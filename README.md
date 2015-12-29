@@ -1,12 +1,13 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as Amazon S3, Couchbase, or a local filesystem.  On top of that, it also introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.
+This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), or a local filesystem.  On top of that, it also introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.
 
 ## Features at a Glance
 
 * Store JSON or binary (raw) data.
 * Supports multiple back-ends including Amazon S3, Couchbase and local filesystem.
 * Linked lists with very fast push, pop, shift, unshift, and random reads/writes.
+* Advisory locking system for records and lists.
 * Variable expiration dates per key and automatic deletion.
 
 # Usage
