@@ -289,10 +289,10 @@ In order to maintain compatibility with all the various engines, keys are "norma
 
 * They are converted to lower-case.
 * Only the following characters are allowed (everything else is stripped):
-** Alphanumerics
-** Dashes (hyphens)
-** Dots (periods)
-** Forward-slashes
+	* Alphanumerics
+	* Dashes (hyphens)
+	* Dots (periods)
+	* Forward-slashes
 * Duplicate adjacent slashes (i.e. "//") are converted to a single slash.
 * Leading and trailing slashes are stripped.
 
