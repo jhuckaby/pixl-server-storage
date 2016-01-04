@@ -14,7 +14,6 @@ module.exports = Class.create({
 	startup: function(callback) {
 		// setup Amazon AWS connection
 		var self = this;
-		this.logDebug(2, "Setting up Amazon S3");
 		
 		this.setup();
 		this.config.on('reload', function() { self.setup(); } );
@@ -24,8 +23,14 @@ module.exports = Class.create({
 	
 	setup: function() {
 		// setup AWS connection
-		AWS.config.update( this.storage.config.get('AWS') || this.server.config.get('AWS') );
-		this.s3 = new AWS.S3( this.config.get() );
+		var aws_config = this.storage.config.get('AWS') || this.server.config.get('AWS');
+		var s3_config = this.config.get();
+		
+		this.logDebug(2, "Setting up Amazon S3 (" + aws_config.region + ")");
+		this.logDebug(3, "S3 Bucket ID: " + s3_config.params.Bucket);
+		
+		AWS.config.update( aws_config );
+		this.s3 = new AWS.S3( s3_config );
 	},
 	
 	put: function(key, value, callback) {
@@ -41,9 +46,9 @@ module.exports = Class.create({
 			this.logDebug(9, "Storing S3 Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
+			this.logDebug(9, "Storing S3 JSON Object: " + key, this.debugLevel(10) ? params.Body : null);
 			params.Body = JSON.stringify( params.Body );
 			params.ContentType = 'application/json';
-			this.logDebug(9, "Storing S3 JSON Object", params);
 		}
 		
 		this.s3.putObject( params, function(err, data) {
@@ -101,7 +106,7 @@ module.exports = Class.create({
 			}
 			
 			var body = null;
-			if (this.storage.isBinaryKey(key)) {
+			if (self.storage.isBinaryKey(key)) {
 				body = data.Body;
 				self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
 			}
@@ -113,7 +118,7 @@ module.exports = Class.create({
 					callback( e, null );
 					return;
 				}
-				self.logDebug(9, "JSON fetch complete: " + key, body);
+				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? body : null);
 			}
 			
 			callback( null, body );
@@ -143,7 +148,7 @@ module.exports = Class.create({
 	
 	shutdown: function(callback) {
 		// shutdown storage
-		this.logDebug(2, "Shutting down AWS storage");
+		this.logDebug(2, "Shutting down S3 storage");
 		delete this.s3;
 		callback();
 	}

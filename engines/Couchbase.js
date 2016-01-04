@@ -55,7 +55,7 @@ module.exports = Class.create({
 			this.logDebug(9, "Storing Couchbase Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
-			this.logDebug(9, "Storing Couchbase JSON Object: " + key, value);
+			this.logDebug(9, "Storing Couchbase JSON Object: " + key, this.debugLevel(10) ? value : null);
 			if (this.config.get('serialize')) value = JSON.stringify( value );
 		}
 		
@@ -107,14 +107,22 @@ module.exports = Class.create({
 			}
 			else {
 				var body = result.value;
-				if (!self.storage.isBinaryKey(key) && self.config.get('serialize')) {
-					try { body = JSON.parse( body.toString() ); }
-					catch (e) {
-						self.logError('couchbase', "Failed to parse JSON record: " + key + ": " + e);
-						callback( e, null );
-						return;
-					}
+				
+				if (self.storage.isBinaryKey(key)) {
+					self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
 				}
+				else {
+					if (self.config.get('serialize')) {
+						try { body = JSON.parse( body.toString() ); }
+						catch (e) {
+							self.logError('couchbase', "Failed to parse JSON record: " + key + ": " + e);
+							callback( e, null );
+							return;
+						}
+					}
+					self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? body : null);
+				}
+				
 				callback( null, body );
 			}
 		} );
