@@ -1020,6 +1020,26 @@ module.exports = {
 			} );
 		},
 		
+		function listFindRegExp1(test) {
+			var self = this;
+			test.expect(7);
+			
+			this.storage.listFind( 'list2', { foo: /^BAR5$/i, number: /1527/ }, function(err, item, idx) {
+				test.ok( !err, "No error searching list: " + err );
+				test.ok( !!item, "Item is true" );
+				test.ok( item.foo == 'bar5', "Item foo matches bar5" );
+				test.ok( item.number == 1527, "Item value matches 1527" );
+				
+				// check negative case
+				self.storage.listFind( 'list2', { foo: /^bar6$/ }, function(err, item, idx) {
+					test.ok( !err, "No error expected searching list: " + err );
+					test.ok( !item, "Item is expected to be null" );
+					test.ok( idx == -1, "Item idx is expected to be -1: " + idx );
+					test.done();
+				} );
+			} );
+		},
+		
 		function listFindBad1(test) {
 			test.expect(3);
 			this.storage.listFind( 'list2', { number: 2000 }, function(err, item, idx) {
@@ -1287,6 +1307,27 @@ module.exports = {
 			test.expect(8);
 			var num_items = 0;
 			var criteria = { vegetable: "carrot" };
+			
+			this.storage.listFindEach( 'list2', criteria, 
+				function(item, idx, callback) {
+					if (item) num_items++;
+					test.ok( !!item, "Item was passed to iterator" );
+					test.ok( item.vegetable == 'carrot', "Item has correct vegetable" );
+					callback();
+				},
+				function(err) {
+					test.ok( !err, "No error iterating list: " + err );
+					test.ok( num_items == 3, "Found 3 items: " + num_items );
+					test.done();
+				}
+			);
+		},
+		
+		function listFindEachRegExp1(test) {
+			// test listFindEach on large list with multiple pages, using reg exp
+			test.expect(8);
+			var num_items = 0;
+			var criteria = { vegetable: /^CARROT$/i };
 			
 			this.storage.listFindEach( 'list2', criteria, 
 				function(item, idx, callback) {

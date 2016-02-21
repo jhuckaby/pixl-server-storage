@@ -750,7 +750,10 @@ module.exports = Class.create({
 						for (var idx = 0, len = page.items.length; idx < len; idx++) {
 							var matches = 0;
 							for (var k in criteria) {
-								if (criteria[k] == page.items[idx][k]) { matches++; }
+								if (criteria[k].test) {
+									if (criteria[k].test(page.items[idx][k])) { matches++; }
+								}
+								else if (criteria[k] == page.items[idx][k]) { matches++; }
 							}
 							if (matches == num_crit) {
 								// we found our item!
@@ -902,7 +905,10 @@ module.exports = Class.create({
 								// for each item, check against criteria
 								var matches = 0;
 								for (var k in criteria) {
-									if (criteria[k] == item[k]) { matches++; }
+									if (criteria[k].test) {
+										if (criteria[k].test(item[k])) { matches++; }
+									}
+									else if (criteria[k] == item[k]) { matches++; }
 								}
 								if (matches == num_crit) {
 									iterator(item, item_idx++, callback);
