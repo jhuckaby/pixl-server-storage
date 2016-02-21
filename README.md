@@ -495,7 +495,7 @@ All list operations that write data will automatically lock the list using [Advi
 
 ## List Page Size
 
-List items are stored in groups called "pages", and each page can hold up to N items (the default is 50).  The idea is, when you want to store or fetch multiple items at once, the storage engine only has to read / write a small amount of records.  The downsize is, fetching or storing a single item requires the whole page to be loaded and saved, so it is definitely optimized for batch operations.
+List items are stored in groups called "pages", and each page can hold up to N items (the default is 50).  The idea is, when you want to store or fetch multiple items at once, the storage engine only has to read / write a small amount of records.  The downside is, fetching or storing a single item requires the whole page to be loaded and saved, so it is definitely optimized for batch operations.
 
 You can configure how many items are allowed in each page, by changing the default [page size](#list_page_size) in your storage configuration, or setting it per list by passing an option to [listCreate()](#listcreate).
 
@@ -1183,7 +1183,7 @@ If an item is not found, an error is not generated.  However, the `item` will be
 	storage.listFindCut( KEY, CRITERIA, CALLBACK );
 ```
 
-The `listFindCut()` method will search a list for a particular item based on a criteria object, and if found, it'll delete it (remove it from the list using [listSplice()(#listsplice)).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself.  Example:
+The `listFindCut()` method will search a list for a particular item based on a criteria object, and if found, it'll delete it (remove it from the list using [listSplice()](#listsplice)).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself.  Example:
 
 ```javascript
 	storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
