@@ -486,15 +486,46 @@ module.exports = Class.create({
 		}
 	},
 	
+	waitForAllLocks: function(callback) {
+		// wait for all locks to release before proceeding
+		var self = this;
+		var num_locks = Tools.numKeys(this.locks);
+		
+		if (num_locks) {
+			this.logDebug(3, "Waiting for " + num_locks + " locks to be released", Object.keys(this.locks));
+			
+			async.whilst(
+				function () {
+					return (Tools.numKeys(self.locks) > 0);
+				},
+				function (callback) {
+					setTimeout( function() { callback(); }, 250 );
+				},
+				function() {
+					// all locks released
+					callback();
+				}
+			); // whilst
+		}
+		else callback();
+	},
+	
 	shutdown: function(callback) {
 		// shutdown storage
 		var self = this;
 		this.logDebug(2, "Shutting down storage system");
 		
 		this.waitForQueueDrain( function() {
-			if (self.engine) self.engine.shutdown(callback);
-			else callback();
-		} );
+			// queue drained, now wait for locks
+			
+			self.waitForAllLocks( function() {
+				// all locks released, now shutdown engine
+				
+				if (self.engine) self.engine.shutdown(callback);
+				else callback();
+				
+			} ); // waitForLocks
+		} ); // waitForQueueDrain
 	}
 	
 });
