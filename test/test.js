@@ -1736,6 +1736,8 @@ module.exports = {
 	
 	tearDown: function (callback) {
 		// clean up
-		this.server.shutdown(callback);
+		this.server.shutdown( function() {
+			cp.exec("rm -rf " + base_data_dir, callback);
+		} );
 	}
 };
