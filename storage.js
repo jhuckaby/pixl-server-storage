@@ -221,7 +221,7 @@ module.exports = Class.create({
 			function(key, callback) {
 				// iterator for each key
 				self.get(key, function(err, data) {
-					if (err) callback(err);
+					if (err) return callback(err);
 					records[key] = data;
 					callback();
 				} );
