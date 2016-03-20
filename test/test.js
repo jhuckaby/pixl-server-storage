@@ -1599,7 +1599,7 @@ module.exports = {
 				test.ok( !err, "No error creating binary: " + err );
 				
 				self.storage.get( key, function(err, data) {
-					test.ok( !err, "No error fetching test1: " + err );
+					test.ok( !err, "No error fetching binary: " + err );
 					test.ok( !!data, "Data is true" );
 					test.ok( typeof(data) == 'object', "Data is an object (not a string)" );
 					test.ok( data.length == spacerBuf.length, "Data length is correct" );
@@ -1609,6 +1609,45 @@ module.exports = {
 					
 					self.storage.delete( key, function(err) {
 						test.ok( !err, "No error deleting binary key: " + err );
+						test.done();
+					} );
+				} );
+			} );
+		},
+		
+		function testStream(test) {
+			test.expect(9);
+			var self = this;
+			
+			var key = 'spacer-stream.gif';
+			var filename = 'spacer.gif';
+			var spacerBuf = fs.readFileSync( __dirname + '/' + filename );
+			var spacerHash = digestHex( spacerBuf );
+			var spacerStream = fs.createReadStream( __dirname + '/' + filename );
+			
+			test.ok( !!spacerBuf, "Got buffer from file" );
+			test.ok( typeof(spacerBuf) == 'object', "Buffer is an object" );
+			test.ok( spacerBuf.length > 0, "Buffer has size" );
+			test.ok( !!spacerStream, "Got read stream" );
+			
+			this.storage.putStream( key, spacerStream, function(err) {
+				test.ok( !err, "No error creating stream: " + err );
+				
+				var tempFile = __dirname + '/' + filename + '.streamtemp';
+				var outStream = fs.createWriteStream( tempFile );
+				
+				self.storage.getStream( key, outStream, function(err) {
+					test.ok( !err, "No error fetching stream: " + err );
+					
+					var newSpacerBuf = fs.readFileSync( tempFile );
+					test.ok( newSpacerBuf.length == spacerBuf.length, "Stream length is correct" );
+					
+					var hashTest = digestHex( newSpacerBuf );
+					test.ok( hashTest == spacerHash, "SHA256 hash of data matches original" );
+					
+					self.storage.delete( key, function(err) {
+						test.ok( !err, "No error deleting stream key: " + err );
+						fs.unlinkSync( tempFile );
 						test.done();
 					} );
 				} );

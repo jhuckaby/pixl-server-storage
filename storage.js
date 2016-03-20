@@ -114,6 +114,18 @@ module.exports = Class.create({
 		this.engine.put( key, value, callback );
 	},
 	
+	putStream: function(key, stream, callback) {
+		// store key+stream
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		key = this.normalizeKey( key );
+		
+		if (!this.isBinaryKey(key)) {
+			return callback( new Error("Stream values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
+		}
+		
+		this.engine.putStream( key, stream, callback );
+	},
+	
 	putMulti: function(records, callback) {
 		// put multiple records at once, given object of keys and values
 		var self = this;
@@ -203,6 +215,16 @@ module.exports = Class.create({
 			
 			callback(err, value);
 		} );
+	},
+	
+	getStream: function(key, stream, callback) {
+		// fetch value via stream pipe
+		var self = this;
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		key = this.normalizeKey( key );
+		
+		this.engine.getStream( key, stream, callback );
 	},
 	
 	getMulti: function(keys, callback) {

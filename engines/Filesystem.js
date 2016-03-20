@@ -1,4 +1,4 @@
-// SimpleTask Local File Storage Plugin
+// Local File Storage Plugin
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 
@@ -152,6 +152,58 @@ module.exports = Class.create({
 		} ); // mkdirp
 	},
 	
+	putStream: function(key, inp, callback) {
+		// store key+stream of data to disk
+		var self = this;
+		var file = this.getFilePath(key);
+		
+		this.logDebug(9, "Storing Binary Stream Object: " + key);
+		
+		var dir = path.dirname( file );
+		
+		var temp_file = this.tempDir + '/' + path.basename(file) + '.tmp.' + this.tempFileCounter;
+		this.tempFileCounter = (this.tempFileCounter + 1) % 10000000;
+		
+		// make sure parent dirs exist, async
+		mkdirp( dir, 0775, function(err) {
+			if (err) {
+				// failed to create directory
+				var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
+				self.logError('file', msg);
+				return callback( new Error(msg), null );
+			}
+			
+			// now create the write stream
+			var outp = fs.createWriteStream( temp_file );
+			
+			outp.on('error', function(err) {
+				// failed to write file
+				var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
+				self.logError('file', msg);
+				return callback( new Error(msg), null );
+			} );
+			
+			outp.on('finish', function() {
+				// finally, rename temp file to final
+				fs.rename( temp_file, file, function (err) {
+					if (err) {
+						// failed to write file
+						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
+						self.logError('file', msg);
+						return callback( new Error(msg), null );
+					}
+					
+					// all done
+					self.logDebug(9, "Store operation complete: " + key);
+					callback(null, null);
+				} ); // rename
+			} ); // pipe finish
+			
+			// pipe inp to outp
+			inp.pipe( outp );
+		} ); // mkdirp
+	},
+	
 	head: function(key, callback) {
 		// head value given key
 		var self = this;
@@ -220,6 +272,40 @@ module.exports = Class.create({
 			
 			callback( null, data );
 		} );
+	},
+	
+	getStream: function(key, outp, callback) {
+		// fetch stream given key
+		var self = this;
+		var file = this.getFilePath(key);
+		
+		this.logDebug(9, "Fetching Binary Stream: " + key, file);
+		
+		// create read stream
+		var inp = fs.createReadStream( file );
+		
+		// capture read errors
+		inp.on('error', function(err) {
+			var msg = err.message;
+			if (msg.match(/ENOENT/)) msg = "File not found";
+			else {
+				// log fs errors that aren't simple missing files (i.e. I/O errors)
+				self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err);
+			}
+			return callback(
+				new Error("Failed to fetch key: " + key + ": " + msg),
+				null
+			);
+		} );
+		
+		// handle completion
+		outp.on('finish', function() {
+			self.logDebug(9, "Stream fetch complete: " + key);
+			callback( null );
+		} );
+		
+		// pipe to output
+		inp.pipe( outp );
 	},
 	
 	delete: function(key, callback) {

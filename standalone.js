@@ -1,4 +1,4 @@
-// SimpleTask Storage System - Standalone Mode
+// Storage System - Standalone Mode
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 

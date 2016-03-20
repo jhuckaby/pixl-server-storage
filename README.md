@@ -403,6 +403,7 @@ storage.delete( 'test1', function(err) {
 To store a binary value, pass a filled `Buffer` object as the value, and specify a key ending in a "file extension", e.g. `.gif`.  The latter requirement is so the engine can detect which records are binary and which are JSON, just by looking at the key.  Example:
 
 ```javascript
+var fs = require('fs');
 var buffer = fs.readFileSync('picture.gif');
 storage.put( 'test1.gif', buffer, function(err) {
 	if (err) throw err;
@@ -412,11 +413,38 @@ storage.put( 'test1.gif', buffer, function(err) {
 When fetching a binary record, a `Buffer` object will be passed to your callback:
 
 ```javascript
+var fs = require('fs');
 storage.get( 'test1.gif', function(err, buffer) {
 	if (err) throw err;
 	fs.writeFileSync('picture.gif', buffer);
 } );
 ```
+
+# Using Streams
+
+You can store and fetch records using [streams](https://nodejs.org/api/stream.html), so as to not load content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](#putstream) method.  Similarly, to fetch an object and spool it to a writable stream, call the [getStream()](#getstream) method.
+
+Example of storing a record by reading the data from a readable stream:
+
+```js
+var fs = require('fs');
+var stream = fs.createReadStream('picture.gif');
+storage.putStream( 'test1.gif', stream, function(err) {
+	if (err) throw err;
+} );
+```
+
+Example of fetching a record and spooling it to a writable stream:
+
+```js
+var fs = require('fs');
+var stream = fs.createWriteStream('/var/tmp/downloaded.gif');
+storage.getStream( 'test1.gif', stream, function(err) {
+	if (err) throw err;
+} );
+```
+
+Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase API does not support streams, so they are currently simulated for that engine.  Streams *are* supported natively for both the Filesystem and Amazon S3 engines.
 
 # Expiring Data
 
@@ -907,8 +935,44 @@ storage.put( 'test1', { foo: 'bar1' }, function(err) {
 For binary values, the key *must* contain a file extension, e.g. `test1.gif`.  Example:
 
 ```javascript
+var fs = require('fs');
 var buffer = fs.readFileSync('picture.gif');
 storage.put( 'test1.gif', buffer, function(err) {
+	if (err) throw err;
+} );
+```
+
+## putMulti
+
+```javascript
+storage.putMulti( RECORDS, CALLBACK );
+```
+
+The `putMulti()` method stores multiple keys/values at once, from a specified object containing both.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than storing the records in sequence.  Example:
+
+```javascript
+var records = {
+	multi1: { fruit: 'apple' },
+	multi2: { fruit: 'orange' },
+	multi3: { fruit: 'banana' }
+};
+storage.putMulti( records, function(err) {
+	if (err) throw err;
+} );
+```
+
+## putStream
+
+```javascript
+storage.putStream( KEY, STREAM, CALLBACK );
+```
+
+The `putStream()` method stores a record using a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable), so it doesn't have to be read into memory.  This can be used to spool very large files to storage without using any RAM.  Note that this is treated as a binary record, so the key *must* contain a file extension, e.g. `test1.gif`.  Example:
+
+```javascript
+var fs = require('fs');
+var stream = fs.createReadStream('picture.gif');
+storage.putStream( 'test1.gif', stream, function(err) {
 	if (err) throw err;
 } );
 ```
@@ -944,15 +1008,29 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 } );
 ```
 
+## getStream
+
+```javascript
+storage.getStream( KEY, STREAM, CALLBACK );
+```
+
+The `getStream()` method fetches a binary record by spooling the contents to a [writable stream](https://nodejs.org/api/stream.html#stream_class_stream_writable), so it doesn't load anything into memory.  Example:
+
+```javascript
+var fs = require('fs');
+var stream = fs.createWriteStream('/var/tmp/downloaded.gif');
+storage.getStream( 'test1.gif', stream, function(err) {
+	if (err) throw err;
+} );
+```
+
 ## head
 
 ```javascript
 storage.head( KEY, CALLBACK );
 ```
 
-The `head()` method fetches metadata about an object given a key, without fetching the object itself.  This generally means that the object size, and last modification date are retrieved, however this is engine specific.  The `Couchbase` engine, for example, has no such API, so the `head()` method is a no-op.
-
-However, if the current engine *does* support `head()` (i.e. the `Filesystem` and `S3` engines both do), your callback function will be passed an error if one occurred, and an object containing two keys:
+The `head()` method fetches metadata about an object given a key, without fetching the object itself.  This generally means that the object size, and last modification date are retrieved, however this is engine specific.  Your callback function will be passed an error if one occurred, and an object containing at least two keys:
 
 | Key | Description |
 | --- | ----------- |
@@ -969,6 +1047,25 @@ storage.head( 'test1', function(err, data) {
 } );
 ```
 
+Please note that as of this writing, the `Couchbase` engine has no native API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but there is no way to retrieve the last modified date.
+
+## headMulti
+
+```javascript
+storage.headMulti( KEYS, CALLBACK );
+```
+
+The `headMulti()` method pings multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than pinging the records in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
+
+```javascript
+storage.headMulti( ['test1', 'test2', 'test3'], function(err, values) {
+	if (err) throw err;
+	// values[0] will be the test1 head info.
+	// values[1] will be the test2 head info.
+	// values[2] will be the test3 head info.
+} );
+```
+
 ## delete
 
 ```javascript
@@ -979,6 +1076,20 @@ The `delete()` method deletes an object given a key.  Your callback function is 
 
 ```javascript
 storage.delete( 'test1', function(err) {
+	if (err) throw err;
+} );
+```
+
+## deleteMulti
+
+```javascript
+storage.deleteMulti( KEYS, CALLBACK );
+```
+
+The `deleteMulti()` method deletes multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than pinging the records in sequence.  Example:
+
+```javascript
+storage.deleteMulti( ['test1', 'test2', 'test3'], function(err) {
 	if (err) throw err;
 } );
 ```

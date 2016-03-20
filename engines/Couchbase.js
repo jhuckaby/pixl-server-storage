@@ -1,4 +1,4 @@
-// SimpleTask Couchbase Storage Plugin
+// Couchbase Storage Plugin
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 
@@ -69,13 +69,29 @@ module.exports = Class.create({
 		} );
 	},
 	
+	putStream: function(key, inp, callback) {
+		// store key+value in Couchbase using read stream
+		var self = this;
+		
+		// The Couchbase Node.JS 2.0 API has no stream support.
+		// So, we have to do this the RAM-hard way...
+		
+		var chunks = [];
+		inp.on('data', function(chunk) {
+			chunks.push( chunk );
+		} );
+		inp.on('end', function() {
+			var buf = Buffer.concat(chunks);
+			self.put( key, buf, callback );
+		} );
+	},
+	
 	head: function(key, callback) {
 		// head couchbase value given key
 		var self = this;
 		
-		// Note: From what I can tell from the Couchbase Node.JS 2.0 API,
-		// there is simply no way to head / ping an object.
-		// So, we have to do this the hard way...
+		// The Couchbase Node.JS 2.0 API has no way to head / ping an object.
+		// So, we have to do this the RAM-hard way...
 		
 		this.get( key, function(err, data) {
 			if (err) return callback(err);
@@ -125,6 +141,22 @@ module.exports = Class.create({
 				
 				callback( null, body );
 			}
+		} );
+	},
+	
+	getStream: function(key, outp, callback) {
+		// download key+value to write stream
+		var self = this;
+		
+		// The Couchbase Node.JS 2.0 API has no stream support.
+		// So, we have to do this the RAM-hard way...
+		this.get( key, function(err, buf) {
+			if (err) return callback(err);
+			
+			outp.write( buf );
+			outp.end();
+			
+			callback();
 		} );
 	},
 	

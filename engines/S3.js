@@ -1,4 +1,4 @@
-// SimpleTask Amazon AWS S3 Storage Plugin
+// Amazon AWS S3 Storage Plugin
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 
@@ -56,6 +56,26 @@ module.exports = Class.create({
 				self.logError('s3', "Failed to store object: " + key + ": " + err.message);
 			}
 			else self.logDebug(9, "Store complete: " + key);
+			
+			if (callback) callback(err, data);
+		} );
+	},
+	
+	putStream: function(key, inp, callback) {
+		// store key+stream of data to S3
+		var self = this;
+		
+		var params = {};
+		params.Key = key;
+		params.Body = inp;
+		
+		this.logDebug(9, "Storing S3 Binary Stream: " + key);
+		
+		this.s3.upload(params, function(err, data) {
+			if (err) {
+				self.logError('s3', "Failed to store stream: " + key + ": " + err.message);
+			}
+			else self.logDebug(9, "Stream store complete: " + key);
 			
 			if (callback) callback(err, data);
 		} );
@@ -123,6 +143,47 @@ module.exports = Class.create({
 			
 			callback( null, body );
 		} );
+	},
+	
+	getStream: function(key, outp, callback) {
+		// Download S3 object to stream given key and write stream
+		var self = this;
+		
+		this.logDebug(9, "Fetching S3 Stream: " + key);
+		
+		var params = { Key: key };
+		var download = this.s3.getObject(params);
+		
+		download.on('httpHeaders', function(statusCode, headers) {
+			if (statusCode < 300) {
+				this.response.httpResponse.createUnbufferedStream().pipe( outp );
+			}
+			else {
+				this.abort();
+			}
+		} );
+		
+		download.on('error', function(err) {
+			if (err.code == 'NoSuchKey') {
+				// key not found, special case, don't log an error
+				// always include "Not found" in error message
+				err = new Error("Failed to fetch key: " + key + ": Not found");
+			}
+			else {
+				// some other error
+				self.logError('s3', "Failed to fetch key: " + key + ": " + err.message);
+			}
+			callback( err );
+			return;
+		} );
+		
+		download.on('complete', function() {
+			outp.end();
+			self.logDebug(9, "Stream fetch complete: " + key);
+			callback();
+		} );
+		
+		download.send();
 	},
 	
 	delete: function(key, callback) {
