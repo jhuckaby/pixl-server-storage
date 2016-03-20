@@ -1616,7 +1616,7 @@ module.exports = {
 		},
 		
 		function testStream(test) {
-			test.expect(9);
+			test.expect(11);
 			var self = this;
 			
 			var key = 'spacer-stream.gif';
@@ -1636,22 +1636,29 @@ module.exports = {
 				var tempFile = __dirname + '/' + filename + '.streamtemp';
 				var outStream = fs.createWriteStream( tempFile );
 				
-				self.storage.getStream( key, outStream, function(err) {
+				self.storage.getStream( key, function(err, storageStream) {
 					test.ok( !err, "No error fetching stream: " + err );
+					test.ok( !!storageStream, "Got storage stream as 2nd arg");
+					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
 					
-					var newSpacerBuf = fs.readFileSync( tempFile );
-					test.ok( newSpacerBuf.length == spacerBuf.length, "Stream length is correct" );
+					outStream.on('finish', function() {
+						var newSpacerBuf = fs.readFileSync( tempFile );
+						test.ok( newSpacerBuf.length == spacerBuf.length, "Stream length is correct" );
+						
+						var hashTest = digestHex( newSpacerBuf );
+						test.ok( hashTest == spacerHash, "SHA256 hash of data matches original" );
+						
+						self.storage.delete( key, function(err) {
+							test.ok( !err, "No error deleting stream key: " + err );
+							fs.unlinkSync( tempFile );
+							test.done();
+						} ); // delete
+					} ); // stream finish
 					
-					var hashTest = digestHex( newSpacerBuf );
-					test.ok( hashTest == spacerHash, "SHA256 hash of data matches original" );
+					storageStream.pipe( outStream );
 					
-					self.storage.delete( key, function(err) {
-						test.ok( !err, "No error deleting stream key: " + err );
-						fs.unlinkSync( tempFile );
-						test.done();
-					} );
-				} );
-			} );
+				} ); // getStream
+			} ); // putStream
 		},
 		
 		function testPutMulti(test) {

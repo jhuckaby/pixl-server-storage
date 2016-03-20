@@ -274,38 +274,33 @@ module.exports = Class.create({
 		} );
 	},
 	
-	getStream: function(key, outp, callback) {
-		// fetch stream given key
+	getStream: function(key, callback) {
+		// get readable stream to record value given key
 		var self = this;
 		var file = this.getFilePath(key);
 		
 		this.logDebug(9, "Fetching Binary Stream: " + key, file);
 		
-		// create read stream
-		var inp = fs.createReadStream( file );
-		
-		// capture read errors
-		inp.on('error', function(err) {
-			var msg = err.message;
-			if (msg.match(/ENOENT/)) msg = "File not found";
-			else {
-				// log fs errors that aren't simple missing files (i.e. I/O errors)
-				self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err);
+		// make sure record exists
+		fs.stat(file, function(err, stats) {
+			if (err) {
+				var msg = err.message;
+				if (msg.match(/ENOENT/)) msg = "File not found";
+				else {
+					// log fs errors that aren't simple missing files (i.e. I/O errors)
+					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err);
+				}
+				return callback(
+					new Error("Failed to head key: " + key + ": " + msg),
+					null
+				);
 			}
-			return callback(
-				new Error("Failed to fetch key: " + key + ": " + msg),
-				null
-			);
+			
+			// create read stream
+			var inp = fs.createReadStream( file );
+			
+			callback( null, inp );
 		} );
-		
-		// handle completion
-		outp.on('finish', function() {
-			self.logDebug(9, "Stream fetch complete: " + key);
-			callback( null );
-		} );
-		
-		// pipe to output
-		inp.pipe( outp );
 	},
 	
 	delete: function(key, callback) {

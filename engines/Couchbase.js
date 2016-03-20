@@ -144,8 +144,8 @@ module.exports = Class.create({
 		} );
 	},
 	
-	getStream: function(key, outp, callback) {
-		// download key+value to write stream
+	getStream: function(key, callback) {
+		// get readable stream to record value given key
 		var self = this;
 		
 		// The Couchbase Node.JS 2.0 API has no stream support.
@@ -153,10 +153,8 @@ module.exports = Class.create({
 		this.get( key, function(err, buf) {
 			if (err) return callback(err);
 			
-			outp.write( buf );
-			outp.end();
-			
-			callback();
+			var stream = new BufferStream(buf);
+			callback(null, stream);
 		} );
 	},
 	
@@ -189,3 +187,29 @@ module.exports = Class.create({
 	}
 	
 });
+
+// Modified the following snippet from node-streamifier:
+// Copyright (c) 2014 Gabriel Llamas, MIT Licensed
+
+var util = require('util');
+var stream = require('stream');
+
+var BufferStream = function (object, options) {
+  if (object instanceof Buffer || typeof object === 'string') {
+    options = options || {};
+    stream.Readable.call(this, {
+      highWaterMark: options.highWaterMark,
+      encoding: options.encoding
+    });
+  } else {
+    stream.Readable.call(this, { objectMode: true });
+  }
+  this._object = object;
+};
+
+util.inherits(BufferStream, stream.Readable);
+
+BufferStream.prototype._read = function () {
+  this.push(this._object);
+  this._object = null;
+};

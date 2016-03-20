@@ -422,25 +422,31 @@ storage.get( 'test1.gif', function(err, buffer) {
 
 # Using Streams
 
-You can store and fetch records using [streams](https://nodejs.org/api/stream.html), so as to not load content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](#putstream) method.  Similarly, to fetch an object and spool it to a writable stream, call the [getStream()](#getstream) method.
+You can store and fetch records using [streams](https://nodejs.org/api/stream.html), so as to not load content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](#putstream) method.  Similarly, to fetch a readable stream to a record, call the [getStream()](#getstream) method.
 
-Example of storing a record by reading the data from a readable stream:
+Example of storing a record by spooling the data from a file:
 
 ```js
 var fs = require('fs');
 var stream = fs.createReadStream('picture.gif');
+
 storage.putStream( 'test1.gif', stream, function(err) {
 	if (err) throw err;
 } );
 ```
 
-Example of fetching a record and spooling it to a writable stream:
+Example of fetching a read stream and spooling it to a file:
 
 ```js
 var fs = require('fs');
-var stream = fs.createWriteStream('/var/tmp/downloaded.gif');
-storage.getStream( 'test1.gif', stream, function(err) {
+var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+
+storage.getStream( 'test1.gif', function(err, readStream) {
 	if (err) throw err;
+	writeStream.on('finish', function() {
+		// data is completely written
+	} );
+	readStream.pipe( writeStream );
 } );
 ```
 
@@ -1011,16 +1017,21 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 ## getStream
 
 ```javascript
-storage.getStream( KEY, STREAM, CALLBACK );
+storage.getStream( KEY, CALLBACK );
 ```
 
-The `getStream()` method fetches a binary record by spooling the contents to a [writable stream](https://nodejs.org/api/stream.html#stream_class_stream_writable), so it doesn't load anything into memory.  Example:
+The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
 
 ```javascript
 var fs = require('fs');
-var stream = fs.createWriteStream('/var/tmp/downloaded.gif');
-storage.getStream( 'test1.gif', stream, function(err) {
+var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+
+storage.getStream( 'test1.gif', function(err, readStream) {
 	if (err) throw err;
+	writeStream.on('finish', function() {
+		// data is completely written
+	} );
+	readStream.pipe( writeStream );
 } );
 ```
 

@@ -217,14 +217,14 @@ module.exports = Class.create({
 		} );
 	},
 	
-	getStream: function(key, stream, callback) {
+	getStream: function(key, callback) {
 		// fetch value via stream pipe
 		var self = this;
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
 		key = this.normalizeKey( key );
 		
-		this.engine.getStream( key, stream, callback );
+		this.engine.getStream( key, callback );
 	},
 	
 	getMulti: function(keys, callback) {

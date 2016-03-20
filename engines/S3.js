@@ -145,8 +145,8 @@ module.exports = Class.create({
 		} );
 	},
 	
-	getStream: function(key, outp, callback) {
-		// Download S3 object to stream given key and write stream
+	getStream: function(key, callback) {
+		// get readable stream to record value given key
 		var self = this;
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
@@ -156,7 +156,8 @@ module.exports = Class.create({
 		
 		download.on('httpHeaders', function(statusCode, headers) {
 			if (statusCode < 300) {
-				this.response.httpResponse.createUnbufferedStream().pipe( outp );
+				var stream = this.response.httpResponse.createUnbufferedStream();
+				callback( null, stream );
 			}
 			else {
 				this.abort();
@@ -178,9 +179,7 @@ module.exports = Class.create({
 		} );
 		
 		download.on('complete', function() {
-			outp.end();
-			self.logDebug(9, "Stream fetch complete: " + key);
-			callback();
+			self.logDebug(9, "S3 stream download complete: " + key);
 		} );
 		
 		download.send();
