@@ -241,6 +241,7 @@ Then configure your storage thusly:
 		"region": "us-west-1" 
 	},
 	"S3": {
+		"keyPrefix": "",
 		"params": {
 			"Bucket": "MY_S3_BUCKET_ID"
 		}
@@ -252,9 +253,26 @@ Replace `YOUR_AMAZON_ACCESS_KEY` and `YOUR_AMAZON_SECRET_KEY` with your Amazon A
 
 The `AWS` object is passed directly to the `config.update()` function from the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module, so you can also include any properties supported there.  See the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/guide/node-configuring.html) for more details.
 
-The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.
+The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.  The one exception is `keyPrefix` which is a custom property used by pixl-server-storage (see [S3 Key Prefix](#s3-key-prefix) below).
 
 If you plan on using Amazon AWS in other parts of you application, you can actually move the `AWS` config object into your outer server configuration.  The storage module will look for it there.
+
+### S3 Key Prefix
+
+The S3 engine supports an optional key prefix, in case you are sharing a bucket with other applications, and want to keep all your app related records separate.  To specify this, include a `keyPrefix` property in your `S3` object (this goes alongside the `params`, but not inside of it).  Example:
+
+```js
+{
+	"S3": {
+		"keyPrefix": "myapp",
+		"params": {
+			"Bucket": "MY_S3_BUCKET_ID"
+		}
+	}
+}
+```
+
+This would prefix the string `myapp` before all your application keys (a trailing slash will be added after the prefix if needed).  For example, if your app tried to write a record with key `users/jhuckaby`, the actual S3 key would end up as `myapp/users/jhuckaby`.
 
 ## Couchbase
 
@@ -270,19 +288,22 @@ Then configure your storage thusly:
 {
 	"engine": "Couchbase",
 	"Couchbase": {
-		"connect_string": "couchbase://127.0.0.1",
+		"connectString": "couchbase://127.0.0.1",
 		"bucket": "default",
 		"password": "",
-		"serialize": false
+		"serialize": false,
+		"keyPrefix": ""
 	}
 }
 ```
 
-Set the `connect_string` for your own Couchbase server setup.  You can embed a username and password into the string if they are required to connect (this is different from the bucket password), and use `couchbases://` for SSL, if desired.
+Set the `connectString` for your own Couchbase server setup.  You can embed a username and password into the string if they are required to connect (this is different from the bucket password), and use `couchbases://` for SSL, if desired.
 
 The `bucket` property should be set to the bucket name.  If you don't know this then `default` is probably correct.  The `password` property is the bucket password, and may or may not be required, depending on your Couchbase server setup.
 
 The `serialize` property, when set to `true`, will cause all object values to be serialized to JSON before storing, and they will also be parsed from JSON when fetching.  When set to `false` (the default), this is left up to Couchbase to handle.
+
+The optional `keyPrefix` works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
 
 # Key Normalization
 

@@ -15,10 +15,11 @@ module.exports = Class.create({
 	__parent: Component,
 	
 	defaultConfig: {
-		connect_string: "couchbase://127.0.0.1",
+		connectString: "couchbase://127.0.0.1",
 		bucket: "default",
 		password: "",
-		serialize: false
+		serialize: false,
+		keyPrefix: ""
 	},
 	
 	startup: function(callback) {
@@ -34,7 +35,11 @@ module.exports = Class.create({
 		// setup Couchbase connection
 		var self = this;
 		
-		this.cluster = new CouchbaseAPI.Cluster( this.config.get('connect_string') );
+		this.keyPrefix = this.config.get('keyPrefix').replace(/^\//, '');
+		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
+		
+		// support old legacy naming convention: connect_string
+		this.cluster = new CouchbaseAPI.Cluster( this.config.get('connectString') || this.config.get('connect_string') );
 		if (this.config.get('password')) {
 			this.bucket = this.cluster.openBucket( this.config.get('bucket'), this.config.get('password'), function(err) {
 				callback(err);
@@ -50,6 +55,7 @@ module.exports = Class.create({
 	put: function(key, value, callback) {
 		// store key+value in Couchbase
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		if (this.storage.isBinaryKey(key)) {
 			this.logDebug(9, "Storing Couchbase Binary Object: " + key, '' + value.length + ' bytes');
@@ -61,7 +67,8 @@ module.exports = Class.create({
 		
 		this.bucket.upsert( key, value, {}, function(err) {
 			if (err) {
-				self.logError('couchbase', "Failed to store object: " + key + ": " + err);
+				err.message = "Failed to store object: " + key + ": " + err.message;
+				self.logError('couchbase', err.message);
 			}
 			else self.logDebug(9, "Store complete: " + key);
 			
@@ -89,19 +96,36 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head couchbase value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		// The Couchbase Node.JS 2.0 API has no way to head / ping an object.
 		// So, we have to do this the RAM-hard way...
 		
 		this.get( key, function(err, data) {
-			if (err) return callback(err);
-			callback( null, { mod: 1, len: data.length } );
+			if (err) {
+				// some other error
+				err.message = "Failed to head key: " + key + ": " + err.message;
+				self.logError('couchbase', err.message);
+				callback(err);
+			}
+			else if (!data) {
+				// record not found
+				// always use "NoSuchKey" in error code
+				var err = new Error("Failed to head key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				
+				callback( err, null );
+			}
+			else {
+				callback( null, { mod: 1, len: data.length } );
+			}
 		} );
 	},
 	
 	get: function(key, callback) {
 		// fetch Couchbase value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Fetching Couchbase Object: " + key);
 		
@@ -109,16 +133,17 @@ module.exports = Class.create({
 			if (!result) {
 				if (err) {
 					// some other error
-					self.logError('couchbase', "Failed to fetch key: " + key + ": " + err.message);
+					err.message = "Failed to fetch key: " + key + ": " + err.message;
+					self.logError('couchbase', err.message);
 					callback( err, null );
 				}
 				else {
 					// record not found
-					// always include "Not found" in error message
-					callback(
-						new Error("Failed to fetch key: " + key + ": Not found"),
-						null
-					);
+					// always use "NoSuchKey" in error code
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					
+					callback( err, null );
 				}
 			}
 			else {
@@ -147,11 +172,23 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		// The Couchbase Node.JS 2.0 API has no stream support.
 		// So, we have to do this the RAM-hard way...
 		this.get( key, function(err, buf) {
-			if (err) return callback(err);
+			if (err) {
+				// some other error
+				err.message = "Failed to fetch key: " + key + ": " + err.message;
+				self.logError('couchbase', err.message);
+				return callback(err);
+			}
+			else if (!buf) {
+				// record not found
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback( err, null );
+			}
 			
 			var stream = new BufferStream(buf);
 			callback(null, stream);
@@ -160,12 +197,17 @@ module.exports = Class.create({
 	
 	delete: function(key, callback) {
 		// delete Couchbase key given key
+		// Example CB error message: The key does not exist on the server
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Deleting Couchbase Object: " + key);
 		
 		this.bucket.remove( key, {}, function(err) {
 			if (err) {
+				// if error was a non-existent key, make sure we use the standard code
+				if (err.message.match(/not\s+exist/i)) err.code = "NoSuchKey";
+				
 				self.logError('couchbase', "Failed to delete object: " + key + ": " + err.message);
 			}
 			else self.logDebug(9, "Delete complete: " + key);

@@ -29,6 +29,10 @@ module.exports = Class.create({
 		this.logDebug(2, "Setting up Amazon S3 (" + aws_config.region + ")");
 		this.logDebug(3, "S3 Bucket ID: " + s3_config.params.Bucket);
 		
+		this.keyPrefix = (s3_config.keyPrefix || '').replace(/^\//, '');
+		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
+		delete s3_config.keyPrefix;
+		
 		AWS.config.update( aws_config );
 		this.s3 = new AWS.S3( s3_config );
 	},
@@ -36,6 +40,7 @@ module.exports = Class.create({
 	put: function(key, value, callback) {
 		// store key+value in s3
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		var params = {};
 		params.Key = key;
@@ -64,6 +69,7 @@ module.exports = Class.create({
 	putStream: function(key, inp, callback) {
 		// store key+stream of data to S3
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		var params = {};
 		params.Key = key;
@@ -84,6 +90,7 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head s3 value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Pinging S3 Object: " + key);
 		
@@ -107,6 +114,7 @@ module.exports = Class.create({
 	get: function(key, callback) {
 		// fetch s3 value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Fetching S3 Object: " + key);
 		
@@ -116,6 +124,7 @@ module.exports = Class.create({
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
 				}
 				else {
 					// some other error
@@ -148,6 +157,7 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
@@ -169,6 +179,7 @@ module.exports = Class.create({
 				// key not found, special case, don't log an error
 				// always include "Not found" in error message
 				err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
 			}
 			else {
 				// some other error
@@ -188,6 +199,7 @@ module.exports = Class.create({
 	delete: function(key, callback) {
 		// delete s3 key given key
 		var self = this;
+		key = this.keyPrefix + key;
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
