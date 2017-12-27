@@ -28,12 +28,10 @@ module.exports = Class.create({
         var self = this;
         this.logDebug(2, "Setting up Mongodb");
 
-        this.setup();
+        this.setup(callback);
         this.config.on('reload', function () {
             self.setup();
         });
-
-        callback()
     },
 
     setup: function (callback) {
@@ -45,9 +43,9 @@ module.exports = Class.create({
         // support old legacy naming convention: connect_string
         self.cluster = MongodbAPI(connectionString);
         self.collection = self.cluster.get(collection);
-        //self.collection.createIndex( { key: 1 });
-
-        if (callback) callback();
+        self.collection.createIndex({key: 1}, function (err) {
+            callback(err);
+        });
     },
 
     put: function (key, value, callback) {
@@ -211,7 +209,7 @@ module.exports = Class.create({
 
     runMaintenance: function (callback) {
         // run daily maintenance
-        this.collection.remove({ "key": /^_cleanup\/.*/i });
+        this.collection.remove({"key": /^_cleanup\/.*/i});
         if (callback) callback();
     },
 
@@ -238,7 +236,7 @@ var BufferStream = function (object, options) {
             encoding: options.encoding
         });
     } else {
-        stream.Readable.call(this, { objectMode: true });
+        stream.Readable.call(this, {objectMode: true});
     }
     this._object = object;
 };
