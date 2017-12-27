@@ -43,8 +43,8 @@ module.exports = Class.create({
         // support old legacy naming convention: connect_string
         self.cluster = MongodbAPI(connectionString);
         self.collection = self.cluster.get(collection);
-        self.collection.createIndex({key: 1}, function (err) {
-            callback(err);
+        self.collection.createIndex({key: 1}, function (err, result) {
+            if (callback) callback(err);
         });
     },
 
