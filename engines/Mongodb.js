@@ -2,8 +2,8 @@
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 
-// Requires the 'mongodb' module from npm
-// npm install mongodb
+// Requires the 'monk' module from npm
+// npm install monk
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
