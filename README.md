@@ -1,6 +1,6 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), or a local filesystem.  On top of that, it also introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.
+This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), [MongoDB](http://mongodb.github.io/node-mongodb-native/) or a local filesystem.  On top of that, it also introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.
 
 ## Features at a Glance
 
@@ -304,6 +304,43 @@ The `bucket` property should be set to the bucket name.  If you don't know this 
 The `serialize` property, when set to `true`, will cause all object values to be serialized to JSON before storing, and they will also be parsed from JSON when fetching.  When set to `false` (the default), this is left up to Couchbase to handle.
 
 The optional `keyPrefix` works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
+
+## MongoDB
+
+If you want to use [MongoDB](https://docs.mongodb.com/) as a backing store, here is how to do so.  First, you need to manually install the [mongodb](http://mongodb.github.io/node-mongodb-native/3.0/) module into your app:
+
+```
+npm install mongodb@3
+```
+
+Then configure your storage thusly:
+
+```javascript
+{
+	"engine": "MongoDB",
+	"MongoDB": {
+		"connectString": "mongodb://127.0.0.1",
+		"databaseName": "cronicle",
+		"collectionName": "data",
+		"gridFsBucketName": "data_bucket",
+		"bucketChunkSizeMb": 1,
+		"serialize": true
+	}
+}
+```
+
+Set the `connectString` for your own MongoDB server setup.  You can embed a username and password into the string if they are required to connect, more on connection string [here](https://docs.mongodb.com/manual/reference/connection-string/)
+
+The `databaseName` property should be set to the database name used for storing the data.
+
+The `collectionName` property should be set to the collection name used for storing the data.
+
+The `gridFsBucketName` is bucket name used for file storage. [more](http://mongodb.github.io/node-mongodb-native/3.0/api/GridFSBucket.html)
+
+The `bucketChunkSizeMb` is the chunk size for gridFsBucket to split the files. [more](http://mongodb.github.io/node-mongodb-native/3.0/api/GridFSBucket.html)
+
+The `serialize` property, when set to `true` ( the default - recommended because mongo does not support $ and . in nested object values ), will cause all object values to be serialized to JSON before storing, and they will also be parsed from JSON when fetching.  When set to `false`, this is left up to MongoDB to handle.
+
 
 # Key Normalization
 
