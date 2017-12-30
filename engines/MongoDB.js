@@ -76,18 +76,17 @@ module.exports = Class.create({
                     callback(err);
                 }
                 self.collection = collection;
+                callback();
             });
 
 
-            self.collection.createIndex({key: 1}, function (err, result) {
+            self.collection.createIndex({key: 1}, {background: 1}, function (err, result) {
                 if (err) {
+                    // non fatal error if index is not created.
                     err.message = "Failed to create index key";
                     self.logError("mongoDB setup", err.message);
-
-                    callback(err);
                 }
                 self.logDebug(9, "MongoDB setup", "index key created");
-                callback();
             });
 
         });
@@ -98,7 +97,6 @@ module.exports = Class.create({
         var self = this;
 
         if (this.storage.isBinaryKey(key)) {
-            value = new Buffer(value).toString('base64');
             this.logDebug(9, "Storing MongoDB Binary Object: " + key, '' + value.length + ' bytes');
         }
         else {
@@ -183,7 +181,7 @@ module.exports = Class.create({
                 var body = result.value;
 
                 if (self.storage.isBinaryKey(key)) {
-                    body = new Buffer(body, 'base64');
+                    body = body.buffer;
                     self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
                 }
                 else {
@@ -261,29 +259,3 @@ module.exports = Class.create({
     }
 
 });
-
-// Modified the following snippet from node-streamifier:
-// Copyright (c) 2014 Gabriel Llamas, MIT Licensed
-
-var util = require('util');
-var stream = require('stream');
-
-var BufferStream = function (object, options) {
-    if (object instanceof Buffer || typeof object === 'string') {
-        options = options || {};
-        stream.Readable.call(this, {
-            highWaterMark: options.highWaterMark,
-            encoding: options.encoding
-        });
-    } else {
-        stream.Readable.call(this, {objectMode: true});
-    }
-    this._object = object;
-};
-
-util.inherits(BufferStream, stream.Readable);
-
-BufferStream.prototype._read = function () {
-    this.push(this._object);
-    this._object = null;
-};
