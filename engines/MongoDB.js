@@ -85,8 +85,9 @@ module.exports = Class.create({
                     // non fatal error if index is not created.
                     err.message = "Failed to create index key";
                     self.logError("mongoDB setup", err.message);
+                } else {
+                    self.logDebug(9, "MongoDB setup", "index key created");
                 }
-                self.logDebug(9, "MongoDB setup", "index key created");
             });
 
         });
