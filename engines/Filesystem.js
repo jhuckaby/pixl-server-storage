@@ -28,6 +28,8 @@ module.exports = Class.create({
 		// counter so worker temp files don't collide
 		this.tempFileCounter = 1;
 		
+		this.logDebug(3, "Base directory: " + this.baseDir);
+		
 		callback();
 	},
 	
@@ -36,8 +38,16 @@ module.exports = Class.create({
 		this.baseDir = this.config.get('base_dir') || process.cwd();
 		this.keyNamespaces = this.config.get('key_namespaces') || 0;
 		this.pretty = this.config.get('pretty') || 0;
+		this.rawFilePaths = this.config.get('raw_file_paths') || 0;
 		
-		this.logDebug(3, "Base directory: " + this.baseDir);
+		this.keyPrefix = (this.config.get('key_prefix') || '').replace(/^\//, '');
+		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
+		
+		this.keyTemplate = (this.config.get('key_template') || '').replace(/^\//, '').replace(/\/$/, '');
+		
+		// perform some cleanup on baseDir, just in case
+		// (baseDir is used as a sentinel for recursive parent dir deletes, so we have to be careful)
+		this.baseDir = this.baseDir.replace(/\/$/, '').replace(/\/\//g, '/');
 		
 		// create initial data dir if necessary
 		try {
@@ -65,37 +75,113 @@ module.exports = Class.create({
 	
 	getFilePath: function(key) {
 		// get local path to file given storage key
-		var self = this;
+		var file = '';
 		
-		// hash key to get dir structure
-		// no need for salt, as this is not for security, 
-		// only for distributing the files evenly into a tree of subdirs
-		var shasum = crypto.createHash('md5');
-		shasum.update( key );
-		var hash = shasum.digest('hex');
-		
-		// locate directory on disk
-		var dir = this.baseDir;
-		
-		// if key contains a base "dir", use that on disk as well (one level deep only)
-		// i.e. users/jhuckaby --> users/01/9a/aa/019aaa6887e5ce3533dcc691b05e69e4.json
-		if (this.keyNamespaces) {
-			if (key.match(/^([\w\-\.]+)\//)) dir += '/' + RegExp.$1;
-			else dir += '/' + key;
+		if (this.rawFilePaths) {
+			// file path is raw key, no md5 hashing
+			// used for very small apps and testing
+			file = this.baseDir + '/' + key;
+			if (!key.match(/\.(\w+)$/)) file += '.json';
+		}
+		else {
+			// hash key to get dir structure
+			// no need for salt, as this is not for security, 
+			// only for distributing the files evenly into a tree of subdirs
+			var md5 = Tools.digestHex(key, 'md5');
+			
+			// locate directory on disk
+			var dir = this.baseDir;
+			
+			if (this.keyPrefix) {
+				dir += '/' + this.keyPrefix;
+			}
+			
+			// if key contains a base "dir", use that on disk as well (one level deep only)
+			// i.e. users/jhuckaby --> users/01/9a/aa/019aaa6887e5ce3533dcc691b05e69e4.json
+			if (this.keyNamespaces) {
+				if (key.match(/^([\w\-\.]+)\//)) dir += '/' + RegExp.$1;
+				else dir += '/' + key;
+			}
+			
+			if (this.keyTemplate) {
+				// apply hashing using key template
+				var idx = 0;
+				var temp = this.keyTemplate.replace( /\#/g, function() {
+					return md5.substr(idx++, 1);
+				} );
+				file = dir + '/' + Tools.substitute( temp, { key: key, md5: md5 } );
+			}
+			else {
+				// classic legacy md5 hash dir layout, e.g. ##/##/##/[md5]
+				dir += '/' + md5.substring(0, 2) + '/' + md5.substring(2, 4) + '/' + md5.substring(4, 6);
+				
+				// filename is full hash
+				file = dir + '/' + md5;
+			}
+			
+			// grab ext from key, or default to json
+			// (all binary keys should have a file extension IN THE KEY)
+			if (key.match(/\.(\w+)$/)) file += '.' + RegExp.$1;
+			else file += '.json';
 		}
 		
-		// hash subdirs
-		dir += '/' + hash.substring(0, 2) + '/' + hash.substring(2, 4) + '/' + hash.substring(4, 6);
-		
-		// filename is full hash
-		var file = dir + '/' + hash;
-		
-		// grab ext from key, or default to json
-		// (all binary keys should have a file extension IN THE KEY)
-		if (key.match(/\.(\w+)$/)) file += '.' + RegExp.$1;
-		else file += '.json';
-		
 		return file;
+	},
+	
+	_makeDirs: function(dir, perms, callback) {
+		// make directories recursively, with retries
+		var self = this;
+		var retries = 5;
+		var last_err = null;
+		
+		mkdirp( dir, perms, function(err) {
+			if (err) {
+				// go into retry loop
+				self.logDebug(6, "Error creating directory: " + dir + ": " + err + " (will retry)");
+				
+				async.whilst(
+					function() { return( retries >= 0 ); },
+					function(callback) {
+						mkdirp( dir, perms, function(err) {
+							if (err) {
+								self.logDebug(6, "Error creating directory: " + dir + ": " + err + " (" + retries + " retries remain)");
+								last_err = err;
+								retries--;
+							}
+							else {
+								// success, jump out of loop
+								last_err = null;
+								retries = -1;
+							}
+							callback();
+						} );
+					},
+					function() {
+						callback( last_err );
+					}
+				); // whilst
+			} // err
+			else callback();
+		} ); // mkdirp
+	},
+	
+	_renameFile: function(source_file, dest_file, callback) {
+		// rename file plus mkdir if needed
+		var self = this;
+		
+		fs.rename(source_file, dest_file, function(rn_err) {
+			if (!rn_err || (rn_err.code == 'EXDEV')) return callback();
+			
+			self.logDebug(6, "Error renaming file: " + source_file + " --> " + dest_file + ": " + rn_err + " (will retry)");
+			
+			// we may need one more mkdir (race condition with delete)
+			self._makeDirs( path.dirname(dest_file), 0o0775, function(mk_err) {
+				if (mk_err) return callback(rn_err);
+				
+				// last try
+				fs.rename(source_file, dest_file, callback);
+			});
+		});
 	},
 	
 	put: function(key, value, callback) {
@@ -108,7 +194,7 @@ module.exports = Class.create({
 			this.logDebug(9, "Storing Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
-			this.logDebug(9, "Storing JSON Object: " + key, this.debugLevel(10) ? value : null);
+			this.logDebug(9, "Storing JSON Object: " + key, this.debugLevel(10) ? value : file);
 			value = this.pretty ? JSON.stringify( value, null, "\t" ) : JSON.stringify( value );
 		}
 		
@@ -117,26 +203,26 @@ module.exports = Class.create({
 		var temp_file = this.tempDir + '/' + path.basename(file) + '.tmp.' + this.tempFileCounter;
 		this.tempFileCounter = (this.tempFileCounter + 1) % 10000000;
 		
-		// make sure parent dirs exist, async
-		mkdirp( dir, 0775, function(err) {
+		// write temp file (atomic mode)
+		fs.writeFile( temp_file, value, function (err) {
 			if (err) {
-				// failed to create directory
-				var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
+				// failed to write file
+				var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
 				self.logError('file', msg);
 				return callback( new Error(msg), null );
 			}
 			
-			// now write temp file (atomic mode)
-			fs.writeFile( temp_file, value, function (err) {
+			// make sure parent dirs exist, async
+			self._makeDirs( dir, 0o0775, function(err) {
 				if (err) {
-					// failed to write file
-					var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
+					// failed to create directory
+					var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
 					self.logError('file', msg);
 					return callback( new Error(msg), null );
 				}
 				
 				// finally, rename temp file to final
-				fs.rename( temp_file, file, function (err) {
+				self._renameFile( temp_file, file, function (err) {
 					if (err) {
 						// failed to write file
 						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
@@ -148,8 +234,8 @@ module.exports = Class.create({
 					self.logDebug(9, "Store operation complete: " + key);
 					callback(null, null);
 				} ); // rename
-			} ); // write
-		} ); // mkdirp
+			} ); // mkdirp
+		} ); // temp file
 	},
 	
 	putStream: function(key, inp, callback) {
@@ -157,35 +243,35 @@ module.exports = Class.create({
 		var self = this;
 		var file = this.getFilePath(key);
 		
-		this.logDebug(9, "Storing Binary Stream Object: " + key);
+		this.logDebug(9, "Storing Binary Stream Object: " + key, file);
 		
 		var dir = path.dirname( file );
 		
 		var temp_file = this.tempDir + '/' + path.basename(file) + '.tmp.' + this.tempFileCounter;
 		this.tempFileCounter = (this.tempFileCounter + 1) % 10000000;
 		
-		// make sure parent dirs exist, async
-		mkdirp( dir, 0775, function(err) {
-			if (err) {
-				// failed to create directory
-				var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
-				self.logError('file', msg);
-				return callback( new Error(msg), null );
-			}
-			
-			// now create the write stream
-			var outp = fs.createWriteStream( temp_file );
-			
-			outp.on('error', function(err) {
-				// failed to write file
-				var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
-				self.logError('file', msg);
-				return callback( new Error(msg), null );
-			} );
-			
-			outp.on('finish', function() {
-				// finally, rename temp file to final
-				fs.rename( temp_file, file, function (err) {
+		// create the write stream to temp file
+		var outp = fs.createWriteStream( temp_file );
+		
+		outp.on('error', function(err) {
+			// failed to write file
+			var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
+			self.logError('file', msg);
+			return callback( new Error(msg), null );
+		} );
+		
+		outp.on('finish', function() {
+			// make sure parent dirs exist, async
+			self._makeDirs( dir, 0o0775, function(err) {
+				if (err) {
+					// failed to create directory
+					var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
+					self.logError('file', msg);
+					return callback( new Error(msg), null );
+				}
+				
+				// rename temp file to final
+				self._renameFile( temp_file, file, function (err) {
 					if (err) {
 						// failed to write file
 						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
@@ -197,11 +283,11 @@ module.exports = Class.create({
 					self.logDebug(9, "Store operation complete: " + key);
 					callback(null, null);
 				} ); // rename
-			} ); // pipe finish
-			
-			// pipe inp to outp
-			inp.pipe( outp );
-		} ); // mkdirp
+			} ); // mkdirp
+		} ); // pipe finish
+		
+		// pipe inp to outp
+		inp.pipe( outp );
 	},
 	
 	head: function(key, callback) {
@@ -209,20 +295,21 @@ module.exports = Class.create({
 		var self = this;
 		var file = this.getFilePath(key);
 		
-		this.logDebug(9, "Pinging Object: " + key);
+		this.logDebug(9, "Pinging Object: " + key, file);
 		
 		fs.stat(file, function(err, stats) {
 			if (err) {
-				var msg = err.message;
-				if (msg.match(/ENOENT/)) msg = "File not found";
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
 				else {
 					// log fs errors that aren't simple missing files (i.e. I/O errors)
-					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err);
+					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err.message);
 				}
-				return callback(
-					new Error("Failed to head key: " + key + ": " + msg),
-					null
-				);
+				
+				err.message = "Failed to head key: " + key + ": " + err.message;
+				return callback( err, null );
 			}
 			
 			self.logDebug(9, "Head complete: " + key);
@@ -245,16 +332,17 @@ module.exports = Class.create({
 		
 		fs.readFile(file, opts, function (err, data) {
 			if (err) {
-				var msg = err.message;
-				if (msg.match(/ENOENT/)) msg = "File not found";
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
 				else {
 					// log fs errors that aren't simple missing files (i.e. I/O errors)
-					self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err);
+					self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err.message);
 				}
-				return callback(
-					new Error("Failed to fetch key: " + key + ": " + msg),
-					null
-				);
+				
+				err.message = "Failed to fetch key: " + key + ": " + err.message;
+				return callback( err, null );
 			}
 			
 			if (file.match(/\.json$/i)) {
@@ -284,16 +372,17 @@ module.exports = Class.create({
 		// make sure record exists
 		fs.stat(file, function(err, stats) {
 			if (err) {
-				var msg = err.message;
-				if (msg.match(/ENOENT/)) msg = "File not found";
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
 				else {
 					// log fs errors that aren't simple missing files (i.e. I/O errors)
-					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err);
+					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err.message);
 				}
-				return callback(
-					new Error("Failed to head key: " + key + ": " + msg),
-					null
-				);
+				
+				err.message = "Failed to head key: " + key + ": " + err.message;
+				return callback( err, null );
 			}
 			
 			// create read stream
@@ -308,49 +397,158 @@ module.exports = Class.create({
 		var self = this;
 		var file = this.getFilePath(key);
 		
-		this.logDebug(9, "Deleting Object: " + key);
+		this.logDebug(9, "Deleting Object: " + key, file);
 		
 		fs.unlink(file, function(err) {
 			if (err) {
-				var msg = err.message;
-				if (msg.match(/ENOENT/)) msg = "File not found";
-				self.logError('file', "Failed to delete object: " + key + ": " + msg);
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
+				
+				self.logError('file', "Failed to delete file: " + key + ": " + file + ": " + err.message);
+				
+				err.message = "Failed to delete key: " + key + ": " + err.message;
+				return callback( err );
 			}
 			else {
 				self.logDebug(9, "Delete complete: " + key);
 				
-				// enqueue async job to cleanup parent dirs if empty
-				self.storage.enqueue( {
-					action: 'custom',
-					key: key,
-					dir: path.dirname(file),
-					handler: function(task, callback) {
-						// attempt to delete via rmdir() which will fail if it contains any files
-						self.logDebug(9, "Cleaning up: " + task.dir);
-						
-						fs.rmdir( task.dir, function(err) {
-							if (!err) {
-								// success -- do we need to go shallower?
-								var dir = path.dirname( task.dir );
-								if (dir != self.baseDir) {
-									// enqueue new task for next outer parent level
-									self.storage.enqueue({
-										action: 'custom',
-										key: task.key,
-										dir: dir,
-										handler: task.handler
-									});
-								}
-							} // success
-							callback( null );
-						} ); // rmdir
-					} // handler
-				} ); // cleanup
+				// cleanup parent dirs if empty
+				var done = false;
+				var dir = path.dirname(file);
 				
+				if (dir != self.baseDir) {
+					async.whilst(
+						function() { 
+							return (!done); 
+						},
+						function(callback) {
+							fs.rmdir( dir, function(err) {
+								if (err) {
+									// dir has files, we're done
+									done = true;
+								}
+								else {
+									// success -- do we need to go shallower?
+									self.logDebug(9, "Deleted empty parent dir: " + dir);
+									
+									dir = path.dirname( dir );
+									if (dir == self.baseDir) {
+										// cannot go any further
+										done = true;
+									}
+								} // success
+								callback();
+							} ); // rmdir
+						},
+						callback
+					);
+				}
+				else return callback();
 			} // success
+		} ); // unlink
+	},
+	
+	commitTempFile: function(key, temp_file, callback) {
+		// quickly rename temp file over record, given key
+		// this is used by the transaction system for commits
+		var self = this;
+		
+		this.logDebug(9, "Storing record data from temp file: " + key + ": " + temp_file);
+		
+		if (this.config.get('nfs')) {
+			// in NFS mode, we cannot do the rename trick, so we have to use putStream()
+			var inp = fs.createReadStream( temp_file );
 			
-			if (callback) callback(err);
-		} );
+			inp.on('error', function(err) {
+				var msg = "Failed to read temp file: " + key + ": " + temp_file + ": " + err.message;
+				self.logError('file', msg);
+				return callback( new Error(msg) );
+			});
+			
+			this.putStream( key, inp, function(err) {
+				if (err) {
+					var msg = "Failed to write stream: " + key + ": " + temp_file + ": " + err.message;
+					self.logError('file', msg);
+					return callback( new Error(msg) );
+				}
+				
+				fs.unlink( temp_file, function(err) {
+					if (err) {
+						var msg = "Failed to unlink file: " + key + ": " + temp_file + ": " + err.message;
+						self.logError('file', msg);
+						return callback( new Error(msg) );
+					}
+					
+					// all done
+					self.logDebug(9, "Store operation complete: " + key);
+					callback();
+				} ); // unlink
+			} ); // putStream
+			
+			return;
+		} // NFS mode
+		
+		var file = this.getFilePath(key);
+		var dir = path.dirname( file );
+		
+		// make sure parent dirs exist, async
+		this._makeDirs( dir, 0o0775, function(err) {
+			if (err) {
+				// failed to create directory
+				var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
+				self.logError('file', msg);
+				return callback( new Error(msg) );
+			}
+			
+			// rename temp file to final
+			self._renameFile( temp_file, file, function (err) {
+				if (err) {
+					// failed to rename file
+					if (err.code == 'EXDEV') {
+						// cross-device rename attempted, switch to NFS mode and recurse
+						self.logDebug(2, "Cross-device rename detected in commitTempFile, switching to NFS mode");
+						self.config.set('nfs', true);
+						return self.commitTempFile(key, temp_file, callback);
+					}
+					else {
+						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
+						self.logError('file', msg);
+						return callback( new Error(msg) );
+					}
+				}
+				
+				// fsync new file to make sure it is really written to disk
+				fs.open( file, "r", function(err, fh) {
+					if (err) {
+						var msg = "Failed to open file: " + key + ": " + file + ": " + err.message;
+						self.logError('file', msg);
+						return callback( new Error(msg) );
+					}
+					
+					fs.fsync(fh, function(err) {
+						if (err) {
+							var msg = "Failed to fsync file: " + key + ": " + file + ": " + err.message;
+							self.logError('file', msg);
+							return callback( new Error(msg) );
+						}
+						
+						fs.close(fh, function(err) {
+							if (err) {
+								var msg = "Failed to close file: " + key + ": " + file + ": " + err.message;
+								self.logError('file', msg);
+								return callback( new Error(msg) );
+							}
+							
+							// all done
+							self.logDebug(9, "Store operation complete: " + key);
+							callback();
+						}); // fs.close
+					}); // fs.fsync
+				} ); // fs.open
+			} ); // rename
+		} ); // mkdirp
 	},
 	
 	runMaintenance: function(callback) {
