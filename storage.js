@@ -4,22 +4,35 @@
 
 var util = require("util");
 var async = require('async');
+var unidecode = require('unidecode');
 
 var Class = require("pixl-class");
 var Tools = require("pixl-tools");
+var Perf = require("pixl-perf");
 var Component = require("pixl-server/component");
 var List = require("./list.js");
+var Hash = require("./hash.js");
+var Indexer = require("./indexer.js");
+var Transaction = require("./transaction.js");
 
 module.exports = Class.create({
 	
 	__name: 'Storage',
 	__parent: Component,
-	__mixins: [ List ],
+	__mixins: [ List, Hash, Indexer, Transaction ],
+	
+	version: require('./package.json').version,
 	
 	defaultConfig: {
 		list_page_size: 50,
+		hash_page_size: 50,
 		concurrency: 1,
 		maintenance: 0,
+		log_event_types: { 
+			all:0, get:0, put:0, head:0, delete:0, expire_set:0, perf_sec:0, perf_min:0,
+			commit:0, index:0, unindex:0, search:0, sort:0, maint:1 
+		},
+		max_recent_events: 0,
 		cache_key_match: ''
 	},
 	
@@ -28,10 +41,18 @@ module.exports = Class.create({
 	cacheKeyRegex: null,
 	started: false,
 	
+	earlyStart: function() {
+		// check for early transaction recovery
+		if (!this.config.get('transactions')) return true;
+		
+		// transactions are enabled
+		return this.transEarlyStart();
+	},
+	
 	startup: function(callback) {
 		// setup storage plugin
 		var self = this;
-		this.logDebug(2, "Setting up storage system");
+		this.logDebug(2, "Setting up storage system v" + this.version);
 		
 		// advisory locking system (in RAM, single process only)
 		this.locks = {};
@@ -56,6 +77,21 @@ module.exports = Class.create({
 		// queue for setting expirations and custom engine ops
 		this.queue = async.queue( this.dequeue.bind(this), this.concurrency );
 		
+		// setup perf tracking system
+		this.perf = new Perf();
+		this.perf.minMax = true;
+		
+		this.minutePerf = new Perf();
+		this.minutePerf.minMax = true;
+		
+		this.lastSecondMetrics = {};
+		this.lastMinuteMetrics = {};
+		this.recentEvents = {};
+		
+		// bind to server tick, so we can aggregate perf metrics
+		this.server.on('tick', this.tick.bind(this));
+		this.server.on('minute', this.tickMinute.bind(this));
+		
 		// setup daily maintenance, if configured
 		if (this.config.get('maintenance')) {
 			// e.g. "day", "04:00", etc.
@@ -65,16 +101,29 @@ module.exports = Class.create({
 		}
 		
 		// allow engine to startup as well
-		this.engine.startup( function() {
+		this.engine.startup( function(err) {
+			if (err) return callback(err);
+			
+			// set started flag, as transactions may need to recover from a crash
 			self.started = true;
-			callback();
-		} );
+			
+			// finally, init transaction system
+			self.initTransactions( function(err) {
+				
+				// all done
+				callback(err);
+				
+			} ); // initTransactions
+		} ); // engine.startup
 	},
 	
 	prepConfig: function() {
 		// save some config values
 		this.listItemsPerPage = this.config.get('list_page_size');
+		this.hashItemsPerPage = this.config.get('hash_page_size');
 		this.concurrency = this.config.get('concurrency');
+		this.logEventTypes = this.config.get('log_event_types');
+		this.maxRecentEvents = this.config.get('max_recent_events');
 		
 		this.cacheKeyRegex = null;
 		if (this.config.get('cache_key_match')) {
@@ -83,8 +132,8 @@ module.exports = Class.create({
 	},
 	
 	normalizeKey: function(key) {
-		// lower-case, strip leading and trailing slashes
-		return key.toLowerCase().replace(/[^\w\-\.\/]+/g, '').replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
+		// downconvert unicode, lower-case, alphanum-dash-dot-slash only, strip leading and trailing slashes
+		return unidecode(key).toLowerCase().replace(/[^\w\-\.\/]+/g, '').replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
 	},
 	
 	isBinaryKey: function(key) {
@@ -94,11 +143,15 @@ module.exports = Class.create({
 	
 	put: function(key, value, callback) {
 		// store key+value pair
+		var self = this;
+		
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		key = this.normalizeKey( key );
 		
-		// sanity check
-		var isBuffer = (value instanceof Buffer);
+		// sanity checks
+		if (!value) return callback( new Error("Record value cannot be false.") );
+		
+		var isBuffer = !!value.fill;
 		if (isBuffer && !this.isBinaryKey(key)) {
 			return callback( new Error("Buffer values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
 		}
@@ -111,11 +164,25 @@ module.exports = Class.create({
 			this.cache[key] = value;
 		}
 		
-		this.engine.put( key, value, callback );
+		// invoke engine and track perf
+		var pf = this.perf.begin('put');
+		
+		this.engine.put( key, value, function(err) {
+			// put complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('put', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err);
+		} );
 	},
 	
 	putStream: function(key, stream, callback) {
 		// store key+stream
+		var self = this;
+		
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		key = this.normalizeKey( key );
 		
@@ -123,7 +190,22 @@ module.exports = Class.create({
 			return callback( new Error("Stream values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
 		}
 		
-		this.engine.putStream( key, stream, callback );
+		// sanity checks
+		if (!stream || !stream.pipe) return callback( new Error("Not a valid stream.") );
+		
+		// invoke engine and track perf
+		var pf = this.perf.begin('put');
+		
+		this.engine.putStream( key, stream, function(err) {
+			// put complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('put', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err);
+		} );
 	},
 	
 	putMulti: function(records, callback) {
@@ -132,7 +214,7 @@ module.exports = Class.create({
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
 		// if engine provides its own putMulti, call that directly
-		if ("putMulti" in this.engine) {
+		if (("putMulti" in this.engine) && !this.currentTransactionPath) {
 			return this.engine.putMulti(records, callback);
 		}
 		
@@ -150,11 +232,50 @@ module.exports = Class.create({
 		);
 	},
 	
+	commitTempFile: function(key, temp_file, callback) {
+		// Internal API: quickly rename temp file over record, given key
+		// this is used by the transaction system for commits
+		var self = this;
+		
+		if (!("commitTempFile" in self.engine)) {
+			return callback(new Error("Engine does not support commitTempFile."));
+		}
+		
+		// invoke engine and track perf
+		var pf = this.perf.begin('put');
+		
+		this.engine.commitTempFile(key, temp_file, function(err) {
+			// put complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('put', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err);
+		} );
+	},
+	
 	head: function(key, callback) {
 		// fetch metadata given key: { mod, len }
+		var self = this;
+		
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		key = this.normalizeKey( key );
-		this.engine.head( key, callback );
+		
+		// invoke engine and track perf
+		var pf = this.perf.begin('head');
+		
+		this.engine.head( key, function(err, data) {
+			// head complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('head', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err, data);
+		} );
 	},
 	
 	headMulti: function(keys, callback) {
@@ -165,7 +286,7 @@ module.exports = Class.create({
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
 		// if engine provides its own headMulti, call that directly
-		if ("headMulti" in this.engine) {
+		if (("headMulti" in this.engine) && !this.currentTransactionPath) {
 			return this.engine.headMulti(keys, callback);
 		}
 		
@@ -205,7 +326,13 @@ module.exports = Class.create({
 			return callback( null, this.cache[key] );
 		}
 		
+		// invoke engine and track perf
+		var pf = this.perf.begin('get');
+		
 		this.engine.get( key, function(err, value) {
+			// get complete
+			var elapsed = pf.end();
+			
 			if (err) return callback(err);
 			
 			// ram cache
@@ -213,7 +340,11 @@ module.exports = Class.create({
 				self.cache[key] = value;
 			}
 			
-			callback(err, value);
+			self.logTransaction('get', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(null, value);
 		} );
 	},
 	
@@ -235,7 +366,7 @@ module.exports = Class.create({
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
 		// if engine provides its own getMulti, call that directly
-		if ("getMulti" in this.engine) {
+		if (("getMulti" in this.engine) && !this.currentTransactionPath) {
 			return this.engine.getMulti(keys, callback);
 		}
 		
@@ -263,7 +394,9 @@ module.exports = Class.create({
 	},
 	
 	delete: function(key, callback) {
-		// delete key given key
+		// delete record given key
+		var self = this;
+		
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		key = this.normalizeKey( key );
 		
@@ -272,17 +405,28 @@ module.exports = Class.create({
 			delete this.cache[key];
 		}
 		
-		this.engine.delete( key, callback );
+		// invoke engine and track perf
+		var pf = this.perf.begin('delete');
+		
+		this.engine.delete( key, function(err) {
+			// delete complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('delete', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err);
+		} );
 	},
 	
 	deleteMulti: function(keys, callback) {
 		// delete multiple records at once, given array of keys
 		var self = this;
-		var records = {};
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
 		// if engine provides its own deleteMulti, call that directly
-		if ("deleteMulti" in this.engine) {
+		if (("deleteMulti" in this.engine) && !this.currentTransactionPath) {
 			return this.engine.deleteMulti(keys, callback);
 		}
 		
@@ -326,14 +470,27 @@ module.exports = Class.create({
 	},
 	
 	expire: function(key, expiration, force) {
-		// set expiration date on key
-		this.logDebug(9, "Setting expiration on: " + key + " to " + expiration);
+		// set expiration date on key, normalize to midnight
+		var dargs = Tools.getDateArgs(
+			Tools.normalizeTime( expiration, { hour:0, min:0, sec:0 } ) 
+		);
+		
+		var dnow = Tools.getDateArgs( new Date() );
+		if (!force && ((dargs.epoch <= dnow.epoch) || (dargs.yyyy_mm_dd == dnow.yyyy_mm_dd))) {
+			// date is in past, move to tomorrow, to avoid race condition with maintenance()
+			// this trick guarantees tomorrow midnight regardless of daylight savings time
+			dargs = Tools.getDateArgs( Tools.normalizeTime(
+				Tools.normalizeTime( dnow.epoch, { hour:12, min:0, sec:0 } ) + 86400,
+				{ hour:0, min:0, sec:0 } )
+			);
+		}
+		
+		this.logDebug(9, "Setting expiration on: " + key + " to " + dargs.yyyy_mm_dd);
 		
 		this.enqueue({
 			action: 'expire_set',
 			key: key,
-			expiration: expiration,
-			force: !!force
+			expiration: dargs.epoch
 		});
 	},
 	
@@ -345,31 +502,39 @@ module.exports = Class.create({
 			var func = task;
 			task = { action: 'custom', handler: func };
 		}
-		this.logDebug(9, "Enqueuing async task", task);
+		this.logDebug(9, "Enqueuing async task: " + (task.label || task.action), task);
 		this.queue.push( task );
 	},
 	
 	dequeue: function(task, callback) {
 		// run task and fire callback
 		var self = this;
-		this.logDebug(9, "Running async task", task);
+		this.logDebug(9, "Running async task: " + (task.label || task.action), task);
 		
 		switch (task.action) {
 			case 'expire_set':
 				// set expiration on record
 				var dargs = Tools.getDateArgs( task.expiration );
-				var dnow = Tools.getDateArgs( new Date() );
-				if (!task.force && ((dargs.epoch <= dnow.epoch) || (dargs.yyyy_mm_dd == dnow.yyyy_mm_dd))) {
-					// move to tomorrow, avoid race condition with maintenance()
-					dargs = Tools.getDateArgs( dnow.epoch + 86400 );
-				}
+				var cleanup_list_path = '_cleanup/' + dargs.yyyy + '/' + dargs.mm + '/' + dargs.dd;
+				var cleanup_hash_path = '_cleanup/expires';
 				
-				var cleanup_key = '_cleanup/' + dargs.yyyy + '/' + dargs.mm + '/' + dargs.dd;
-				this.listPush( cleanup_key, { key: task.key }, function(err, data) {
+				this.listPush( cleanup_list_path, { key: task.key }, { page_size: 1000 }, function(err, data) {
 					// should never fail, but who knows
-					if (err) self.logError('cleanup', "Failed to push cleanup list: " + cleanup_key + ": " + err);
-					callback();
-				} );
+					if (err) self.logError('cleanup', "Failed to push cleanup list: " + cleanup_list_path + ": " + err);
+					
+					self.hashPut( cleanup_hash_path, task.key, { expires: task.expiration }, { page_size: 1000 }, function(err) {
+						// should never fail, but who knows
+						if (err) self.logError('cleanup', "Failed to put cleanup hash: " + cleanup_hash_path + ": " + err);
+						
+						self.logTransaction('expire_set', task.key, {
+							epoch: dargs.epoch,
+							yyyy_mm_dd: dargs.yyyy_mm_dd,
+							list_path: cleanup_list_path
+						});
+						
+						callback();
+					} ); // hashPut
+				} ); // listPush
 			break; // expire_set
 			
 			case 'custom':
@@ -386,71 +551,90 @@ module.exports = Class.create({
 		// run daily maintenance (delete expired keys)
 		var self = this;
 		var dargs = Tools.getDateArgs( date || (new Date()) );
-		var cleanup_key = '_cleanup/' + dargs.yyyy + '/' + dargs.mm + '/' + dargs.dd;
-		this.logDebug(3, "Running daily maintenance", cleanup_key);
+		var cleanup_list_path = '_cleanup/' + dargs.yyyy + '/' + dargs.mm + '/' + dargs.dd;
+		var cleanup_hash_path = '_cleanup/expires';
+		var stats = {
+			time_start: Tools.timeNow(),
+			num_deleted: 0,
+			num_skipped: 0,
+			num_errors: 0
+		};
 		
-		this.listEach( cleanup_key, 
+		this.logDebug(3, "Running daily maintenance", cleanup_list_path);
+		
+		var deleteExpiredRecord = function(key, callback) {
+			// delete single expired record of any type
+			
+			var finishDelete = function(err) {
+				// log errors here (some records may already be deleted, which is fine)
+				if (err) stats.num_errors++;
+				
+				// also delete metadata (expires epoch)
+				self.hashDelete( cleanup_hash_path, key, function(herr) { 
+					if (!err) stats.num_deleted++;
+					callback(); 
+				} );
+			};
+			
+			// get record to determine type
+			self.get( key, function(err, data) {
+				if (!data) data = {};
+				if (data.type && (data.type == 'list')) {
+					self.listDelete( key, true, finishDelete );
+				}
+				else if (data.type && (data.type == 'hash')) {
+					self.hashDeleteAll( key, true, finishDelete );
+				}
+				else {
+					self.delete( key, finishDelete );
+				}
+			} ); // get
+		}; // deleteExpiredRecord
+		
+		this.listEach( cleanup_list_path, 
 			function(item, item_idx, callback) {
 				// delete item if still expired
 				var key = item.key;
-				if (key.match(/\.\w+$/)) {
-					// key has file extension so it is probably binary, delete right away
-					self.delete( key, function(err) {
-						callback();
-					} );
-				} // binary
-				else {
-					// see if expiration date is still overdue
-					self.get( key, function(err, data) {
-						if (data && data.expires) {
-							var eargs = Tools.getDateArgs( data.expires );
-							if ((eargs.epoch <= dargs.epoch) || (eargs.yyyy_mm_dd == dargs.yyyy_mm_dd)) {
-								// still expired, kill it
-								if (data.type && (data.type == 'list')) {
-									self.listDelete( key, true, function(err) { callback(); } );
-								}
-								else {
-									self.delete( key, function(err) { callback(); } );
-								}
-							}
-							else {
-								// oops, expiration changed, skip
-								self.logDebug(9, "Expiration on record " + key + " has changed to " + eargs.yyyy_mm_dd + ", skipping delete");
-								callback();
-							}
-						}
-						else if (data) {
-							// no expiration date, just delete it
-							if (data.type && (data.type == 'list')) {
-								self.listDelete( key, true, function(err) { callback(); } );
-							}
-							else {
-								self.delete( key, function(err) { callback(); } );
-							}
+				
+				// see if expiration date is still overdue
+				self.hashGet( cleanup_hash_path, key, function(err, data) {
+					if (data && data.expires) {
+						var eargs = Tools.getDateArgs( data.expires );
+						if ((eargs.epoch <= dargs.epoch) || (eargs.yyyy_mm_dd == dargs.yyyy_mm_dd)) {
+							// still expired, kill it
+							deleteExpiredRecord(key, callback);
 						}
 						else {
-							// failed to load, just move on (probably deleted)
+							// oops, expiration changed, skip
+							stats.num_skipped++;
+							self.logDebug(9, "Expiration on record " + key + " has changed to " + eargs.yyyy_mm_dd + ", skipping delete");
 							callback();
 						}
-					} ); // get
-				} // json
+					}
+					else {
+						// no expiration date, just delete it
+						deleteExpiredRecord(key, callback);
+					}
+				} ); // hashGet
 			},
 			function(err) {
 				// list iteration complete
 				if (err) {
-					self.logDebug(10, "Failed to load list, skipping maintenance (probably harmless)", cleanup_key);
+					self.logDebug(10, "Failed to load list, skipping maintenance (probably harmless)", cleanup_list_path);
 					if (callback) callback();
 				}
 				else {
 					// no error, delete list
-					self.listDelete( cleanup_key, true, function(err) {
+					self.listDelete( cleanup_list_path, true, function(err) {
 						if (err) {
-							self.logError('maint', "Failed to delete cleanup list: " + cleanup_key + ": " + err);
+							self.logError('maint', "Failed to delete cleanup list: " + cleanup_list_path + ": " + err);
 						}
 						
 						// allow engine to run maint as well
 						self.engine.runMaintenance( function() {
+							stats.elapsed_sec = Tools.timeNow() - stats.time_start;
 							self.logDebug(3, "Daily maintenance complete");
+							self.logTransaction('maint', cleanup_list_path, stats);
 							if (callback) callback();
 						} );
 						
@@ -461,41 +645,141 @@ module.exports = Class.create({
 	},
 	
 	lock: function(key, wait, callback) {
-		// lock key in RAM, possibly wait until unlocked
+		// lock key in exclusive mode, possibly wait until acquired
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
-		if (key.match(/^(\|+)/)) key = RegExp.$1 + this.normalizeKey(key);
+		if (key.match(/^(\w*\|+)(.+)$/)) key = RegExp.$1 + this.normalizeKey(RegExp.$2);
 		else key = this.normalizeKey(key);
 		
+		this.logDebug(9, "Requesting lock: " + key);
+		
 		if (this.locks[key]) {
+			var lock = this.locks[key];
 			if (wait) {
-				this.logDebug(9, "Key is already locked: " + key + ", waiting for unlock");
-				this.locks[key].push(callback);
+				lock.clients.push(callback);
+				this.logDebug(9, "Key is already locked: " + key + ", waiting for unlock (" + lock.clients.length + " clients waiting)");
 			}
 			else {
 				this.logDebug(9, "Key is already locked: " + key);
-				callback( new Error("Key is locked") );
+				callback( new Error("Key is locked"), lock );
 			}
 		}
 		else {
-			this.logDebug(9, "Locking key: " + key);
-			this.locks[key] = [];
-			callback(null);
+			this.logDebug(9, "Locked key: " + key);
+			var lock = { type: 'ex', clients: [] };
+			this.locks[key] = lock;
+			callback(null, lock);
 		}
 	},
 	
 	unlock: function(key) {
 		// release lock on key
-		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		if (!this.started) throw new Error("Storage has not completed startup.");
 		
-		if (key.match(/^(\|+)/)) key = RegExp.$1 + this.normalizeKey(key);
+		if (key.match(/^(\w*\|+)(.+)$/)) key = RegExp.$1 + this.normalizeKey(RegExp.$2);
 		else key = this.normalizeKey(key);
 		
 		if (this.locks[key]) {
-			this.logDebug(9, "Unlocking key: " + key);
-			var callback = this.locks[key].shift();
-			if (callback) callback();
+			var lock = this.locks[key];
+			if (lock.type != 'ex') {
+				this.logError('lock', "Lock is incorrect type (expected exclusive): " + key);
+				return;
+			}
+			
+			this.logDebug(9, "Unlocking key: " + key + " (" + lock.clients.length + " clients waiting)");
+			var callback = lock.clients.shift();
+			if (callback) {
+				this.logDebug(9, "Locking key: " + key);
+				callback(null, lock);
+			}
 			else delete this.locks[key];
+		}
+	},
+	
+	shareLock: function(key, wait, callback) {
+		// lock key in shared (read-only) mode, possibly wait until acquired
+		var self = this;
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		if (key.match(/^(\w*\|+)(.+)$/)) key = RegExp.$1 + this.normalizeKey(RegExp.$2);
+		else key = this.normalizeKey(key);
+		
+		this.logDebug(9, "Requesting shared lock: " + key);
+		
+		if (this.locks[key]) {
+			var lock = this.locks[key];
+			if ((lock.type == 'sh') && !lock.clients.length) {
+				// lock is already shared and no exclusive clients are waiting, so join the party
+				lock.readers++;
+				this.logDebug(9, "Joined shared lock: " + key, { readers: lock.readers });
+				callback(null, lock);
+			}
+			else {
+				// exclusive lock (or shared lock with exclusive clients waiting), so we must wait
+				if (!wait) return callback( new Error("Key is locked"), lock );
+				
+				var func = function(err, lock) {
+					if (err) return callback(err);
+					
+					// acquired lock, convert to shared
+					if (lock.type == 'ex') {
+						self.logDebug(9, "Locked key in shared mode: " + key);
+						lock.type = 'sh';
+						lock.readers = 1;
+						callback(null, lock);
+						
+						// look for more pending shared readers
+						while (lock.clients[0] && lock.clients[0].__pixl_share_client) {
+							var client = lock.clients.shift();
+							lock.readers++;
+							self.logDebug(9, "Joined shared lock: " + key, { readers: lock.readers });
+							client(null, lock);
+						}
+					}
+					else {
+						// lock already shared, and we've been joined to it
+						callback(null, lock);
+					}
+				}; // got lock
+				
+				// add special flag so we know client wants to be shared
+				func.__pixl_share_client = 1;
+				
+				// wait for exclusive lock (which we will convert to shared)
+				this.lock(key, true, func);
+			}
+		}
+		else {
+			this.logDebug(9, "Locked key in shared mode: " + key);
+			var lock = { type: 'sh', clients: [], readers: 1 };
+			this.locks[key] = lock;
+			callback(null, lock);
+		}
+	},
+	
+	shareUnlock: function(key) {
+		// release lock on shared key
+		if (!this.started) throw new Error("Storage has not completed startup.");
+		
+		if (key.match(/^(\w*\|+)(.+)$/)) key = RegExp.$1 + this.normalizeKey(RegExp.$2);
+		else key = this.normalizeKey(key);
+		
+		if (this.locks[key]) {
+			var lock = this.locks[key];
+			if (lock.type != 'sh') {
+				this.logError('lock', "Lock is incorrect type (expected shared): " + key);
+				return;
+			}
+			
+			if (lock.readers > 0) {
+				lock.readers--;
+				this.logDebug(9, "Removing reader from shared lock: " + key, { readers: lock.readers });
+				if (lock.readers > 0) return;
+			}
+			
+			// all readers gone, so treat as exclusive and fully unlock key
+			lock.type = 'ex';
+			this.unlock(key);
 		}
 	},
 	
@@ -530,6 +814,97 @@ module.exports = Class.create({
 			); // whilst
 		}
 		else callback();
+	},
+	
+	logTransaction: function(type, key, data) {
+		// proxy request to system logger with correct component
+		if (this.maxRecentEvents) {
+			if (!this.recentEvents[type]) this.recentEvents[type] = [];
+			this.recentEvents[type].push({
+				date: Tools.timeNow(),
+				type: type,
+				key: key,
+				data: data
+			});
+			if (this.recentEvents[type].length > this.maxRecentEvents) {
+				this.recentEvents[type].shift();
+			}
+		}
+		
+		if (this.logEventTypes[type] || this.logEventTypes['all']) {
+			this.logger.set( 'component', this.__name );
+			this.logger.transaction( type, key, data );
+		}
+	},
+	
+	tick: function() {
+		// called every second by pixl-server
+		
+		// rotate and log second perf metrics
+		var metrics = this.lastSecondMetrics = this.perf.getMinMaxMetrics();
+		
+		if (Tools.numKeys(metrics) && (this.logEventTypes.perf_sec || this.logEventTypes.all)) {
+			this.logger.print({ 
+				component: this.__name,
+				category: 'perf', 
+				code: 'second', 
+				msg: "Last Second Performance Metrics", 
+				data: metrics 
+			});
+		}
+		
+		// import perf into minutePerf
+		this.minutePerf.import( this.perf );
+		
+		// and reset second perf
+		this.perf.reset();
+	},
+	
+	tickMinute: function() {
+		// called every minute by pixl-server
+		
+		// rotate and log minute perf metrics
+		var metrics = this.lastMinuteMetrics = this.minutePerf.getMinMaxMetrics();
+		
+		if (Tools.numKeys(metrics) && (this.logEventTypes.perf_min || this.logEventTypes.all)) {
+			this.logger.print({ 
+				component: this.__name,
+				category: 'perf', 
+				code: 'minute', 
+				msg: "Last Minute Performance Metrics", 
+				data: metrics 
+			});
+		}
+		
+		// and reset minute perf
+		this.minutePerf.reset();
+	},
+	
+	getStats: function() {
+		// get perf and other misc stats
+		var stats = {
+			version: this.version,
+			engine: this.engine.__name,
+			concurrency: this.concurrency,
+			transactions: !!this.transactions,
+			last_second: this.lastSecondMetrics,
+			last_minute: this.lastMinuteMetrics,
+			recent_events: this.recentEvents,
+			locks: {}
+		};
+		
+		// locks have actual callback functions, so convert to JSON-friendly
+		for (var key in this.locks) {
+			var lock = this.locks[key];
+			if (lock.type == 'ex') {
+				stats.locks[key] = { type: 'exclusive', clients: lock.clients.length + 1 };
+			}
+			else if (lock.type == 'sh') {
+				stats.locks[key] = { type: 'shared', readers: lock.readers };
+			}
+		}
+		
+		return stats;
 	},
 	
 	shutdown: function(callback) {
