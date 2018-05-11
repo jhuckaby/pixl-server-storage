@@ -4,12 +4,18 @@
 
 var util = require("util");
 var async = require('async');
-
 var Class = require("pixl-class");
 var Tools = require("pixl-tools");
 
-module.exports = Class.create({
+var ListSplice = require("./list-splice.js");
 
+// support for older node versions
+var isArray = Array.isArray || util.isArray;
+
+module.exports = Class.create({
+	
+	__mixins: [ ListSplice ],
+	
 	listCreate: function(key, opts, callback) {
 		// Create new list
 		var self = this;
@@ -32,14 +38,18 @@ module.exports = Class.create({
 				if (err) return callback(err);
 				
 				// create first page
-				self.put( key + '/0', { type: 'list_page', items: [] }, callback );
+				self.put( key + '/0', { type: 'list_page', items: [] }, function(err) {
+					if (err) return callback(err);
+					else callback(null, opts);
+				} );
 			} ); // header created
 		} ); // get check
 	},
 	
-	_listLoad: function(key, create, callback) {
+	_listLoad: function(key, create_opts, callback) {
 		// Internal method, load list root, create if doesn't exist
 		var self = this;
+		if (create_opts && (typeof(create_opts) != 'object')) create_opts = {};
 		this.logDebug(9, "Loading list: " + key);
 		
 		this.get(key, function(err, data) {
@@ -47,18 +57,12 @@ module.exports = Class.create({
 				// list already exists
 				callback(null, data);
 			}
-			else if (create && err && err.toString().match(/\bnot\s+found\b/i)) {
+			else if (create_opts && err && (err.code == "NoSuchKey")) {
 				// create new list, ONLY if record was not found (and not some other error)
-				self.logDebug(9, "List not found, creating it: " + key);
-				self.listCreate(key, {}, function(err, data) {
+				self.logDebug(9, "List not found, creating it: " + key, create_opts);
+				self.listCreate(key, create_opts, function(err, data) {
 					if (err) callback(err, null);
-					else callback( null, {
-						first_page: 0,
-						last_page: 0,
-						length: 0,
-						page_size: self.listItemsPerPage,
-						type: 'list'
-					} );
+					else callback( null, data );
 				} );
 			}
 			else {
@@ -80,7 +84,7 @@ module.exports = Class.create({
 				// list page already exists
 				callback(null, data);
 			}
-			else if (create && err && err.toString().match(/\bnot\s+found\b/i)) {
+			else if (create && err && (err.code == "NoSuchKey")) {
 				// create new list page, ONLY if record was not found (and not some other error)
 				self.logDebug(9, "List page not found, creating it: " + page_key);
 				callback( null, { type: 'list_page', items: [] } );
@@ -104,19 +108,34 @@ module.exports = Class.create({
 		this.unlock( '|'+key );
 	},
 	
-	listPush: function(key, items, callback) {
+	_listShareLock: function(key, wait, callback) {
+		// internal list shared lock wrapper
+		// uses unique key prefix so won't deadlock with user locks
+		this.shareLock( '|'+key, wait, callback );
+	},
+	
+	_listShareUnlock: function(key) {
+		// internal list shared unlock wrapper
+		this.shareUnlock( '|'+key );
+	},
+	
+	listPush: function(key, items, create_opts, callback) {
 		// Push new items onto end of list
 		var self = this;
+		if (!callback && (typeof(create_opts) == 'function')) {
+			callback = create_opts;
+			create_opts = {};
+		}
 		var list = null;
 		var page = null;
-		if (!util.isArray(items)) items = [items];
+		if (!isArray(items)) items = [items];
 		this.logDebug(9, "Pushing " + items.length + " items onto end of list: " + key, this.debugLevel(10) ? items : null);
 		
 		this._listLock(key, true, function() {
 			async.series([
 				function(callback) {
 					// first load list header
-					self._listLoad(key, 'create', function(err, data) {
+					self._listLoad(key, create_opts, function(err, data) {
 						list = data; 
 						callback(err, data);
 					} );
@@ -191,19 +210,23 @@ module.exports = Class.create({
 		} ); // locked
 	},
 	
-	listUnshift: function(key, items, callback) {
+	listUnshift: function(key, items, create_opts, callback) {
 		// Unshift new items onto beginning of list
 		var self = this;
+		if (!callback && (typeof(create_opts) == 'function')) {
+			callback = create_opts;
+			create_opts = {};
+		}
 		var list = null;
 		var page = null;
-		if (!util.isArray(items)) items = [items];
+		if (!isArray(items)) items = [items];
 		this.logDebug(9, "Unshifting " + items.length + " items onto beginning of list: " + key, this.debugLevel(10) ? items : null);
 		
 		this._listLock( key, true, function() {
 			async.series([
 				function(callback) {
 					// first load list header
-					self._listLoad(key, 'create', function(err, data) {
+					self._listLoad(key, create_opts, function(err, data) {
 						list = data; 
 						callback(err, data);
 					} );
@@ -229,7 +252,7 @@ module.exports = Class.create({
 				// split items into pages
 				var item = null;
 				var count = 0;
-				while (item = items.shift()) {
+				while (item = items.pop()) {
 					// make sure item is an object
 					if (typeof(item) != 'object') continue;
 					
@@ -445,11 +468,21 @@ module.exports = Class.create({
 		var items = [];
 		if (!this.started) return callback( new Error("Storage has not completed startup.") );
 		
+		idx = parseInt( idx || 0 );
+		if (isNaN(idx)) return callback( new Error("Position must be an integer.") );
+		
+		len = parseInt( len || 0 );
+		if (isNaN(len)) return callback( new Error("Length must be an integer.") );
+		
 		this.logDebug(9, "Fetching " + len + " items at position " + idx + " from list: " + key);
 		
 		async.series([
 			function(callback) {
-				// first load list header
+				// first we share lock
+				self._listShareLock(key, true, callback);
+			},
+			function(callback) {
+				// next load list header
 				self._listLoad(key, false, function(err, data) {
 					list = data; 
 					callback(err, data);
@@ -465,7 +498,10 @@ module.exports = Class.create({
 		],
 		function(err, results) {
 			// list and page loaded, proceed with get
-			if (err) return callback(err, null, list);
+			if (err) {
+				self._listShareUnlock(key);
+				return callback(err, null, list);
+			}
 			
 			// apply defaults if applicable
 			if (!idx) idx = 0;
@@ -473,11 +509,17 @@ module.exports = Class.create({
 			
 			// range check
 			if (list.length && (idx >= list.length)) {
+				self._listShareUnlock(key);
 				return callback( new Error("Index out of range"), null, list );
 			}
 			
 			// Allow user to get items from end of list
 			if (idx < 0) { idx += list.length; }
+			if (idx < 0) {
+				self._listShareUnlock(key);
+				return callback( new Error("Index out of range"), null, list );
+			}
+			
 			if (idx + len > list.length) { len = list.length - idx; }
 			
 			// First page is special, as it is variably sized
@@ -489,6 +531,7 @@ module.exports = Class.create({
 			}
 			if (!len || (idx >= list.length)) {
 				// all items were on first page, return now
+				self._listShareUnlock(key);
 				return callback( null, items, list );
 			}
 			
@@ -524,206 +567,12 @@ module.exports = Class.create({
 				},
 				function(err) {
 					// all pages loaded
+					self._listShareUnlock(key);
 					if (err) return callback(err, null);
 					callback( null, items, list );
 				}
 			); // pages loaded
 		} ); // list loaded
-	},
-	
-	listSplice: function(key, idx, len, new_items, callback) {
-		// Cut any size chunk out of list, optionally replacing it with a new chunk
-		var self = this;
-		var cut_items = [];
-		if (!new_items) new_items = [];
-		if (!util.isArray(new_items)) new_items = [new_items];
-		var num_new = new_items.length;
-		
-		this.logDebug(9, "Splicing " + len + " items at position " + idx + " in list: " + key, this.debugLevel(10) ? new_items : null);
-		
-		this._listLock( key, true, function() {
-			// locked
-			self._listLoad(key, false, function(err, list) {
-				// list loaded, proceed
-				var page_idx = list.first_page;
-				var new_page_idx = list.first_page;
-				var num_fp_items = 0;
-				var found_start = false;
-				var chunk_size = list.page_size;
-				
-				// Manage bounds, allow negative
-				if (idx < 0) { idx += list.length; }
-				// if (!len) { len = list.length - idx; }
-				if (idx + len > list.length) { len = list.length - idx; }
-				var simple_replace = (num_new == len);
-				
-				// bounds check
-				if ((idx < 0) || (idx > list.length)) {
-					return callback( new Error("List index out of bounds.") );
-				}
-				
-				if (!len && !num_new) {
-					// nothing to cut, nothing to insert, so we're already done
-					self._listUnlock(key);
-					return callback(null);
-				}
-				if (!len && (idx == list.length)) {
-					// nothing to cut and idx is at the list end, so push instead
-					self._listUnlock(key);
-					return self.listPush( key, new_items, callback );
-				}
-				if (!len && !idx) {
-					// nothing to cut and idx is at the list beginning, so unshift instead
-					self._listUnlock(key);
-					return self.listUnshift( key, new_items, callback );
-				}
-				
-				if (!idx && list.length && (len == list.length) && !num_new) {
-					// special case: cutting ALL items from list, and not replacing any
-					// need to create a proper empty list, and return the items
-					self._listUnlock(key);
-					self.listGet( key, idx, len, function(err, items) {
-						if (err) return callback(err);
-						
-						self.listDelete( key, false, function(err) {
-							if (err) return callback(err);
-							callback(null, items);
-						} );
-					} );
-					return;
-				}
-				
-				async.whilst(
-					function() { return page_idx <= list.last_page; },
-					function(callback) {
-						// load each page
-						self._listLoadPage(key, page_idx, false, function(err, page) {
-							if (err) return callback(err);
-							
-							// decide what we need to do for current page
-							var page_start_idx = 0;
-							var local_idx = idx;
-							
-							if (page_idx == list.first_page) {
-								// first page is special (variable length)
-								num_fp_items = page.items.length;
-								if (idx < num_fp_items) {
-									// cut starts on first page
-									found_start = true;
-									new_page_idx = page_idx;
-								}
-								else {
-									// find page we need to jump to
-									page_idx = list.first_page + 1 + Math.floor((idx - num_fp_items) / chunk_size);
-									return callback(null);
-								}
-							}
-							else {
-								// beyond first page
-								page_start_idx = num_fp_items + ((page_idx - list.first_page - 1) * chunk_size);
-								local_idx = idx - page_start_idx;
-								if ((local_idx >= 0) && (local_idx < page.items.length)) {
-									found_start = true;
-									new_page_idx = page_idx;
-								}
-							}
-							
-							// copy items to new list buffers
-							var unsh = [];
-							for (var idy = 0, ley = page.items.length; idy < ley; idy++) {
-								var gidy = idy + page_start_idx;
-								if (gidy < idx) {
-									unsh.push( page.items[idy] );
-									// new_items.unshift( page.items[idy] );
-								}
-								else if (gidy >= (idx + len)) {
-									new_items.push( page.items[idy] );
-								}
-								else {
-									cut_items.push( page.items[idy] );
-								}
-							} // foreach item on page
-							while (unsh.length) {
-								new_items.unshift( unsh.pop() );
-							}
-							
-							// onto the next page...
-							page_idx++;
-							
-							if (found_start && (new_items.length >= chunk_size)) {
-								// need to flush our growing buffer first
-								var buffer = new_items.splice( 0, chunk_size );
-								var save_key = key + '/' + new_page_idx++;
-								
-								// special case -- if we're re-inserting the same number of items as we're cutting, 
-								// then we can jump to the end right here
-								if (simple_replace && !new_items.length) {
-									page_idx = new_page_idx = list.last_page + 1;
-								}
-								
-								self.put( save_key, { type: 'list_page', items: buffer }, callback );
-							}
-							else callback(null);
-						} ); // page loaded
-					},
-					function(err) {
-						// all pages processed
-						if (err) {
-							self._listUnlock(key);
-							return callback(err, null);
-						}
-						
-						// finish saving buffer into list pages
-						async.whilst(
-							function() { return new_items.length > 0; },
-							function(callback) {
-								// chop off a chunk and save it
-								var buffer = new_items.splice( 0, chunk_size );
-								self.put( key + '/' + new_page_idx++, { type: 'list_page', items: buffer }, callback );
-							},
-							function(err) {
-								// all new pages saved
-								if (err) {
-									self._listUnlock(key);
-									return callback(err, null);
-								}
-								
-								// update list metadata
-								list.length -= len;
-								list.length += num_new;
-								var old_last_page = list.last_page;
-								list.last_page = new_page_idx - 1;
-								
-								// delete extra pages no longer needed
-								async.whilst(
-									function() { return new_page_idx <= old_last_page; },
-									function(callback) {
-										// delete unused page
-										self.delete( key + '/' + new_page_idx++, callback );
-									},
-									function(err) {
-										// all new pages deleted
-										if (err) {
-											self._listUnlock(key);
-											return callback(err, null);
-										}
-										
-										// finally, save list metadata
-										self.put( key, list, function(err, data) {
-											self._listUnlock(key);
-											if (err) return callback(err, null);
-											
-											// success, return spliced items
-											callback(null, cut_items);
-										} );
-									} // deleted
-								); // whilst (delete)
-							} // saved
-						); // whilst (buffer)
-					} // pages processed
-				); // whilst (pages)
-			} ); // loaded
-		} ); // locked
 	},
 	
 	listFind: function(key, criteria, callback) {
@@ -732,50 +581,60 @@ module.exports = Class.create({
 		var num_crit = Tools.numKeys(criteria);
 		this.logDebug(9, "Locating item in list: " + key, criteria);
 		
-		this._listLoad(key, false, function(err, list) {
-			// list loaded, proceed
-			if (err) return callback(err, null);
-			
-			var item = null;
-			var item_idx = 0;
-			var page_idx = list.first_page;
-			if (!list.length) return callback(null, null);
-			
-			async.whilst(
-				function() { return page_idx <= list.last_page; },
-				function(callback) {
-					self._listLoadPage(key, page_idx, false, function(err, page) {
-						if (err) return callback(err, null);
-						// now scan page's items
-						for (var idx = 0, len = page.items.length; idx < len; idx++) {
-							var matches = 0;
-							for (var k in criteria) {
-								if (criteria[k].test) {
-									if (criteria[k].test(page.items[idx][k])) { matches++; }
-								}
-								else if (criteria[k] == page.items[idx][k]) { matches++; }
-							}
-							if (matches == num_crit) {
-								// we found our item!
-								item = page.items[idx];
-								idx = len;
-								page_idx = list.last_page;
-							}
-							else item_idx++;
-						} // foreach item
-						
-						page_idx++;
-						callback();
-					} ); // page loaded
-				},
-				function(err) {
-					// all pages loaded
-					if (err) return callback(err, null);
-					if (!item) item_idx = -1;
-					callback( null, item, item_idx );
+		this._listShareLock(key, true, function() {
+			// share locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listShareUnlock(key);
+					return callback(err, null);
 				}
-			); // whilst
-		} ); // loaded
+				
+				var item = null;
+				var item_idx = 0;
+				var page_idx = list.first_page;
+				if (!list.length) {
+					self._listShareUnlock(key);
+					return callback(null, null);
+				}
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						self._listLoadPage(key, page_idx, false, function(err, page) {
+							if (err) return callback(err, null);
+							// now scan page's items
+							for (var idx = 0, len = page.items.length; idx < len; idx++) {
+								var matches = 0;
+								for (var k in criteria) {
+									if (criteria[k].test) {
+										if (criteria[k].test(page.items[idx][k])) { matches++; }
+									}
+									else if (criteria[k] == page.items[idx][k]) { matches++; }
+								}
+								if (matches == num_crit) {
+									// we found our item!
+									item = page.items[idx];
+									idx = len;
+									page_idx = list.last_page;
+								}
+								else item_idx++;
+							} // foreach item
+							
+							page_idx++;
+							callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages loaded
+						self._listShareUnlock(key);
+						if (err) return callback(err, null);
+						if (!item) item_idx = -1;
+						callback( null, item, item_idx );
+					}
+				); // whilst
+			} ); // loaded
+		} ); // _listShareLock
 	},
 	
 	listFindCut: function(key, criteria, callback) {
@@ -883,52 +742,57 @@ module.exports = Class.create({
 		var num_crit = Tools.numKeys(criteria);
 		this.logDebug(9, "Locating items in list: " + key, criteria);
 		
-		this._listLoad(key, false, function(err, list) {
-			// list loaded, proceed
-			if (err) {
-				callback(err);
-				return;
-			}
-			var page_idx = list.first_page;
-			var item_idx = 0;
-			
-			async.whilst(
-				function() { return page_idx <= list.last_page; },
-				function(callback) {
-					// load each page
-					self._listLoadPage(key, page_idx++, false, function(err, page) {
-						if (err) return callback(err);
-						
-						// iterate over page items
-						if (page && page.items && page.items.length) {
-							async.eachSeries( page.items, function(item, callback) {
-								// for each item, check against criteria
-								var matches = 0;
-								for (var k in criteria) {
-									if (criteria[k].test) {
-										if (criteria[k].test(item[k])) { matches++; }
+		this._listShareLock(key, true, function() {
+			// share locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listShareUnlock(key);
+					callback(err);
+					return;
+				}
+				var page_idx = list.first_page;
+				var item_idx = 0;
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						// load each page
+						self._listLoadPage(key, page_idx++, false, function(err, page) {
+							if (err) return callback(err);
+							
+							// iterate over page items
+							if (page && page.items && page.items.length) {
+								async.eachSeries( page.items, function(item, callback) {
+									// for each item, check against criteria
+									var matches = 0;
+									for (var k in criteria) {
+										if (criteria[k].test) {
+											if (criteria[k].test(item[k])) { matches++; }
+										}
+										else if (criteria[k] == item[k]) { matches++; }
 									}
-									else if (criteria[k] == item[k]) { matches++; }
-								}
-								if (matches == num_crit) {
-									iterator(item, item_idx++, callback);
-								}
-								else {
-									item_idx++;
-									callback();
-								}
-							}, callback );
-						}
-						else callback();
-					} ); // page loaded
-				},
-				function(err) {
-					// all pages iterated
-					if (err) return callback(err);
-					else callback(null);
-				} // pages complete
-			); // whilst
-		} ); // loaded
+									if (matches == num_crit) {
+										iterator(item, item_idx++, callback);
+									}
+									else {
+										item_idx++;
+										callback();
+									}
+								}, callback );
+							}
+							else callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages iterated
+						self._listShareUnlock(key);
+						if (err) return callback(err);
+						else callback(null);
+					} // pages complete
+				); // whilst
+			} ); // loaded
+		} ); // _listShareLock
 	},
 	
 	listDelete: function(key, entire, callback) {
@@ -1034,7 +898,7 @@ module.exports = Class.create({
 				},
 				function(err) {
 					// all pages copied
-					if (err) return callback(err, null);
+					if (err) return callback(err);
 					
 					// now copy list header
 					self.copy(old_key, new_key, function(err, data) {
@@ -1051,7 +915,7 @@ module.exports = Class.create({
 		var self = this;
 		this.logDebug(9, "Renaming list: " + old_key + " to " + new_key);
 		
-		this.listCopy( old_key, new_key, function(err, data) {
+		this.listCopy( old_key, new_key, function(err) {
 			// copy complete, now delete old list
 			if (err) return callback(err);
 			
@@ -1063,38 +927,43 @@ module.exports = Class.create({
 		// fire iterator for every element in list, only load one page at a time
 		var self = this;
 		
-		this._listLoad(key, false, function(err, list) {
-			// list loaded, proceed
-			if (err) {
-				callback(err);
-				return;
-			}
-			var page_idx = list.first_page;
-			var item_idx = 0;
-			
-			async.whilst(
-				function() { return page_idx <= list.last_page; },
-				function(callback) {
-					// load each page
-					self._listLoadPage(key, page_idx++, false, function(err, page) {
+		this._listShareLock(key, true, function() {
+			// share locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listShareUnlock(key);
+					callback(err);
+					return;
+				}
+				var page_idx = list.first_page;
+				var item_idx = 0;
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						// load each page
+						self._listLoadPage(key, page_idx++, false, function(err, page) {
+							if (err) return callback(err);
+							
+							// iterate over page items
+							if (page && page.items && page.items.length) {
+								async.eachSeries( page.items, function(item, callback) {
+									iterator(item, item_idx++, callback);
+								}, callback );
+							}
+							else callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages iterated
+						self._listShareUnlock(key);
 						if (err) return callback(err);
-						
-						// iterate over page items
-						if (page && page.items && page.items.length) {
-							async.eachSeries( page.items, function(item, callback) {
-								iterator(item, item_idx++, callback);
-							}, callback );
-						}
-						else callback();
-					} ); // page loaded
-				},
-				function(err) {
-					// all pages iterated
-					if (err) return callback(err);
-					else callback(null);
-				} // pages complete
-			); // whilst
-		} ); // loaded
+						else callback(null);
+					} // pages complete
+				); // whilst
+			} ); // loaded
+		} ); // _listShareLock
 	},
 	
 	listInsertSorted: function(key, insert_item, comparator, callback) {
@@ -1102,7 +971,7 @@ module.exports = Class.create({
 		var self = this;
 		var loc = false;
 		
-		if (util.isArray(comparator)) {
+		if (isArray(comparator)) {
 			// convert to closure
 			var sort_key = comparator[0];
 			var sort_dir = comparator[1] || 1;
