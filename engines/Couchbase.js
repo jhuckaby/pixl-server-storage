@@ -8,6 +8,7 @@
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var CouchbaseAPI = require('couchbase');
+var Tools = require("pixl-tools");
 
 module.exports = Class.create({
 	
@@ -19,7 +20,8 @@ module.exports = Class.create({
 		bucket: "default",
 		password: "",
 		serialize: false,
-		keyPrefix: ""
+		keyPrefix: "",
+		keyTemplate: ""
 	},
 	
 	startup: function(callback) {
@@ -28,7 +30,7 @@ module.exports = Class.create({
 		this.logDebug(2, "Setting up Couchbase");
 		
 		this.setup(callback);
-		this.config.on('reload', function() { self.setup(); } );
+		// this.config.on('reload', function() { self.setup(); } );
 	},
 	
 	setup: function(callback) {
@@ -37,6 +39,8 @@ module.exports = Class.create({
 		
 		this.keyPrefix = this.config.get('keyPrefix').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
+		
+		this.keyTemplate = this.config.get('keyTemplate').replace(/^\//, '').replace(/\/$/, '');
 		
 		// support old legacy naming convention: connect_string
 		this.cluster = new CouchbaseAPI.Cluster( this.config.get('connectString') || this.config.get('connect_string') );
@@ -52,10 +56,29 @@ module.exports = Class.create({
 		}
 	},
 	
+	prepKey: function(key) {
+		// prepare key for S3 based on config
+		var md5 = Tools.digestHex(key, 'md5');
+		
+		if (this.keyPrefix) {
+			key = this.keyPrefix + key;
+		}
+		
+		if (this.keyTemplate) {
+			var idx = 0;
+			var temp = this.keyTemplate.replace( /\#/g, function() {
+				return md5.substr(idx++, 1);
+			} );
+			key = Tools.substitute( temp, { key: key, md5: md5 } );
+		}
+		
+		return key;
+	},
+	
 	put: function(key, value, callback) {
 		// store key+value in Couchbase
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		if (this.storage.isBinaryKey(key)) {
 			this.logDebug(9, "Storing Couchbase Binary Object: " + key, '' + value.length + ' bytes');
@@ -96,7 +119,7 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head couchbase value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		// The Couchbase Node.JS 2.0 API has no way to head / ping an object.
 		// So, we have to do this the RAM-hard way...
@@ -125,7 +148,7 @@ module.exports = Class.create({
 	get: function(key, callback) {
 		// fetch Couchbase value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching Couchbase Object: " + key);
 		
@@ -172,7 +195,7 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		// The Couchbase Node.JS 2.0 API has no stream support.
 		// So, we have to do this the RAM-hard way...
@@ -199,7 +222,7 @@ module.exports = Class.create({
 		// delete Couchbase key given key
 		// Example CB error message: The key does not exist on the server
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Deleting Couchbase Object: " + key);
 		
