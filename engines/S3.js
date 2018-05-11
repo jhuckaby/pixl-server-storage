@@ -4,6 +4,7 @@
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
+var Tools = require("pixl-tools");
 var AWS = require('aws-sdk');
 
 module.exports = Class.create({
@@ -16,13 +17,14 @@ module.exports = Class.create({
 		var self = this;
 		
 		this.setup();
-		this.config.on('reload', function() { self.setup(); } );
+		// this.config.on('reload', function() { self.setup(); } );
 		
 		callback();
 	},
 	
 	setup: function() {
 		// setup AWS connection
+		var self = this;
 		var aws_config = this.storage.config.get('AWS') || this.server.config.get('AWS');
 		var s3_config = this.config.get();
 		
@@ -33,14 +35,43 @@ module.exports = Class.create({
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
 		delete s3_config.keyPrefix;
 		
+		this.keyTemplate = (s3_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
+		delete s3_config.keyTemplate;
+		
+		if (this.debugLevel(10)) {
+			// S3 has a logger API but it's extremely verbose -- restrict to level 10 only
+			s3_config.logger = {
+				log: function(msg) { self.logDebug(10, "S3 Debug: " + msg); }
+			};
+		}
+		
 		AWS.config.update( aws_config );
 		this.s3 = new AWS.S3( s3_config );
+	},
+	
+	prepKey: function(key) {
+		// prepare key for S3 based on config
+		var md5 = Tools.digestHex(key, 'md5');
+		
+		if (this.keyPrefix) {
+			key = this.keyPrefix + key;
+		}
+		
+		if (this.keyTemplate) {
+			var idx = 0;
+			var temp = this.keyTemplate.replace( /\#/g, function() {
+				return md5.substr(idx++, 1);
+			} );
+			key = Tools.substitute( temp, { key: key, md5: md5 } );
+		}
+		
+		return key;
 	},
 	
 	put: function(key, value, callback) {
 		// store key+value in s3
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		var params = {};
 		params.Key = key;
@@ -69,7 +100,7 @@ module.exports = Class.create({
 	putStream: function(key, inp, callback) {
 		// store key+stream of data to S3
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		var params = {};
 		params.Key = key;
@@ -90,7 +121,7 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head s3 value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Pinging S3 Object: " + key);
 		
@@ -114,7 +145,7 @@ module.exports = Class.create({
 	get: function(key, callback) {
 		// fetch s3 value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching S3 Object: " + key);
 		
@@ -157,7 +188,7 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
@@ -199,7 +230,7 @@ module.exports = Class.create({
 	delete: function(key, callback) {
 		// delete s3 key given key
 		var self = this;
-		key = this.keyPrefix + key;
+		key = this.prepKey(key);
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
