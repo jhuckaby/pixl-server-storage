@@ -1,14 +1,76 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), or a local filesystem.  On top of that, it also introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.
+This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
 
 ## Features at a Glance
 
-* Store JSON or binary (raw) data.
+* Uses very little memory in most cases.
+* Store JSON or binary (raw) data records.
 * Supports multiple back-ends including Amazon S3, Couchbase and local filesystem.
 * Linked lists with very fast push, pop, shift, unshift, and random reads/writes.
-* Advisory locking system for records and lists.
+* Hash tables with key iterators, and very fast reads / writes.
+* Advisory locking system with shared and exclusive locks.
 * Variable expiration dates per key and automatic deletion.
+* Transaction system for isolated compound operations and atomic commits, rollbacks.
+* Indexing system for searches across collections of JSON records.
+* Supports Google-style full-text search queries.
+
+## Table of Contents
+
+The documentation is split up across six files:
+
+- &rarr; **[Main Docs](https://github.com/jhuckaby/pixl-server-storage/blob/master/README.md)** *(You are here)*
+- &rarr; **[Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md)**
+- &rarr; **[Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md)**
+- &rarr; **[Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md)**
+- &rarr; **[Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md)**
+- &rarr; **[API Reference](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md)**
+
+Here is the table of contents for this current document:
+
+<!-- toc -->
+- [Usage](#usage)
+	* [Standalone Mode](#standalone-mode)
+- [Configuration](#configuration)
+	* [engine](#engine)
+	* [engine_path](#engine_path)
+	* [list_page_size](#list_page_size)
+	* [hash_page_size](#hash_page_size)
+	* [concurrency](#concurrency)
+	* [maintenance](#maintenance)
+	* [log_event_types](#log_event_types)
+	* [max_recent_events](#max_recent_events)
+	* [debug (standalone)](#debug-standalone)
+- [Engines](#engines)
+	* [Local Filesystem](#local-filesystem)
+		+ [Key Namespaces](#key-namespaces)
+		+ [Raw File Paths](#raw-file-paths)
+		+ [Key Template](#key-template)
+	* [Amazon S3](#amazon-s3)
+		+ [S3 Key Prefix](#s3-key-prefix)
+		+ [S3 Key Template](#s3-key-template)
+	* [Couchbase](#couchbase)
+- [Key Normalization](#key-normalization)
+- [Basic Functions](#basic-functions)
+	* [Storing Records](#storing-records)
+	* [Fetching Records](#fetching-records)
+	* [Copying Records](#copying-records)
+	* [Renaming Records](#renaming-records)
+	* [Deleting Records](#deleting-records)
+- [Storing Binary Blobs](#storing-binary-blobs)
+- [Using Streams](#using-streams)
+- [Expiring Data](#expiring-data)
+- [Advisory Locking](#advisory-locking)
+- [Logging](#logging)
+	* [Debug Logging](#debug-logging)
+	* [Error Logging](#error-logging)
+	* [Transaction Logging](#transaction-logging)
+	* [Performance Logs](#performance-logs)
+- [Performance Metrics](#performance-metrics)
+- [Daily Maintenance](#daily-maintenance)
+- [Plugin Development](#plugin-development)
+- [Unit Tests](#unit-tests)
+- [License](#license)
 
 # Usage
 
@@ -74,7 +136,7 @@ This example is a very simple server configuration, which will start a local fil
 
 ## Standalone Mode
 
-If you want to access the storage component as a standalone class (i.e. not part of a [pixl-server](https://www.npmjs.com/package/pixl-server) server daemon), you can require the `pixl-server-storage/standalone` path and invoke it directly.  This can be useful for things like CLI scripts.  Example usage:
+If you want to access the storage component as a standalone class (i.e. not part of a [pixl-server](https://www.npmjs.com/package/pixl-server) server daemon), you can require the `pixl-server-storage/standalone` path and invoke it directly.  This can be useful for things like simple CLI scripts.  Example usage:
 
 ```javascript
 var StandaloneStorage = require('pixl-server-storage/standalone');
@@ -97,10 +159,17 @@ var storage = new StandaloneStorage(config, function(err) {
 		storage.get( 'test-key', function(err, data) {
 			if (err) throw err;
 			console.log(data);
+			
+			// we have to shutdown manually
+			storage.shutdown( function() { 
+				process.exit(0); 
+			} );
 		} );
 	} );
 });
 ```
+
+Please note that standalone mode does not perform standard [pixl-server](https://www.npmjs.com/package/pixl-server) timer operations like emit `tick` and `minute` events, so things like performance metrics collection and [Daily Maintenance](#daily-maintenance) do not run.  It also doesn't register standard [SIGINT / SIGTERM](https://nodejs.org/api/process.html#process_signal_events) signal listeners for handing shutdown, so these must be handled by your code.
 
 # Configuration
 
@@ -139,7 +208,11 @@ All engines must have a name, so you always need to declare a `engine` property 
 
 ## list_page_size
 
-The `list_page_size` property specifies the default page size (number of items per page) for new lists.  However, you can override this per each list when creating them.  See [Lists](#lists) below for details.
+The `list_page_size` property specifies the default page size (number of items per page) for new lists.  However, you can override this per each list when creating them.  See [Lists](docs/Lists.md) for details.
+
+## hash_page_size
+
+The `hash_page_size` property specifies the default page size (number of items per page) for new hashes.  However, you can override this per each hash when creating them.  See [Hashes](docs/Hashes.md) for details.
 
 ## concurrency
 
@@ -157,6 +230,14 @@ The `maintenance` property allows the storage system to run routine maintenance,
 
 Make sure your server's clock and timezone are correct.  The values are always assumed to be in the current timezone.
 
+## log_event_types
+
+The `log_event_types` property allows you to configure exactly which transaction event types are logged.  By default, none of them are. For details, see the [Transaction Logging](#transaction-logging) section below.
+
+## max_recent_events
+
+The `max_recent_events` property allows the storage system to track the latest N events in memory, which are then provided in the call to [getStats()](docs/API.md#getstats).  For details, see the [Performance Metrics](#performance-metrics) section below.
+
 ## debug (standalone)
 
 The `debug` property is only used when using [Standalone Mode](#standalone-mode).  Setting this to `true` will cause the engine to emit debugging messages to the console.
@@ -167,7 +248,7 @@ The storage system can be backed by a number of different "engines", which actua
 
 ## Local Filesystem
 
-The local filesystem engine is called `Filesystem`, and reads/writes files to local disk.  It distributes files by hashing their keys using MD5, and splitting up the path into several subdirectories.  So even with tens of millions of records, no one single directory will ever have more than 255 files.  For example:
+The local filesystem engine is called `Filesystem`, and reads/writes files to local disk.  It distributes files by hashing their keys using [MD5](https://en.wikipedia.org/wiki/MD5), and splitting up the path into several subdirectories.  So even with tens of millions of records, no one single directory will ever have more than 255 files.  For example:
 
 ```
 Plain Key:
@@ -201,7 +282,19 @@ For binary records, the file extension will match whatever was in the key.
 
 ### Key Namespaces
 
-To help segment your application data into categories on the filesystem, an optional `key_namespaces` configuration parameter can be specified, and set to a true value.  This will modify the key hashing algorithm to include a "prefix" directory, extracted from the plain key itself.  Example:
+To help segment your application data into categories on the filesystem, an optional `key_namespaces` configuration parameter can be specified, and set to a true value.  This will modify the key hashing algorithm to include a "prefix" directory, extracted from the plain key itself.  Example configuration:
+
+```javascript
+{
+	"engine": "Filesystem",
+	"Filesystem": {
+		"base_dir": "/var/data/myserver",
+		"key_namespaces": true
+	}
+}
+```
+
+Here is an example storage key and how to gets translated to the a filesystem path:
 
 ```
 Plain Key:
@@ -222,6 +315,52 @@ So in this case the `users` prefix is extracted from the plain key, and then ins
 
 In order to use key namespaces effectively, you need to make sure that *all* your plain keys contain some kind of namespace prefix, followed by a slash.  The idea is, you can then store your app's data in different physical locations using symlinks.  You can also determine how much disk space is taken up by each of your app's data categories, without having to walk all the hash directories.
 
+### Raw File Paths
+
+For testing purposes, or for small datasets, you can optionally set the `raw_file_paths` Filesystem configuration parameter to any true value.  This will skip the MD5 hashing of all filesystem paths, and literally write them to the filesystem verbatim, as they come in (well, after [Key Normalization](#key-normalization) of course).  Example configuration:
+
+```javascript
+{
+	"engine": "Filesystem",
+	"Filesystem": {
+		"base_dir": "/var/data/myserver",
+		"raw_file_paths": true
+	}
+}
+```
+
+So with raw file paths enabled our example key (`users/jhuckaby`) would literally end up on the filesystem right here:
+
+```
+/var/data/myserver/users/jhuckaby.json
+```
+
+Using this mode you can easily overwhelm a filesystem with too many files in a single directory, depending on how you format your keys.  It is really only meant for testing purposes.
+
+Note that if `raw_file_paths` is enabled, `key_namespaces` has no effect.
+
+### Key Template
+
+For complete, low-level control over the key hashing and directory layout, you can specify a key "template" via the `key_template` configuration property.  This allows you to specify exactly how the directories are laid out, and whether the full plain key is part of the directory path, or just the MD5 hash.  For example, consider this configuration:
+
+```javascript
+{
+	"engine": "Filesystem",
+	"Filesystem": {
+		"base_dir": "/var/data/myserver",
+		"key_template": "##/##/##/[md5]"
+	}
+}
+```
+
+If your `key_template` property contains any hash marks (`#`), they will be dynamically replaced with characters from an [MD5 hash](https://en.wikipedia.org/wiki/MD5) of the key.  Also, `[md5]` will be substituted for the full MD5 hash, and `[key]` will be subsituted with the full key itself.  So for another example:
+
+```js
+"key_template": "##/##/[key]"
+```
+
+This would replace the 4 hash marks with the first 4 characters from the key's MD5, followed by the full key itself e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
+
 ## Amazon S3
 
 If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, here is how to do so.  First, you need to manually install the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module into your app:
@@ -238,7 +377,9 @@ Then configure your storage thusly:
 	"AWS": {
 		"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
 		"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
-		"region": "us-west-1" 
+		"region": "us-west-1",
+		"correctClockSkew": true,
+		"maxRetries": 5
 	},
 	"S3": {
 		"keyPrefix": "",
@@ -274,6 +415,18 @@ The S3 engine supports an optional key prefix, in case you are sharing a bucket 
 
 This would prefix the string `myapp` before all your application keys (a trailing slash will be added after the prefix if needed).  For example, if your app tried to write a record with key `users/jhuckaby`, the actual S3 key would end up as `myapp/users/jhuckaby`.
 
+### S3 Key Template
+
+Note that Amazon [recommends adding a hash prefix](https://docs.aws.amazon.com/AmazonS3/latest/dev/request-rate-perf-considerations.html) to all your S3 keys, for performance reasons.  To that end, if you specify a `keyTemplate` property, and it contains any hash marks (`#`), they will be dynamically replaced with characters from an [MD5 hash](https://en.wikipedia.org/wiki/MD5) of the key.  So for example:
+
+```js
+"keyTemplate": "##/##/[key]"
+```
+
+This would replace the 4 hash marks with the first 4 characters from the key's MD5, followed by the full key itself, e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
+
+Besides hash marks, the special macro `[key]` will be substituted with the full key, and `[md5]` will be substituted with a full MD5 hash of the key.  These can be used anywhere in the template string.
+
 ## Couchbase
 
 If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app:
@@ -303,25 +456,29 @@ The `bucket` property should be set to the bucket name.  If you don't know this 
 
 The `serialize` property, when set to `true`, will cause all object values to be serialized to JSON before storing, and they will also be parsed from JSON when fetching.  When set to `false` (the default), this is left up to Couchbase to handle.
 
-The optional `keyPrefix` works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
+
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
 
 # Key Normalization
 
 In order to maintain compatibility with all the various engines, keys are "normalized" on all entry points.  Specifically, they undergo the following transformations before being passed along to the engine:
 
-* They are converted to lower-case.
+* Unicode characters are down-converted to ASCII (via [unidecode](https://github.com/FGRibreau/node-unidecode)).
+	* Those that do not have ASCII equivalents are stripped off (e.g. Emoji).
 * Only the following characters are allowed (everything else is stripped):
 	* Alphanumerics
 	* Dashes (hyphens)
 	* Dots (periods)
 	* Forward-slashes
+* All alphanumeric characters are converted to lower-case.
 * Duplicate adjacent slashes (i.e. "//") are converted to a single slash.
 * Leading and trailing slashes are stripped.
 
-So for example, this key:
+So for example, this crazy key:
 
 ```
-" / / / // HELLO-KEY @*#&^$*@/#&^$(*@#&^$   test   / "
+" / / / // HELLO-KEY @*#&^$*@/#&^$(*@#&^$ 😃  tést   / "
 ```
 
 ...is normalized to this:
@@ -344,7 +501,7 @@ var storage = server.Storage;
 
 ## Storing Records
 
-To store a record, call the [put()](#put) method.  Pass in a key, a value, and a callback.  The value may be an Object (which is automatically serialized to JSON), or a `Buffer` for a binary blob (see [Storing Binary Blobs](#storing-binary-blobs) below).  If the record doesn't exist, it is created, otherwise it is replaced.
+To store a record, call the [put()](docs/API.md#put) method.  Pass in a key, a value, and a callback.  The value may be an Object (which is automatically serialized to JSON), or a `Buffer` for a binary blob (see [Storing Binary Blobs](#storing-binary-blobs) below).  If the record doesn't exist, it is created, otherwise it is replaced.
 
 ```javascript
 storage.put( 'test1', { foo: 'bar1' }, function(err) {
@@ -354,7 +511,7 @@ storage.put( 'test1', { foo: 'bar1' }, function(err) {
 
 ## Fetching Records
 
-To fetch a record, call the [get()](#get) method.  Pass in a key, and a callback.  The data returned will be parsed back into an Object if JSON, or a raw `Buffer` object will be returned for binary records.
+To fetch a record, call the [get()](docs/API.md#get) method.  Pass in a key, and a callback.  The data returned will be parsed back into an Object if JSON, or a raw `Buffer` object will be returned for binary records.
 
 ```javascript
 storage.get( 'test1', function(err, data) {
@@ -362,7 +519,25 @@ storage.get( 'test1', function(err, data) {
 } );
 ```
 
-Some engines also allow you to "head" (i.e. ping) an object to retrieve some metadata about it, without fetching the value.  To do this, call the [head()](#head) method, and pass in the key.  The metadata usually consists of the size (`len`) and last modification date (`mod`).  Example:
+If you try to fetch a nonexistent record, a special error object will be passed to your callback with its `code` property set to `NoSuchKey`.  This is a special case allowing you to easily differentiate a "record not found" error from another, more severe I/O error.  Example:
+
+```javascript
+storage.get( 'this_key_does_not_exist', function(err, data) {
+	if (err) {
+		if (err.code == 'NoSuchKey') {
+			// record not found
+		}
+		else {
+			// some other error
+		}
+	}
+	else {
+		// success, data will contain the record
+	}
+} );
+```
+
+Some engines also allow you to "head" (i.e. ping) an object to retrieve some metadata about it, without fetching the value.  To do this, call the [head()](docs/API.md#head) method, and pass in the key.  The metadata usually consists of the size (`len`) and last modification date (`mod`).  Example:
 
 ```javascript
 storage.head( 'test1', function(err, data) {
@@ -387,7 +562,7 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 
 ## Copying Records
 
-To make a copy of a record and store it under a new key, call the [copy()](#copy) method.  Pass in the old key, new key, and a callback.
+To make a copy of a record and store it under a new key, call the [copy()](docs/API.md#copy) method.  Pass in the old key, new key, and a callback.
 
 ```javascript
 storage.copy( 'test1', 'test2', function(err) {
@@ -399,7 +574,7 @@ storage.copy( 'test1', 'test2', function(err) {
 
 ## Renaming Records
 
-To rename a record, call the [rename()](#rename) method.  Pass in the old key, new key, and a callback.
+To rename a record, call the [rename()](docs/API.md#rename) method.  Pass in the old key, new key, and a callback.
 
 ```javascript
 storage.rename( 'test1', 'test2', function(err) {
@@ -411,7 +586,7 @@ storage.rename( 'test1', 'test2', function(err) {
 
 ## Deleting Records
 
-To delete a record, call the [delete()](#delete) method.  This is immediate and permanent.  Pass in the key, and a callback.
+To delete a record, call the [delete()](docs/API.md#delete) method.  This is immediate and permanent.  Pass in the key, and a callback.
 
 ```javascript
 storage.delete( 'test1', function(err) {
@@ -443,7 +618,7 @@ storage.get( 'test1.gif', function(err, buffer) {
 
 # Using Streams
 
-You can store and fetch records using [streams](https://nodejs.org/api/stream.html), so as to not load content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](#putstream) method.  Similarly, to fetch a readable stream to a record, call the [getStream()](#getstream) method.
+You can store and fetch binary records using [streams](https://nodejs.org/api/stream.html), so as to not load any content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](docs/API.md#putstream) method.  Similarly, to fetch a readable stream to a record, call the [getStream()](docs/API.md#getstream) method.
 
 Example of storing a record by spooling the data from a file:
 
@@ -477,38 +652,17 @@ Please note that not all the storage engines support streams natively, so the co
 
 By default all records live indefinitely, and have no predetermined lifespan.  However, you can set an expiration date on any record, and it will be deleted on that day by the daily maintenance job (see [Daily Maintenance](#daily-maintenance) below).  Note that there is no support for an expiration *time*, but rather only a date.
 
-To set the expiration date for a record, call the [expire()](#expire) method, passing in the key and the desired expiration date.  This function completes instantly and requires no callback.  The date argument can be a JavaScript `Date` object, any supported date string (e.g. `YYYY-MM-DD`), or Epoch seconds.  Example:
+To set the expiration date for a record, call the [expire()](docs/API.md#expire) method, passing in the key and the desired expiration date.  This function completes instantly and requires no callback.  The date argument can be a JavaScript `Date` object, any supported date string (e.g. `YYYY-MM-DD`), or Epoch seconds.  Example:
 
 ```javascript
 storage.expire( 'test1', '2015-05-12' );
 ```
 
-It is wasteful to call this multiple times for the same record and the same date.  It adds extra work for the maintenance job, as each call adds an event in a list that must be iterated over.  It should only be called once per record, *or when extending the expiration date to a future day*.
-
-When extending the expiration on a record that has already had [expire()](#expire) called on it, you need to do two things.  First, call [expire()](#expire) again with the new expiration date.  Then, add an `expires` key to your record, set to the same new expiration date, and save it using [put()](#put).  This is a hint to the maintenance job to ignore the first expiration date, and use the second one instead.  Example:
-
-```javascript
-var new_exp_date = '2015-05-12';
-storage.expire( 'test1', new_exp_date );
-
-storage.get( 'test1', function(err, data) {
-	if (err) throw err;
-	data.expires = new_exp_date;
-	storage.put( 'test1', data, function(err) {
-		if (err) throw err;
-	} );
-} );
-```
-
-You can skip the call to [get()](#get) if your record is already loaded in memory.  Just add the `expires` key/value and save it out.  The format can be any supported date string, or Epoch seconds.
-
-Expiration dates may be set on binary records, *but they cannot be updated*.  This is because there is no way to add an `expires` key when the record is not in JSON format.
-
-The reason for this extra hoop you have to jump through is that, by design, the storage system doesn't keep any metadata on your records (it doesn't store the expiration date for you).  The call to [expire()](#expire) simply adds the key to a list of records for deletion on the selected day.  So when *updating* the expiration date, there is no easy / quick way to remove the key from the "to be deleted" list on the old day.  So instead, the maintenance job tries to load the JSON of every record it is about to delete, and looks for the `expires` property, to determine if it can indeed delete, or if it should skip the record.  This will likely be completely redesigned in v2.0.
+It is wasteful to call this multiple times for the same record and the same date.  It adds extra work for the maintenance job, as each call adds an event in a list that must be iterated over.  It should only be called once per record, or when extending the expiration date to a future day.
 
 # Advisory Locking
 
-The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key and exclusive.  You can choose to wait for a lock to be released, or fail immediately if the resource is already locked.  To lock a key, call [lock()](#lock), and to unlock it call [unlock()](#unlock).
+The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key, and can be exclusive or shared.  You can also choose to wait for a lock to be released, or fail immediately if the key is already locked.  To lock a key in exclusive mode, call [lock()](docs/API.md#lock), and to unlock it call [unlock()](docs/API.md#unlock).
 
 Here is a simple use case:
 
@@ -540,326 +694,220 @@ storage.lock( 'test1', true, function() {
 
 The above example is a typical counter increment pattern using advisory locks.  The `test1` record is locked, fetched, its counter incremented, written back to disk, then finally unlocked.  The idea is, even though all the storage operations are async, all other requests for this record will block until the lock is released.  Remember that you always need to call `unlock()`, even if throwing an error.
 
-Please note that these locks are implemented in RAM, so they only exist in the current Node.js process.  This is really only designed for single-process daemons, and clusters with one master server doing writes.
+In addition to exclusive locks, you can request a "shared" lock.  Shared locking allows multiple clients to access the key simultaneously.  For example, one could lock a key for reading using shared locks, but lock it for writing using an exclusive lock.  To lock a key in shared mode, call [shareLock()](docs/API.md#sharelock), and to unlock it call [shareUnlock()](docs/API.md#shareunlock).  Example:
 
-# Lists
-
-A list is a collection of JSON records which can grow or shrink at either end, and supports fast random access.  It's basically a double-ended linked list, but implemented internally using "pages" of N records per page, and each page can be randomly accessed.  This allows for great speed with pushing, popping, shifting, unshifting, and random access, with a list of virtually any size.  Methods are also provided for iterating, searching and splicing, but those often involve reading / writing many pages, so use with caution.
-
-All list operations that write data will automatically lock the list using [Advisory Locking](#advisory-locking), and unlock it when complete.
-
-## List Page Size
-
-List items are stored in groups called "pages", and each page can hold up to N items (the default is 50).  The idea is, when you want to store or fetch multiple items at once, the storage engine only has to read / write a small amount of records.  The downside is, fetching or storing a single item requires the whole page to be loaded and saved, so it is definitely optimized for batch operations.
-
-You can configure how many items are allowed in each page, by changing the default [page size](#list_page_size) in your storage configuration, or setting it per list by passing an option to [listCreate()](#listcreate).
-
-Care should be taken when calculating your list page sizes.  It all depends on how large your items will be, and how many you will be storing / fetching at once.  Note that you cannot easily change the list page size on a populated list (this may be added as a future feature).
-
-## Creating Lists
-
-To create a list, call [listCreate()](#listcreate).  Specify the desired key, options, and a callback function.  You can optionally pass in a custom page size via the second argument (otherwise it'll use the default size):
-
-```javascript
-storage.listCreate( 'list1', { page_size: 100 }, function(err) {
-	if (err) throw err;
-} );
+```js
+storage.shareLock( 'test1', true, function() {
+	// key is locked, now we can fetch data safely
+	storage.get( key, function(err, data) {
+		if (err) {
+			storage.shareUnlock('test1');
+			throw err;
+		}
+	} ); // get
+} ); // lock
 ```
 
-You can also store your own key/value pairs in the options object, which are retrievable via the [listGetInfo()](#listgetinfo) method.  However, beware of name collision -- better to prefix your own option keys with something unique.
+Shared locks obey the following rules:
 
-## Pushing, Popping, Shifting, Unshifting List Items
+- If a key is already locked in exclusive mode, the shared lock waits for the exclusive lock to clear.
+- If a key is already locked in shared mode, multiple clients are allowed to lock it simultaneously.
+- If an exclusive lock is requested on a key that is locked in shared mode, the following occurs:
+	- The exclusive lock must wait for all current shared clients to unlock.
+	- Additional shared clients must wait until after the exclusive lock is acquired, and released.
 
-Lists can be treated as arrays to a certain extent.  Methods are provided to [push](#listpush), [pop](#listpop), [shift](#listshift) and [unshift](#listunshift) items, similar to standard array methods.  These are all extremely fast operations, even with huge lists, as they only read/write the pages that are necessary.  Note that all list items must be objects (they cannot be other JavaScript primitives).
+Shared locks are using internally for accessing complex structures like lists, hashes and searching records in an index.
 
-Examples:
+Please note that all locks are implemented in RAM, so they only exist in the current Node.js process.  This is really only designed for single-process daemons, and clusters with one master server doing writes.
 
-```javascript
-// push onto the end
-storage.listPush( 'list1', { username: 'tsmith', age: 25 }, function(err) {
-	if (err) throw err;
-} );
+# Logging
 
-// pop off the end
-storage.listPop( 'list1', function(err, item) {
-	if (err) throw err;
-} );
+The storage library uses the logging system built into [pixl-server](https://github.com/jhuckaby/pixl-server#logging).  Essentially there is one combined "event log" which contains debug messages, errors and transactions (however, this can be split into multiple logs if desired).  The `component` column will be set to either `Storage`, or the storage engine Plugin (e.g. `Filesystem`).
 
-// shift off the beginning
-storage.listShift( 'list1', function(err, item) {
-	if (err) throw err;
-} );
+In all these log examples the first 3 columns (`hires_epoch`, `date` and `hostname`) are omitted for display purposes.  The columns shown are `component`, `category`, `code`, `msg`, and `data`.
 
-// unshift onto the beginning
-storage.listUnshift( 'list1', { username: 'fwilson', age: 40 }, function(err) {
-	if (err) throw err;
-} );
+## Debug Logging
+
+Log entries with the `category` set to `debug` are debug messages, and have a verbosity level from 1 to 10 (echoed in the `code` column).  Here is an example snippet, showing a hash being created and a key added:
+
+```
+[Storage][debug][9][Storing hash key: users: bsanders][]
+[Storage][debug][9][Requesting lock: |users][]
+[Storage][debug][9][Locked key: |users][]
+[Storage][debug][9][Loading hash: users][]
+[Filesystem][debug][9][Fetching Object: users][data/users.json]
+[Storage][debug][9][Hash not found, creating it: users][]
+[Storage][debug][9][Creating new hash: users][{"page_size":10,"length":0,"type":"hash"}]
+[Filesystem][debug][9][Fetching Object: users][data/users.json]
+[Filesystem][debug][9][Storing JSON Object: users][data/users.json]
+[Filesystem][debug][9][Store operation complete: users][]
+[Filesystem][debug][9][Storing JSON Object: users/data][data/users/data.json]
+[Filesystem][debug][9][Store operation complete: users/data][]
+[Filesystem][debug][9][Fetching Object: users/data][data/users/data.json]
+[Filesystem][debug][9][JSON fetch complete: users/data][]
+[Filesystem][debug][9][Storing JSON Object: users/data][data/users/data.json]
+[Filesystem][debug][9][Store operation complete: users/data][]
+[Filesystem][debug][9][Storing JSON Object: users][data/users.json]
+[Filesystem][debug][9][Store operation complete: users][]
+[Storage][debug][9][Unlocking key: |users (0 clients waiting)][]
 ```
 
-Furthermore, the [listPush()](#listpush) and [listUnshift()](#listunshift) methods also accept multiple items by passing an array of objects, so you can add in bulk.
+## Error Logging
 
-## Fetching List Items
+Errors have the `category` column set to `error`, and come with a `code` and `msg`, both strings.  Errors are typically things that should not ever occur, such as failures to read or write records.  Example:
 
-Items can be fetched from lists by calling [listGet()](#listget), and specifying an index offset starting from zero.  You can fetch any number of items at a time, and the storage engine will figure out which pages need to be loaded.  To fetch items from the end of a list, use a negative index.  Example use:
-
-```javascript
-storage.listGet( 'list1', 40, 5, function(err, items) {
-	if (err) throw err;
-} );
+```
+[Filesystem][error][file][Failed to read file: bad/users: data/bad/users.json: EACCES: permission denied, open 'data/bad/users.json'][]
 ```
 
-This would fetch 5 items starting at item index 40 (zero-based).  To fetch the entire list, set the index and length to zero:
+Other examples of errors include transaction commit failures and transaction rollbacks.
 
-```javascript
-storage.listGet( 'list1', 0, 0, function(err, items) {
-	if (err) throw err;
-} );
+## Transaction Logging
+
+Transactions (well, more specifically, all storage actions) are logged with the `category` column set to `transaction`.  The `code` column will be one of the following constants, denoting which action took place:
+
+```
+get, put, head, delete, expire_set, perf_sec, perf_min, commit, index, unindex, search, sort, maint
 ```
 
-## Splicing Lists
+You can control which of these event types are logged, by including a `log_event_types` object in your storage configuration.  Include keys with true values for any log event types you want to see logged.  Example:
 
-You can "splice" a list just like you would an array.  That is, cut a chunk out of a list at any location, and optionally replace it with a new chunk, similar to the built-in JavaScript [Array.splice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/splice) function.  [listSplice()](#listsplice) is a highly optimized method which only reads/writes the pages it needs, but note that if the list length changes as a result of your splice (i.e. you insert more or less than you remove) it does have to rewrite multiple pages up to the last page, to take up the slack or add new pages.  So please use with caution on large lists.
-
-Here is an example which removes 2 items at index 40, and replaces with 2 new items:
-
-```javascript
-var new_items = [
-	{ username: 'jhuckaby', age: 38, gender: 'male' },
-	{ username: 'sfields', age: 34, gender: 'female' }
-];
-storage.listSplice( 'list1', 40, 2, new_items, function(err, items) {
-	if (err) throw err;
-	// 'items' will contain the 5 removed items
-} );
-```
-
-You don't have to insert the same number of items that you remove.  You can actually remove zero items, and only insert new ones at the specified location.
-
-As with [listGet()](#listget) you can specify a negative index number to target items from the end of the list, as opposed to the beginning.
-
-## Sorted Lists
-
-While it is possible to manually sort your list by fetching all the items as an array, sorting it in memory, then rewriting the entire list, this can be quite time consuming.  Instead, you can perform a [listInsertSorted()](#listinsertsorted) when adding items to a list.  This will find the correct location for a single item based on sorting criteria, and then splice it into place, keeping the list sorted as you go.  Example:
-
-```javascript
-var new_user = {
-	username: 'jhuckaby', 
-	age: 38, 
-	gender: 'male' 
-};
-
-storage.listInsertSorted( 'users', new_user, ['username', 1], function(err) {
-	if (err) throw err;
-	// item inserted successfully
-} );
-```
-
-That third argument is an array of sort criteria, consisting of the property name to sort by (e.g. `username`) and a sort direction (`1` for ascending, `-1` for descending).  You can alternately specify a comparator function here, which is called with the item you are inserting, and the item to compare it to.  This is similar to the built-in [Array.sort()](), which should return `1` or `-1` depending on if your item should come after, or before, the second item.  Example:
-
-```javascript
-var new_user = {
-	username: 'jhuckaby', 
-	age: 38, 
-	gender: 'male' 
-};
-
-var comparator = function(a, b) {
-	return( (a.username < b.username) ? -1 : 1 );
-};
-
-storage.listInsertSorted( 'users', new_user, comparator, function(err) {
-	if (err) throw err;
-	// item inserted successfully
-} );
-```
-
-For large lists, this can still take considerable time, as it is iterating over the list to locate the correct location, and then performing a splice which grows the list, requiring all the remaining pages to be rewritten.  So please use with caution.
-
-## Iterating Over List Items
-
-Need to iterate over the items in your list, but don't want to load the entire thing into memory?  Use the [listEach()](#listeach) method.  Example:
-
-```javascript
-storage.listEach( 'list1', function(item, idx, callback) {
-	// do something with item, then fire callback
-	callback();
-}, 
-function(err) {
-	if (err) throw err;
-	// all items iterated over
-} );
-```
-
-Your iterator function is passed the item and a special callback function, which must be called when you are done with the current item.  Pass it an error if you want to prematurely abort the loop, and jump to the final callback (the error will be passed through to it).  Otherwise, pass nothing to the iterator callback, to notify all is well and you want the next item in the list.
-
-## Searching Lists
-
-Several methods are provided for searching through lists for items matching a set of criteria.  Use [listFind()](#listfind) to find and retrieve a single item, [listFindCut()](#listfindcut) to find and delete, [listFindReplace()](#listfindreplace) to find and replace, [listFindUpdate()](#listfindupdate) to find and apply updates, or [listFindEach()](#listfindeach) to find multiple items and iterate over them.
-
-All of these methods accept a "criteria" object, which may have one or more key/value pairs.  These must *all* match a list item for it to be selected.  For example, if you have a list of users, and you want to find a male with blue eyes, you would pass a criteria object similar to this:
-
-```javascript
-{
-	gender: "male",
-	eyes: "blue"
+```js
+log_event_types: { 
+	get:0, put:1, head:0, delete:1, expire_set:1, perf_sec:1, perf_min:1,
+	commit:1, index:1, unindex:1, search:0, sort:0, maint:1 
 }
 ```
 
-Alternatively, you can use regular expression objects for the criteria values, for more complex matching.  Example:
+Alternatively, you can just set the `all` key to log all event types:
 
-```javascript
-{
-	gender: /^MALE$/i,
-	eyes: /blu/
+```js
+log_event_types: { 
+	all: 1
 }
 ```
 
-Example of finding a single object with [listFind()](#listfind):
+Finally, the `data` column will contain some JSON-formatted metadata about the event, always including the `elapsed_ms` (elapsed time in milliseconds), but often other information as well.
 
-```javascript
-storage.listFind( 'list1', { username: 'jhuckaby' }, function(err, item, idx) {
-	if (err) throw err;
-} );
+Here are some example transaction log entries:
+
+```
+[Storage][transaction][get][index/ontrack/summary/word/releas][{"elapsed_ms":1.971}]
+[Storage][transaction][put][index/ontrack/created/sort/data][{"elapsed_ms":1.448}]
+[Storage][transaction][commit][index/ontrack][{"id":"0f760e77075fdd18c8d39f88e76c1f5e","elapsed_ms":38.286,"actions":25}]
+[Storage][transaction][index][index/ontrack][{"id":"2653","elapsed_ms":92.368}]
+[Storage][transaction][search][index/ontrack][{"query":"(status = \"closed\" && summary =~ \"Released to Preproduction\")","elapsed_ms":14.206,"results":24}]
 ```
 
-Example of finding and deleting a single object with [listFindCut()](#listfindcut):
+## Performance Logs
 
-```javascript
-storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
-	if (err) throw err;
-} );
-```
+If your application has continuous storage traffic, you might be interested in logging aggregated performance metrics every second, and/or every minute.  These can be enabled by setting `perf_sec` and/or `perf_min` properties in the `log_event_types` configuration object, respectively:
 
-Example of finding and replacing a single object with [listFindReplace()](#listfindreplace):
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var new_item = { username: 'huckabyj', foo: 'bar' };
-
-storage.listFindReplace( 'list1', criteria, new_item, function(err) {
-	if (err) throw err;
-} );
-```
-
-Example of finding and updating a single object with [listFindUpdate()](#listfindupdate):
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { gender: 'male', age: 38 };
-
-storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
-	if (err) throw err;
-} );
-```
-
-You can also increment or decrement numerical properties with [listFindUpdate()](#listfindupdate).  If an item key exists and is a number, you can set any update key to a string prefixed with `+` (increment) or `-` (decrement), followed by the delta number (int or float), e.g. `+1`.  So for example, imagine a list of users, and an item property such as `number_of_logins`.  When a user logs in again, you could increment this counter like this:
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { number_of_logins: "+1" };
-
-storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
-	if (err) throw err;
-} );
-```
-
-And finally, here is an example of finding *all* items that match our criteria using [listFindEach()](#listfindeach), and iterating over them:
-
-```javascript
-storage.listFindEach( 'list1', { gender: 'male' }, function(item, idx, callback) {
-	// do something with item, then fire callback
-	callback();
-}, 
-function(err) {
-	if (err) throw err;
-	// all matched items iterated over
-} );
-```
-
-## Copying, Renaming Lists
-
-To duplicate a list and all of its items, call [listCopy()](#listcopy), specifying the old and new key.  Example:
-
-```javascript
-storage.listCopy( 'list1', 'list2', function(err) {
-	if (err) throw err;
-} );
-```
-
-To rename a list, call [listRename()](#listrename).  This is basically just a [listCopy()](#listcopy) followed by a [listDelete()](#listdelete).  Example:
-
-```javascript
-storage.listRename( 'list1', 'list2', function(err) {
-	if (err) throw err;
-} );
-```
-
-With both of these functions, it is highly recommended you make sure the destination (target) key is empty before copying or renaming onto it.  If a list already exists at the destination key, it will be overwritten, but if the new list has differently numbered pages, some of the old list pages may still exist and occupy space, detached from their old parent list.  So it is always safest to delete first.
-
-## Deleting Lists
-
-To delete a list and all of its items, call [listDelete()](#listdelete).  The second argument should be a boolean set to `true` if you want the list *entirely* deleted including the header (options, page size, etc.), or `false` if you only want the list *cleared* (delete the items only, leaving an empty list behind).  Example:
-
-```javascript
-storage.listDelete( 'list1', true, function(err) {
-	if (err) throw err;
-	// list is entirely deleted
-} );
-```
-
-## List Internals
-
-Lists consist of a header record, and then records for each page.  The header is literally just a simple JSON record, stored at the exact key specified for the list.  So if you created an empty list with key `mylist`, and then you fetched the `mylist` record using a simple [get()](#get), you'd see this:
-
-```javascript
-{
-	type: 'list',
-	length: 0,
-	page_size: 50,
-	first_page: 0,
-	last_page: 0
+```js
+log_event_types: { 
+	perf_sec: 1, 
+	perf_min: 1
 }
 ```
 
-This is the list header record, which defines the list and its pages.  Here are descriptions of the header properties:
+Performance metrics are logged with the `category` column set to `perf`.  The actual metrics are in JSON format, in the `data` column.  Here is an example performance log entry:
 
-| Property | Description |
-|----------|-------------|
-| `type` | A static identifier, which will always be set to `list`. |
-| `length` | How many items are currently in the list. |
-| `page_size` | How many items are stored per page. |
-| `first_page` | The page number of the beginning of the list. |
-| `last_page` | The page number of the end of the list. |
+```
+[Storage][perf][second][Last Second Performance Metrics][{"get":{"min":0.132,"max":8.828,"total":319.99,"count":249,"avg":1.285},"index":{"min":24.361,"max":31.813,"total":137.421,"count":5,"avg":27.484},"commit":{"min":16.693,"max":26.227,"total":105.538,"count":5,"avg":21.107},"put":{"min":0.784,"max":7.367,"total":198.952,"count":125,"avg":1.591}}]
+```
 
-The list pages are stored as records "under" the main key, by adding a slash, followed by the page number.  So if you pushed one item onto the list, the updated header record would look like this:
+That JSON data is the same format returned by the [getStats()](docs/API.md#getstats) method.  See below for details.
 
-```javascript
+Note that performance metrics are only logged if there was at least one event.  If your application is completely idle, it will not log anything.
+
+# Performance Metrics
+
+If you want to fetch performance metrics on-demand, call the [getStats()](docs/API.md#getstats) method.  This returns an object containing a plethora of information, including min/avg/max metrics for all events.  Example response, formatted as JSON for display:
+
+```js
 {
-	type: 'list',
-	length: 1,
-	page_size: 50,
-	first_page: 0,
-	last_page: 0
+	"version": "2.0.0",
+	"engine": "Filesystem",
+	"concurrency": 4,
+	"transactions": true,
+	"last_second": {
+		"search": {
+			"min": 14.306,
+			"max": 14.306,
+			"total": 14.306,
+			"count": 1,
+			"avg": 14.306
+		},
+		"get": {
+			"min": 0.294,
+			"max": 2.053,
+			"total": 5.164,
+			"count": 5,
+			"avg": 1.032
+		}
+	},
+	"last_minute": {},
+	"recent_events": {
+		"get": [
+			{
+				"date": 1519507643.523,
+				"type": "get",
+				"key": "index/ontrack/status/word/closed",
+				"data": {
+					"elapsed_ms": 1.795
+				}
+			},
+			{
+				"date": 1519507643.524,
+				"type": "get",
+				"key": "index/ontrack/summary/word/releas",
+				"data": {
+					"elapsed_ms": 2.053
+				}
+			}
+		]
+	},
+	"locks": {}
 }
 ```
 
-Notice that the `first_page` and `last_page` are both still set to `0`, even though we added an item to the list.  That's because pages are zero-based, and the algorithm will fill up page `0` (`50` items in this case) before adding a new page.
+Here are descriptions of the main elements:
 
-So then if you then fetched the key `mylist/0` you'd actually get the raw page data, which is a JSON record with an `items` array:
+| Property Name | Description |
+|---------------|-------------|
+| `version` | The current version of the `pixl-server-storage` module. |
+| `engine` | The name of the current engine Plugin, e.g. `Filesystem`. |
+| `concurrency` | The current concurrency setting (i.e. max threads). |
+| `transactions` | Whether [transactions](docs/Transactions.md) are enabled (true) or disabled (false). |
+| `last_second` | A performance summary of the last second (see below). |
+| `last_minute` | A performance summary of the last minute (see below). |
+| `recent_events` | The most recent N events (see below). |
+| `locks` | Any storage keys that are currently locked (both exclusive and shared). |
 
-```javascript
+The performance metrics (both `last_second` and `last_minute`) include minimums, averages, maximums, counts and totals for each event, and are provided in this format:
+
+```js
 {
-	items: [
-		{ username: "jhuckaby", gender: "male" }
-	]
+	"search": {
+		"min": 14.306,
+		"max": 14.306,
+		"total": 14.306,
+		"count": 1,
+		"avg": 14.306
+	},
+	"get": {
+		"min": 0.294,
+		"max": 2.053,
+		"total": 5.164,
+		"count": 5,
+		"avg": 1.032
+	}
 }
 ```
 
-This array will keep growing as you add more items.  Once it reaches 50, however, the next item pushed will go into a new page, with key `mylist/1`.  That's basically how the paging system works.
+All the measurements are in milliseconds, and represent any actions that took place over the last second or minute.
 
-Remember that lists can grow from either end, so if the first page is filled and you *unshift* another item, it actually adds page `mylist/-1`.
-
-The two "end pages" can have a variable amount of items, up to the `page_size` limit.  The algorithm then creates new pages as needed.  But the *inner* pages that exist between the first and last pages will *always* have the full amount (i.e. `page_size`) of items.  Never more, never less.  So as future list operations are executed, the system will always maintain this rule.
+The `recent_events` object will only be populated if the `max_recent_events` configuration property is set to a positive number.  This will keep track of the last N events in each type, and provide them here.  This feature is disabled by default, as it incurs a small memory overhead for bookkeeping.
 
 # Daily Maintenance
 
@@ -937,610 +985,31 @@ module.exports = Class.create({
 });
 ```
 
-# API Reference
+# Unit Tests
 
-Here are all the public methods you can call in the storage class.  These examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
+To run the unit test suite, issue this command from within the module directory:
 
-```javascript
-var storage = server.Storage;
 ```
-
-## put
-
-```javascript
-storage.put( KEY, VALUE, CALLBACK );
-```
-
-The `put()` method stores a key/value pair.  It will create the record if it doesn't exist, or replace it if it does.  All keys should be strings.  The value may be an object or a `Buffer` (for binary blobs).  Objects are auto-serialized to JSON.  Your callback function is passed an error if one occurred.  Example:
-
-```javascript
-storage.put( 'test1', { foo: 'bar1' }, function(err) {
-	if (err) throw err;
-} );
-```
-
-For binary values, the key *must* contain a file extension, e.g. `test1.gif`.  Example:
-
-```javascript
-var fs = require('fs');
-var buffer = fs.readFileSync('picture.gif');
-storage.put( 'test1.gif', buffer, function(err) {
-	if (err) throw err;
-} );
-```
-
-## putMulti
-
-```javascript
-storage.putMulti( RECORDS, CALLBACK );
-```
-
-The `putMulti()` method stores multiple keys/values at once, from a specified object containing both.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than storing the records in sequence.  Example:
-
-```javascript
-var records = {
-	multi1: { fruit: 'apple' },
-	multi2: { fruit: 'orange' },
-	multi3: { fruit: 'banana' }
-};
-storage.putMulti( records, function(err) {
-	if (err) throw err;
-} );
-```
-
-## putStream
-
-```javascript
-storage.putStream( KEY, STREAM, CALLBACK );
-```
-
-The `putStream()` method stores a record using a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable), so it doesn't have to be read into memory.  This can be used to spool very large files to storage without using any RAM.  Note that this is treated as a binary record, so the key *must* contain a file extension, e.g. `test1.gif`.  Example:
-
-```javascript
-var fs = require('fs');
-var stream = fs.createReadStream('picture.gif');
-storage.putStream( 'test1.gif', stream, function(err) {
-	if (err) throw err;
-} );
-```
-
-## get
-
-```javascript
-storage.get( KEY, CALLBACK );
-```
-
-The `get()` method fetches a value given a key.  If the record is an object, it will be returned as such.  Or, if the record is a binary blob, a `Buffer` object will be returned.  Your callback function is passed an error if one occurred, and the data value for the given record.  Example:
-
-```javascript
-storage.get( 'test1', function(err, data) {
-	if (err) throw err;
-} );
-```
-
-## getMulti
-
-```javascript
-storage.getMulti( KEYS, CALLBACK );
-```
-
-The `getMulti()` method fetches multiple values at once, from a specified array of keys.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than fetching the records in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
-
-```javascript
-storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
-	if (err) throw err;
-	// values[0] will be the test1 record.
-	// values[1] will be the test2 record.
-	// values[2] will be the test3 record.
-} );
-```
-
-## getStream
-
-```javascript
-storage.getStream( KEY, CALLBACK );
-```
-
-The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
-
-```javascript
-var fs = require('fs');
-var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
-
-storage.getStream( 'test1.gif', function(err, readStream) {
-	if (err) throw err;
-	writeStream.on('finish', function() {
-		// data is completely written
-	} );
-	readStream.pipe( writeStream );
-} );
-```
-
-## head
-
-```javascript
-storage.head( KEY, CALLBACK );
-```
-
-The `head()` method fetches metadata about an object given a key, without fetching the object itself.  This generally means that the object size, and last modification date are retrieved, however this is engine specific.  Your callback function will be passed an error if one occurred, and an object containing at least two keys:
-
-| Key | Description |
-| --- | ----------- |
-| `mod` | The last modification date of the object, in Epoch seconds. |
-| `len` | The size of the object value in bytes. |
-
-Example:
-
-```javascript
-storage.head( 'test1', function(err, data) {
-	if (err) throw err;
-	// data.mod
-	// data.len
-} );
-```
-
-Please note that as of this writing, the `Couchbase` engine has no native API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but there is no way to retrieve the last modified date.
-
-## headMulti
-
-```javascript
-storage.headMulti( KEYS, CALLBACK );
-```
-
-The `headMulti()` method pings multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than pinging the records in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
-
-```javascript
-storage.headMulti( ['test1', 'test2', 'test3'], function(err, values) {
-	if (err) throw err;
-	// values[0] will be the test1 head info.
-	// values[1] will be the test2 head info.
-	// values[2] will be the test3 head info.
-} );
-```
-
-## delete
-
-```javascript
-storage.delete( KEY, CALLBACK );
-```
-
-The `delete()` method deletes an object given a key.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.delete( 'test1', function(err) {
-	if (err) throw err;
-} );
-```
-
-## deleteMulti
-
-```javascript
-storage.deleteMulti( KEYS, CALLBACK );
-```
-
-The `deleteMulti()` method deletes multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](#concurrency) configuration, this may be significantly faster than pinging the records in sequence.  Example:
-
-```javascript
-storage.deleteMulti( ['test1', 'test2', 'test3'], function(err) {
-	if (err) throw err;
-} );
-```
-
-## copy
-
-```javascript
-storage.copy( OLD_KEY, NEW_KEY, CALLBACK );
-```
-
-The `copy()` method copies a value from one key and stores it at another.  If the destination record doesn't exist it is created, otherwise it is replaced.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.copy( 'test1', 'test2', function(err) {
-	if (err) throw err;
-} );
-```
-
-**Note:** This is a compound function containing multiple sequential engine operations (in this case a `get` and a `put`).  You may require locking depending on your application.  See [lock()](#lock) and [unlock()](#unlock) below.
-
-## rename
-
-```javascript
-storage.rename( OLD_KEY, NEW_KEY, CALLBACK );
-```
-
-The `rename()` method copies a value from one key, stores it at another, and deletes the original key.  If the destination record doesn't exist it is created, otherwise it is replaced.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.rename( 'test1', 'test2', function(err) {
-	if (err) throw err;
-} );
-```
-
-**Note:** This is a compound function containing multiple sequential engine operations (in this case a `get`, `put` and `delete`).  You may require locking depending on your application.  See [lock()](#lock) and [unlock()](#unlock) below.
-
-## lock
-
-```javascript
-storage.lock( KEY, WAIT, CALLBACK );
-```
-
-The `lock()` method implements an in-memory advisory locking system, where you can request an exclusive lock on a particular key, and optionally wait for it to be unlocked.  It is up to you to call [unlock()](#unlock) for every record that you lock, even in the case of an error.
-
-If you pass `true` for the wait argument and the specified record is already locked, your request is added to a queue and invoked in a FIFO manner.  If you pass `false` and the resource is locked, an error is passed to your callback immediately.
-
-## unlock
-
-```javascript
-storage.unlock( KEY );
-```
-
-The `unlock()` method releases an advisory lock on a particular record, specified by its key.  This is a synchronous function with no callback.  For a usage example, see [Advisory Locking](#advisory-locking) above.
-
-## expire
-
-```javascript
-storage.expire( KEY, DATE );
-```
-
-The `expire()` method sets an expiration date on a record given its key.  The date can be any string, Epoch seconds or `Date` object.  The daily maintenance system will automatically deleted all expired records when it runs (assuming it is enabled -- see [Daily Maintenance](#daily-maintenance)).  Example:
-
-```javascript
-var exp_date = ((new Date()).getTime() / 1000) + 86400; // tomorrow
-storage.expire( 'test1', exp_date );
-```
-
-The earliest you can set a record to expire is the next day, as the maintenance script only runs once per day, typically in the early morning, and it only processes records expiring on the current day.
-
-## listCreate
-
-```javascript
-storage.listCreate( KEY, OPTIONS, CALLBACK );
-```
-
-The `listCreate()` method creates a new, empty list.  Specify the desired key, options (see below) and a callback function.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listCreate( 'list1', {}, function(err) {
-	if (err) throw err;
-} );
-```
-
-Unless otherwise specified, the list will be created with the default [page size](#list_page_size) (number of items per page).  However, you can override this in the options object by passing a `page_size` property:
-
-```javascript
-storage.listCreate( 'list1', { page_size: 100 }, function(err) {
-	if (err) throw err;
-} );
-```
-
-## listPush
-
-```javascript
-storage.listPush( KEY, ITEMS, CALLBACK );
-```
-
-Similar to the standard [Array.push()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push), the `listPush()` method pushes one or more items onto the end of a list.  The list will be created if it doesn't exist, using the default [page size](#list_page_size).  `ITEMS` can be a single object, or an array of objects.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listPush( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
-	if (err) throw err;
-} );
-```
-
-## listUnshift
-
-```javascript
-storage.listUnshift( KEY, ITEMS, CALLBACK );
-```
-
-Similar to the standard [Array.unshift()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift), the `listUnshift()` method unshifts one or more items onto the beginning of a list.  The list will be created if it doesn't exist, using the default [page size](#list_page_size).  `ITEMS` can be a single object, or an array of objects.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listUnshift( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
-	if (err) throw err;
-} );
-```
-
-## listPop
-
-```javascript
-storage.listPop( KEY, CALLBACK );
-```
-
-Similar to the standard [Array.pop()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/pop), the `listPop()` method pops one single item off the end of a list, and returns it.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the popped item, if successful.  Example:
-
-```javascript
-storage.listPop( 'list1', function(err, item) {
-	if (err) throw err;
-} );
-```
-
-If the list is empty, an error is not generated, but the item will be `null`.
-
-## listShift
-
-```javascript
-storage.listShift( KEY, CALLBACK );
-```
-
-Similar to the standard [Array.shift()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift), the `listShift()` method shifts one single item off the beginning of a list, and returns it.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the shifted item, if successful.  Example:
-
-```javascript
-storage.listShift( 'list1', function(err, item) {
-	if (err) throw err;
-} );
-```
-
-If the list is empty, an error is not generated, but the item will be `null`.
-
-## listGet
-
-```javascript
-storage.listGet( KEY, INDEX, LENGTH, CALLBACK );
-```
-
-The `listGet()` method fetches one or more items from a list, given the key, the starting index number (zero-based), the number of items to fetch (defaults to the entire list), and a callback.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be an array of the fetched items, if successful.  Example:
-
-```javascript
-storage.listGet( 'list1', 40, 5, function(err, items) {
-	if (err) throw err;
-} );
-```
-
-This would fetch 5 items starting at item index 40 (zero-based).
-
-You can specify a negative index number to fetch items from the end of the list.  For example, to fetch the last 3 items in the list, use `-3` as the index, and `3` as the length.
-
-Your callback function is also passed the list info object as a 3rd argument, in case you need to know the list length, page size, or first/last page positions.
-
-## listSplice
-
-```javascript
-storage.listSplice( KEY, INDEX, LENGTH, NEW_ITEMS, CALLBACK );
-```
-
-Similar to the standard [Array.splice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/splice), the `listSplice()` method removes a chunk of items from a list, optionally replacing it with a new chunk of items.  You must specify the list key, the index number of the first item to remove (zero-based), the number of items to remove (can be zero), an array of replacement items (can be empty or null), and finally a callback.
-
-Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be an array of the removed items, if successful.  Example:
-
-```javascript
-storage.listSplice( 'list1', 40, 5, [], function(err, items) {
-	if (err) throw err;
-} );
-```
-
-This example would remove 5 items starting at item index 40, and replace with nothing (no items inserted).  The list size would shrink by 5, and the spliced items would be passed to your callback in an array.
-
-## listFind
-
-```javascript
-storage.listFind( KEY, CRITERIA, CALLBACK );
-```
-
-The `listFind()` method will search a list for a particular item, based on a criteria object, and return the first item found to your callback.  The criteria object may have one or more key/value pairs, which must *all* match a list item for it to be selected.  Criteria values may be any JavaScript primitive (string, number, etc.), or a regular expression object for more complex matching.
-
-Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself, and the 3rd argument will be the item's index number (zero-based).  Example:
-
-```javascript
-storage.listFind( 'list1', { username: 'jhuckaby' }, function(err, item, idx) {
-	if (err) throw err;
-} );
-```
-
-If an item is not found, an error is not generated.  However, the `item` will be null, and the `idx` will be `-1`.
-
-## listFindCut
-
-```javascript
-storage.listFindCut( KEY, CRITERIA, CALLBACK );
-```
-
-The `listFindCut()` method will search a list for a particular item based on a criteria object, and if found, it'll delete it (remove it from the list using [listSplice()](#listsplice)).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself.  Example:
-
-```javascript
-storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
-	if (err) throw err;
-} );
-```
-
-## listFindReplace
-
-```javascript
-storage.listFindReplace( KEY, CRITERIA, NEW_ITEM, CALLBACK );
-```
-
-The `listFindReplace()` method will search a list for a particular item based on a criteria object, and if found, it'll replace it with the specified item.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var new_item = { username: 'huckabyj', foo: 'bar' };
-
-storage.listFindReplace( 'list1', criteria, new_item, function(err) {
-	if (err) throw err;
-} );
-```
-
-## listFindUpdate
-
-```javascript
-storage.listFindUpdate( KEY, CRITERIA, UPDATES, CALLBACK );
-```
-
-The `listFindUpdate()` method will search a list for a particular item based on a criteria object, and if found, it'll "update" it with the keys/values specified.  Meaning, they are merged in with the existing item, adding new keys or replacing existing ones.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself, with all the updates applied.  Example:
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { gender: 'male', age: 38 };
-
-storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
-	if (err) throw err;
-} );
-```
-
-You can also increment or decrement numerical properties with this function.  If an item key exists and is a number, you can set any update key to a string prefixed with `+` (increment) or `-` (decrement), followed by the delta number (int or float), e.g. `+1`.  So for example, imagine a list of users, and an item property such as `number_of_logins`.  When a user logs in again, you could increment this counter like this:
-
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { number_of_logins: "+1" };
-
-storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
-	if (err) throw err;
-} );
-```
-
-## listFindEach
-
-```javascript
-storage.listFindEach( KEY, CRITERIA, ITERATOR, CALLBACK );
-```
-
-The `listFindEach()` method will search a list for a *all* items that match a criteria object, and fire an iterator function for each one.  The criteria object may have one or more key/value pairs, which must all match a list item for it to be selected.  Criteria values may be any JavaScript primitive (string, number, etc.), or a regular expression object for more complex matching. 
-
-Your `ITERATOR` function is passed the item, the item index number, and a special callback function which must be called when you are done with the current item.  Pass it an error if you want to prematurely abort the loop, and jump to the final callback (the error will be passed through to it).  Otherwise, pass nothing to the iterator callback, to notify all is well and you want the next matched item.
-
-Your `CALLBACK` function is called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
-
-```javascript
-storage.listFindEach( 'list1', { username: 'jhuckaby' }, function(item, idx, callback) {
-	// do something with item, then fire callback
-	callback();
-}, 
-function(err) {
-	if (err) throw err;
-	// all matched items iterated over
-} );
-```
-
-## listInsertSorted
-
-```javascript
-storage.listInsertSorted( KEY, ITEM, COMPARATOR, CALLBACK );
-```
-
-The `listInsertSorted()` method inserts an item into a list, while keeping it sorted.  It doesn't resort the entire list every time, but rather it locates the correct position to insert the one item, based on sorting criteria, then performs a splice to insert it into place.  Example:
-
-```javascript
-var new_user = {
-	username: 'jhuckaby', 
-	age: 38, 
-	gender: 'male' 
-};
-
-var comparator = function(a, b) {
-	return( (a.username < b.username) ? -1 : 1 );
-};
-
-storage.listInsertSorted( 'users', new_user, comparator, function(err) {
-	if (err) throw err;
-	// item inserted successfully
-} );
-```
-
-If your sorting criteria is simple, i.e. a single top level property sorted ascending or descending, you can specify an array containing the key to sort by, and a direction (`1` for ascending, `-1` for descending), instead of a comparator function.  Example:
-
-```javascript
-storage.listInsertSorted( 'users', new_user, ['username', 1], function(err) {
-	if (err) throw err;
-} );
-```
-
-## listCopy
-
-```javascript
-storage.listCopy( OLD_KEY, NEW_KEY, CALLBACK );
-```
-
-The `listCopy()` method copies a list and all its items to a new key.  Specify the existing list key, a new key, and a callback.  If anything exists at the destination key, it is clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listCopy( 'list1', 'list2', function(err) {
-	if (err) throw err;
-} );
-```
-
-If a list already exists at the destination key, you should delete it first.  It will be overwritten, but if the new list has differently numbered pages, some of the old list pages may still exist and occupy space, detached from their old parent list.  So it is always safest to delete first.
-
-## listRename
-
-```javascript
-storage.listRename( OLD_KEY, NEW_KEY, CALLBACK );
-```
-
-The `listRename()` method renames (moves) a list and all its items to a new key.  Specify the existing list key, a new key, and a callback.  If anything exists at the destination key, it is clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listRename( 'list1', 'list2', function(err) {
-	if (err) throw err;
-} );
+npm test
 ```
 
-If a list already exists at the destination key, you should delete it first.  It will be overwritten, but if the new list has differently numbered pages, some of the old list pages may still exist and occupy space, detached from their old parent list.  So it is always safest to delete first.
+If you install the [pixl-unit](https://www.npmjs.com/package/pixl-unit) module globally, you can provide various command-line options, such as verbose mode:
 
-## listEach
-
-```javascript
-storage.listEach( KEY, ITERATOR, CALLBACK );
-```
-
-The `listEach()` method iterates over a list one item at a time, invoking your `ITERATOR` function for each item.  This is similar to how the [async eachSeries()](https://www.npmjs.com/package/async#eachSeries) method works (in fact, it is used internally for each list page).  The list pages are loaded one at a time, as to not fill up memory with huge lists.
-
-Your iterator function is passed the item, the item index number, and a special callback function which must be called when you are done with the current item.  Pass it an error if you want to prematurely abort the loop, and jump to the final callback (the error will be passed through to it).  Otherwise, pass nothing to the iterator callback, to notify all is well and you want the next item in the list.
-
-Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
-
-```javascript
-storage.listEach( 'list1', function(item, idx, callback) {
-	// do something with item, then fire callback
-	callback();
-}, 
-function(err) {
-	if (err) throw err;
-	// all items iterated over
-} );
-```
-
-## listGetInfo
-
-```javascript
-storage.listGetInfo( KEY, CALLBACK );
 ```
-
-The `listGetInfo()` method retrieves information about the list, without loading any items.  Specifically, it fetches the list length, first and last page numbers, page size, and any custom keys you passed to the `OPTIONS` object when first creating the list.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the list info object, if successful.  Example:
-
-```javascript
-storage.listGetInfo( 'list1', function(err, list) {
-	if (err) throw err;
-} );
+pixl-unit test/test.js --verbose
 ```
 
-Here are the keys you can expect to see in the info object:
+This also allows you to specify an alternate test configuration file via the `--configFile` option.  Using this you can load your own test config, which may use a different engine (e.g. S3, Couchbase, etc.):
 
-| Key | Description |
-|-----|-------------|
-| `length` | Total number of items in the list. |
-| `first_page` | Number of the first page in the list. |
-| `last_page` | Number of the last page in the list. |
-| `page_size` | Number of items per page. |
-
-## listDelete
-
-```javascript
-storage.listDelete( KEY, ENTIRE, CALLBACK );
 ```
-
-The `listDelete()` method deletes a list.  If you pass `true` for the second argument, the *entire* list will be deleted, including the header (options, page size, etc.).  Otherwise the list will simply be "cleared" (all items deleted).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
-
-```javascript
-storage.listDelete( 'list1', true, function(err) {
-	if (err) throw err;
-} );
+pixl-unit test/test.js --configFile /path/to/my/config.json
 ```
 
 # License
 
-The MIT License (MIT)
+**The MIT License (MIT)**
 
-Copyright (c) 2015 - 2016 Joseph Huckaby.
+Copyright (c) 2015 - 2018 Joseph Huckaby.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
