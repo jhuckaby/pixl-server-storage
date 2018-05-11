@@ -1,0 +1,994 @@
+{
+  "Ticket": [
+    {
+      "Assignedto": "dsmith",
+      "Rfaccount": "_none_",
+      "Environment": "Production",
+      "Description": "SAMPLE PRODUCT 1.7.70 BUILD 1\nThis is an official release of Sample Product 1.7.70. This is build number 1. New features and changes are listed below.\n\nBUILD SUMMARY\n(See the release notes)\n\nNEW FEATURES / CHANGES\nOptimized implementation of cross-device profile merging in the Sample Library. See Sample Library Release Notes ( https://mydocs.net/document/d/1kZC1GiuF9zmDv6d5bkFGMW_eBIs8ItefJbUPh1Q2Erk/edit#bookmark=kix.ej2bhezbvjhf ) for details.\n\nBUG FIXES\n(See the release notes)\n\nGIT COMMITS\n(See the release notes)\n\nDOCUMENTATION\nSample Product Release Notes ( http://build.dev.company.net/releases/sampleproduct/1.7.70/ )\n\nbuild Build Report ( http://build.dev.company.net/build/?build_report=2wzbkvz9st )\n\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/2wzbkvz9st/unit.txt )\n\n\nREQUIREMENTS\nList any external dependencies here, such as another product release.\n\nINSTALLATION\n\nPreproduction\nsudo roll preprod x --import 2wzbkvz9st --save b4sampleproduct_1.7.70 --upgrade\n\nLive Production\nsudo roll live-prod x --import 2wzbkvz9st --save b4sampleproduct_1.7.70 --upgrade\n\n\nOpen Issues\n\nNone\n\nCopyright (c) 2016 My Company, LLC.  Confidential.",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1455917142",
+            "Id": "14559171421881",
+            "Text": "Rolled to Preproduction.",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456421696",
+            "Id": "14564216963209",
+            "Text": "ready for prod",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456422035",
+            "Text": "rolled to prod with kittens",
+            "Username": "jhuckaby",
+            "Id": "14564220358621"
+          },
+          {
+            "Id": "14564229458651",
+            "Text": "done in prod",
+            "Username": "dsmith",
+            "Date": "1456422945"
+          }
+        ]
+      },
+      "Priority": "Medium",
+      "Completeby": "1456422945",
+      "ID": "2653",
+      "Status": "Open",
+      "History": {
+        "Event": [
+          {
+            "Description": "Dev Complete",
+            "Tag": "Build 1",
+            "Username": "dsmith",
+            "Id": "14559168836745",
+            "Date": "1455916883",
+            "Comment": ""
+          },
+          {
+            "Comment": "",
+            "Date": "1455917142",
+            "Id": "14559171421881",
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Preprod Release"
+          },
+          {
+            "Description": "completeby=February 26, 2016|March 2, 2016;description=changed",
+            "Username": "api",
+            "Date": "1456356075"
+          },
+          {
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Prod Release",
+            "Id": "14564216963206",
+            "Date": "1456421696",
+            "Comment": ""
+          },
+          {
+            "Date": "1456421696",
+            "Description": "assignedto=dsmith|jhuckaby;environment=Preproduction|Production",
+            "Username": "api"
+          },
+          {
+            "Date": "1456422036",
+            "Description": "assignedto=jhuckaby|dsmith",
+            "Username": "api"
+          }
+        ]
+      },
+      "Createdate": "1455916883",
+      "Summary": "Sample Product 1.7.70 Released to Preproduction",
+      "Customer": "_none_",
+      "Ccemail": ", dsmith",
+      "Modifydate": "1456422945",
+      "Submittedby": "dsmith"
+    },
+    
+    {
+      "ID": "2654",
+      "Comments": {
+        "Comment": [
+          {
+            "Text": "Rolled to Preproduction.",
+            "Username": "dsmith",
+            "Id": "14559172477856",
+            "Date": "1455917247"
+          },
+          {
+            "Username": "dsmith",
+            "Text": "Rolled to Preproduction.",
+            "Id": "14563551670986",
+            "Date": "1456355167"
+          },
+          {
+            "Date": "1456420253",
+            "Id": "14564202538017",
+            "Text": "ready for prod",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456420619",
+            "Username": "jhuckaby",
+            "Text": "rolled to prod",
+            "Id": "14564206196519"
+          },
+          {
+            "Date": "1456421665",
+            "Id": "14564216650695",
+            "Username": "dsmith",
+            "Text": "done in prod"
+          }
+        ]
+      },
+      "Priority": "Medium",
+      "Completeby": "1456421665",
+      "Description": "Sample SERVICE 1.1.38 BUILD 1\nThis is an official release of Sample Service 1.1.38 to Preproduction.  This is build number 1.  New features and changes are listed below. \n\nBUILD SUMMARY\n(See the release notes)\n\nNEW FEATURES / CHANGES\nOptimized implementation of cross-device profile merging in the Sample Library. See Sample Library Release Notes ( https://mydocs.net/document/d/1kZC1GiuF9zmDv6d5bkFGMW_eBIs8ItefJbUPh1Q2Erk/edit#bookmark=kix.ej2bhezbvjhf ) for details.\n\nBUG FIXES\n(See the release notes)\n\nGIT COMMITS\n(See the release notes)\n\nDOCUMENTATION\nSample Service Release Notes ( http://build.dev.company.net/releases/Sampleservice/1.1.38/ )\n\nbuild Build Report ( http://build.dev.company.net/build/?build_report=hzd86vdxtd )\n\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/hzd86vdxtd/unit.txt )\n\n\nREQUIREMENTS\nList any external dependencies here, such as another product release.\n\nINSTALLATION\n\nPreproduction\nsudo roll preprod x --import hzd86vdxtd --save b4Sampleservice_1.1.38 --upgrade\n\nLive Production\nsudo roll live-prod x --import hzd86vdxtd --save b4Sampleservice_1.1.38 --upgrade\n\n\nOPEN ISSUES\nNone\n\nCopyright (c) 2016 MyCompany, Inc.  Confidential.",
+      "Environment": "Production",
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith",
+      "Submittedby": "dsmith",
+      "Modifydate": "1456421665",
+      "Ccemail": "rthomas",
+      "Customer": "_none_",
+      "Summary": "Sample Service 1.1.38 Released to Preproduction hzd86vdxtd",
+      "Status": "Open",
+      "History": {
+        "Event": [
+          {
+            "Id": "14559171616402",
+            "Tag": "Build 1",
+            "Description": "Dev Complete",
+            "Username": "dsmith",
+            "Comment": "",
+            "Date": "1455917161"
+          },
+          {
+            "Date": "1455917247",
+            "Comment": "",
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Preprod Release",
+            "Id": "14559172477856"
+          },
+          {
+            "Description": "ccemail=, dsmith|rthomas;completeby=February 26, 2016|March 2, 2016;description=changed",
+            "Username": "api",
+            "Date": "1456355061"
+          },
+          {
+            "Username": "dsmith",
+            "Description": "Preprod Release",
+            "Tag": "Build 1",
+            "Id": "14563551670986",
+            "Date": "1456355167",
+            "Comment": ""
+          },
+          {
+            "Id": "14564202538014",
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Prod Release",
+            "Comment": "",
+            "Date": "1456420253"
+          },
+          {
+            "Username": "api",
+            "Description": "assignedto=dsmith|jhuckaby;environment=Preproduction|Production",
+            "Date": "1456420254"
+          },
+          {
+            "Username": "api",
+            "Description": "assignedto=jhuckaby|dsmith",
+            "Date": "1456420619"
+          }
+        ]
+      },
+      "Createdate": "1455917161"
+    },
+    
+    {
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith",
+      "ID": "2655",
+      "Completeby": "1456423621",
+      "Priority": "Medium",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1455924170",
+            "Id": "1455924170653",
+            "Text": "Rolled to Preproduction.",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456341599",
+            "Username": "dsmith",
+            "Text": "Rolled to Preproduction.",
+            "Id": "14563415995226"
+          },
+          {
+            "Date": "1456353963",
+            "Id": "14563539634553",
+            "Username": "dsmith",
+            "Text": "Rolled to Preproduction."
+          },
+          {
+            "Date": "1456423142",
+            "Id": "14564231427161",
+            "Username": "dsmith",
+            "Text": "ready for prod"
+          },
+          {
+            "Text": "rolled to prod",
+            "Username": "jhuckaby",
+            "Id": "14564235422873",
+            "Date": "1456423542"
+          },
+          {
+            "Date": "1456423621",
+            "Id": "14564236210221",
+            "Text": "done in prod",
+            "Username": "dsmith"
+          }
+        ]
+      },
+      "Description": "Mapper 1.8.10 BUILD 1\nThis is an official release of Mapper 1.8.10 to QA for a testing pass.  This is build number 1.  New features and changes are listed below.  This release is code and feature complete, and fulfills all the requirements in the ERD.\n\nBUILD SUMMARY\n(See the release notes)\n\nNEW FEATURES / CHANGES\nOptimized implementation of cross-device profile merging in the Sample Library. See Sample Library Release Notes ( https://mydocs.net/document/d/1kZC1GiuF9zmDv6d5bkFGMW_eBIs8ItefJbUPh1Q2Erk/edit#bookmark=kix.ej2bhezbvjhf ) for details.\n\nBUG FIXES\n(See the release notes)\n\nGIT COMMITS\n(See the release notes)\n\nDOCUMENTATION\nMapper Release Notes ( http://build.dev.company.net/releases/Mapper/1.8.10/ )\n\nbuild Build Report ( http://build.dev.company.net/build/?build_report=jz592s8z29 )\n\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/jz592s8z29/unit.txt )\n\nPrevious Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1KOlisbyGvWd7EjprlhzdCbirJnoUnhY17FHR7ijO--M/edit )\n\n\nREQUIREMENTS\nList any external dependencies here, such as another product release.\n\nINSTALLATION\n\nPreproduction\nsudo roll preprod x --import jz592s8z29 --save b4Mapper_1.8.10 --upgrade\n\nLive Production\nsudo roll live-prod x --import jz592s8z29 --save b4Mapper_1.8.10 --upgrade\n\n\nOPEN ISSUES\nNone\n\nCopyright (c) 2016 MyCompany, Inc.  Confidential.",
+      "Environment": "Production",
+      "Summary": "Mapper 1.8.10 Released",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Date": "1455924107",
+            "Comment": "",
+            "Username": "dsmith",
+            "Description": "Dev Complete",
+            "Tag": "Build 1",
+            "Id": "1455924107864"
+          },
+          {
+            "Comment": "",
+            "Date": "1455924170",
+            "Id": "14559241706529",
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Preprod Release"
+          },
+          {
+            "Date": "1456341499",
+            "Description": "assignedto=ebrown|dsmith;completeby=February 26, 2016|March 2, 2016;description=changed",
+            "Username": "api"
+          },
+          {
+            "Username": "dsmith",
+            "Tag": "Build 1",
+            "Description": "Preprod Release",
+            "Id": "14563415995225",
+            "Date": "1456341599",
+            "Comment": ""
+          },
+          {
+            "Date": "1456353888",
+            "Description": "description=changed",
+            "Username": "api"
+          },
+          {
+            "Tag": "Build 1",
+            "Description": "Preprod Release",
+            "Username": "dsmith",
+            "Id": "14563539634552",
+            "Date": "1456353963",
+            "Comment": ""
+          },
+          {
+            "Comment": "",
+            "Date": "1456423142",
+            "Id": "14564231427158",
+            "Description": "Prod Release",
+            "Tag": "Build 1",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456423142",
+            "Username": "api",
+            "Description": "assignedto=dsmith|jhuckaby;environment=Preproduction|Production"
+          },
+          {
+            "Description": "assignedto=jhuckaby|dsmith",
+            "Username": "api",
+            "Date": "1456423542"
+          },
+          {
+            "Date": "1456423621",
+            "Description": "status=Open|Closed;completeby=March 2, 2016|February 25, 2016",
+            "Username": "api"
+          }
+        ]
+      },
+      "Createdate": "1455924107",
+      "Submittedby": "dsmith",
+      "Modifydate": "1456423621",
+      "Ccemail": "ebrown, dsmith",
+      "Customer": "_none_"
+    },
+    
+    {
+      "Ccemail": "_none_",
+      "Customer": "_none_",
+      "Submittedby": "jhuckaby",
+      "Modifydate": "1456164397",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Username": "jhuckaby",
+            "Description": "Opened",
+            "Tag": "Build 1",
+            "Id": "1456164267925",
+            "Date": "1456164367"
+          },
+          {
+            "Id": "1456164365626",
+            "Username": "jhuckaby",
+            "Tag": "Build 1",
+            "Description": "Prod Release",
+            "Comment": "",
+            "Date": "1456164367"
+          },
+          {
+            "Username": "jhuckaby",
+            "Description": "_custom=Added event: Prod Release (Build 1)",
+            "Date": "1456164367"
+          },
+          {
+            "Date": "1456164397",
+            "Username": "api",
+            "Description": "status=New|Closed"
+          }
+        ]
+      },
+      "Createdate": "1456164367",
+      "Summary": "Update config.xml to allow for Amazon monitor servers in ACL",
+      "Description": "We have two Amazon monitor servers with static IPs which need to be able to send requests to ACL protected API endpoints.  This update covers that.\n\nGit Commit:\nhttp://source.dev.company.net/git/?p=dev/env.git;a=commitdiff;h=4f720f1\n\nProd Roll:\nroll prod w x t mgr mtx --import env config.xml --install env config.xml\n\n- Joe",
+      "Environment": "Production",
+      "Completeby": "1456164397",
+      "Priority": "High",
+      "Comments": {
+        "Comment": [{
+          "Date": "1456164397",
+          "Id": "14561643975777",
+          "Text": "rolled",
+          "Username": "jhuckaby"
+        }]
+      },
+      "ID": "2656",
+      "Assignedto": "jhuckaby",
+      "Rfaccount": "_none_"
+    },
+    
+    {
+      "Rfaccount": "_none_",
+      "Assignedto": "jhuckaby",
+      "ID": "2657",
+      "Completeby": "1456387200",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1456188357",
+            "Id": "14561883571713",
+            "Text": "Rolled to Preproduction.",
+            "Username": "jhuckaby"
+          },
+          {
+            "Date": "1456439459",
+            "Id": "1456439454236",
+            "Username": "jhuckaby",
+            "Text": "Rolled to prod, looks good."
+          }
+        ]
+      },
+      "Priority": "Medium",
+      "Environment": "Production",
+      "Description": "VERSION 7.4.5 BUILD 1\r\nThis is an official release of AirCast 7.4.5.  This is build number 1.  New features and changes are listed below.  This release is code and feature complete, and fulfills all the requirements in the ERD.\r\n\r\nBUILD SUMMARY\r\n(See the release notes)\r\n\r\nNEW FEATURES / CHANGES\r\nThis version contains two major bug fixes:\r\n\r\nDEPLOYING PLUGIN XML CONFIG FILES WITHOUT RESTART CAUSES OUTAGE\r\nA bug in the Plugin XML configuration code caused a situation we recently ran into on production.  If a Plugin config file is \"hot reloaded\" (i.e. deployed without a restart) it wipes out the base configuration and uses only what is in the file.  The problem is, we use a hybrid config approach in AirCast, where much of our Plugin configuration is stored in a single \"master\" configuration file, and only some extra parameters are in external files.  But if a file is hot reloaded, the entire configuration was replaced with only whatever the file provided.  This has been fixed, so the file is now merged back into the base config on reload.\r\n\r\nPOSSIBLE FILE CORRUPTION IN Hash WITH SIMULTANEOUS WRITES\r\nA possible bug was found in the base Hash filesystem Plugin in AirCast, where local temp files simply did not have enough entropy.  AirCast is using a local temp file to store data just before it gets sent atomically to NFS, and is using only the mediaset hash and item name as the uniqueness.  So if two write requests for the same mediaset and same filename came in at the same exact moment on the same server, this temp file could clobber itself.  This has been fixed so that PID-specific temp subdirectories are used for all local temp files (these dirs already exists and are auto-created/destroyed with each child fork).\r\n\r\nBUG FIXES\r\n(See the release notes)\r\n\r\nGIT COMMITS\r\n(See the release notes)\r\n\r\nDOCUMENTATION\r\nAirCast Release Notes ( http://build.dev.company.net/releases/AirCast/7.4.5/ )\r\n\r\nbuild Build Report ( http://build.dev.company.net/build/?build_report=vqq56w3spg )\r\n\r\nAirCast Wiki ( https://confluence.cyan.com/display/DEV/company+AirCast )\r\n\r\n\r\nREQUIREMENTS\r\nNone.\r\n\r\nINSTALLATION\r\n\r\nPreproduction\r\nsudo roll preprod app mtx --import vqq56w3spg --save b4AirCast_7.4.5 --upgrade\r\n\r\nLive Production\r\nsudo roll live-prod app mtx --import vqq56w3spg --save b4AirCast_7.4.5 --upgrade\r\n\r\n\r\nOPEN ISSUES\r\nNone\r\n\r\nCopyright (c) 2016 My Company, LLC.  Confidential.",
+      "Summary": "AirCast 7.4.5 Released",
+      "History": {
+        "Event": [
+          {
+            "Comment": "",
+            "Date": "1456188218",
+            "Id": "1456188218508",
+            "Username": "jhuckaby",
+            "Tag": "Build 1",
+            "Description": "Dev Complete"
+          },
+          {
+            "Username": "jhuckaby",
+            "Tag": "Build 1",
+            "Description": "Preprod Release",
+            "Id": "14561883571713",
+            "Date": "1456188357",
+            "Comment": ""
+          },
+          {
+            "Username": "jhuckaby",
+            "Description": "Prod Release",
+            "Tag": "Build 1",
+            "Id": "1456438738122",
+            "Date": "1456438742",
+            "Comment": ""
+          },
+          {
+            "Username": "jhuckaby",
+            "Description": "priority=_none_|Medium;environment=Preproduction|Production;_custom=Added event: Prod Release (Build 1)",
+            "Date": "1456438742"
+          },
+          {
+            "Username": "jhuckaby",
+            "Description": "status=Open|Closed;_custom=Added Comment: Rolled to prod, looks good.",
+            "Date": "1456439459"
+          },
+          {
+            "Date": "1456439469",
+            "Username": "jhuckaby",
+            "Description": "completeby=February 29, 2016|February 25, 2016"
+          }
+        ]
+      },
+      "Status": "Closed",
+      "Createdate": "1456188218",
+      "Modifydate": "1456439469",
+      "Submittedby": "jhuckaby",
+      "Customer": "_none_",
+      "Ccemail": "jhuckaby"
+    },
+    
+    {
+      "Modifydate": "1456267649",
+      "Submittedby": "dsmith",
+      "Customer": "_none_",
+      "Ccemail": "rthomas",
+      "Summary": "Sample: Enable Partner for OEM regular expression sharing",
+      "Status": "Closed",
+      "Createdate": "1456267281",
+      "History": {
+        "Event": [
+          {
+            "Date": "1456267281",
+            "Tag": "Build 1",
+            "Description": "Opened",
+            "Username": "dsmith",
+            "Id": "1456267182801"
+          },
+          {
+            "Date": "1456267342",
+            "Username": "api",
+            "Description": "assignedto=jhuckaby|dsmith"
+          },
+          {
+            "Date": "1456267649",
+            "Username": "api",
+            "Description": "status=New|Closed"
+          }
+        ]
+      },
+      "Environment": "Production",
+      "Description": "Enable Partner for OEM level regular expression sharing. All Partner owners will now be shared when fetching profile data.\n\nsudo roll prod t x mgr --import conf Sample/Sample-1.1.json --install conf Sample/Sample-1.1.json",
+      "ID": "2658",
+      "Priority": "High",
+      "Comments": {
+        "Comment": [
+          {
+            "Text": "rolled to prod",
+            "Username": "jhuckaby",
+            "Id": "14562673420862",
+            "Date": "1456267342"
+          },
+          {
+            "Date": "1456267649",
+            "Id": "14562676493786",
+            "Text": "good in prod",
+            "Username": "dsmith"
+          }
+        ]
+      },
+      "Completeby": "1456267649",
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith"
+    },
+    
+    {
+      "Description": "Show Box 1.4.28 BUILD 1\nThis is an official release of Show Box 1.4.28.  This is build number 1.  New features and changes are listed below. \n\nBUILD SUMMARY\n(See the release notes)\n\nNEW FEATURES / CHANGES\nHandle empty dealerzip parameter as a 'special-fallback' situation.\n\nBUG FIXES\n(See the release notes)\n\nGIT COMMITS\n(See the release notes)\n\nDOCUMENTATION\nShow Box Release Notes ( http://build.dev.company.net/releases/showbox/1.4.28/ )\n\nbuild Build Report ( http://build.dev.company.net/build/?build_report=d8hwb6w79c )\n\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/d8hwb6w79c/unit.txt )\n\n\nREQUIREMENTS\nList any external dependencies here, such as another product release.\n\nINSTALLATION\n\nPreproduction\nsudo roll preprod x --import d8hwb6w79c --save b4showbox_1.4.28 --upgrade\n\nLive Production\nsudo roll live-prod x --import d8hwb6w79c --save b4showbox_1.4.28 --upgrade\n\n\nOPEN ISSUES\nNone\n\nCopyright (c) 2016 My Company, LLC.  Confidential.",
+      "Environment": "Production",
+      "ID": "2659",
+      "Priority": "Medium",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1456433412",
+            "Id": "14564334120057",
+            "Username": "dsmith",
+            "Text": "Rolled to Preproduction."
+          },
+          {
+            "Id": "1456433865112",
+            "Text": "ready for prod",
+            "Username": "dsmith",
+            "Date": "1456433865"
+          },
+          {
+            "Text": "rolled to prod",
+            "Username": "jhuckaby",
+            "Id": "14564341909746",
+            "Date": "1456434191"
+          },
+          {
+            "Text": "good in prod",
+            "Username": "dsmith",
+            "Id": "14564348981304",
+            "Date": "1456434898"
+          }
+        ]
+      },
+      "Completeby": "1456434898",
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith",
+      "Submittedby": "dsmith",
+      "Modifydate": "1456434898",
+      "Ccemail": "ebrown",
+      "Customer": "_none_",
+      "Summary": "Show Box 1.4.28 Released to Preproduction",
+      "Createdate": "1456433331",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Comment": "",
+            "Date": "1456433331",
+            "Id": "14564333313479",
+            "Tag": "Build 1",
+            "Description": "Dev Complete",
+            "Username": "dsmith"
+          },
+          {
+            "Date": "1456433412",
+            "Comment": "",
+            "Description": "Preprod Release",
+            "Tag": "Build 1",
+            "Username": "dsmith",
+            "Id": "14564334120056"
+          },
+          {
+            "Username": "dsmith",
+            "Description": "Prod Release",
+            "Tag": "Build 1",
+            "Id": "14564338651116",
+            "Date": "1456433865",
+            "Comment": ""
+          },
+          {
+            "Date": "1456433865",
+            "Username": "api",
+            "Description": "assignedto=dsmith|jhuckaby;environment=Preproduction|Production"
+          },
+          {
+            "Date": "1456434191",
+            "Username": "api",
+            "Description": "assignedto=jhuckaby|dsmith"
+          },
+          {
+            "Description": "status=Open|Closed;completeby=March 3, 2016|February 25, 2016",
+            "Username": "api",
+            "Date": "1456434898"
+          }
+        ]
+      }
+    },
+    
+    {
+      "Environment": "Production",
+      "Description": "When Box Creator makes calls to AirCast, they should never error out.  This alert threshold will catch these and send to Joe.\r\n\r\nGit Commit:\r\nhttp://source.dev.company.net/git/?p=dev/clear.git;a=commitdiff;h=49e88ad\r\n\r\nProd:\r\nroll prod mtx --import clear adcreator-schedule.xml --install clear adcreator-schedule.xml\r\n\r\n- Joe",
+      "ID": "2660",
+      "Modifydate": "1456439428",
+      "Submittedby": "jhuckaby",
+      "Customer": "_none_",
+      "Priority": "High",
+      "Completeby": "1456387200",
+      "Ccemail": "_none_",
+      "Summary": "New Box Creator threshold alert for AirCast API errors",
+      "Status": "Closed",
+      "Comments": { "Comment": [] },
+      "History": {
+        "Event": [
+          {
+            "Id": "1456439372634",
+            "Description": "Opened",
+            "Tag": "Build 1",
+            "Username": "jhuckaby",
+            "Date": "1456439428"
+          },
+          {
+            "Description": "Prod Release",
+            "Tag": "Build 1",
+            "Username": "jhuckaby",
+            "Id": "1456439425106",
+            "Date": "1456439428",
+            "Comment": ""
+          },
+          {
+            "Date": "1456439428",
+            "Description": "_custom=Added event: Prod Release (Build 1)",
+            "Username": "jhuckaby"
+          }
+        ]
+      },
+      "Createdate": "1424903428",
+      "Rfaccount": "_none_",
+      "Assignedto": "jhuckaby"
+    },
+    
+    {
+      "Completeby": "1456473600",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1456529662",
+            "Text": "All of the above done on idb01 and idb02",
+            "Username": "rthomas",
+            "Id": "1456529661453"
+          },
+          {
+            "Id": "1462588190608",
+            "Username": "rthomas",
+            "Text": "Reindexed ads and admarkup on 2016-05-06 after deleting 5 million ads",
+            "Date": "1462588183"
+          }
+        ]
+      },
+      "Priority": "High",
+      "ID": "2661",
+      "Environment": "Production",
+      "Description": "reindex index Podcasting.idx_campaign_campid_txt;\r\n\r\nreindex index Podcasting.idx_campaign_name;\r\n\r\nreindex index Podcasting.idx_campaign_promoid;\r\n\r\nreindex index Podcasting.idx_campaigns_webid;\r\n\r\nreindex index Podcasting.idx_retargetcampaigns_modifydate;\r\n\r\nreindex index Podcasting.idx_retcampaigns_status;\r\n\r\nreindex index Podcasting.pk_Podcasting_campaigns;\r\n\r\nreindex table Podcasting.adgroups;\r\nreindex table Podcasting.campaignmake ;\r\nreindex table Podcasting.campaigndma ;\r\nreindex table Podcasting.campaignsitetype ;\r\nreindex table Podcasting.campaignnetwork ;\r\nreindex table Podcasting.accounts;\r\nreindex table Podcasting.invgroupnetworks ;\r\nreindex table Podcasting.invgroups ;\r\n\r\nreindex index Podcasting.udx_campmake_campmakeid;\r\nreindex index Podcasting.udx_campdma_campdmaid;\r\n\r\nreindex index Podcasting.idx_ads_status;\r\nreindex index Podcasting.idx_retargetads_modifydate;\r\nreindex index Podcasting.idx_ads_adid_txt;\r\nreindex index Podcasting.idx_ads_adgroupid;\r\nreindex index Podcasting.pk_Podcasting_ads;\r\n\r\n\r\nreindex table Podcasting.admarkup;\r\nreindex index Podcasting.udx_admarkup_markupadid;\r\n\r\nvacuum full Podcasting.campaigns;\r\n//vacuum full Podcasting.ads; (didn't finish so cancelled)\r\nvacuum full Podcasting.admarkup;\r\n\r\nvacuum analyze Podcasting.campaigns;\r\nvacuum analyze Podcasting.ads;\r\nvacuum analyze Podcasting.admarkup;",
+      "Assignedto": "rthomas",
+      "Rfaccount": "_none_",
+      "Customer": "_none_",
+      "Ccemail": "_none_",
+      "Modifydate": "1462588183",
+      "Submittedby": "rthomas",
+      "Createdate": "1456523929",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Date": "1456523929",
+            "Id": "1456523851407",
+            "Description": "Opened",
+            "Tag": "Build 1",
+            "Username": "rthomas"
+          },
+          {
+            "Description": "description=changed",
+            "Username": "rthomas",
+            "Date": "1456525684"
+          },
+          {
+            "Date": "1456529662",
+            "Username": "rthomas",
+            "Description": "status=New|Closed;description=changed;_custom=Added Comment: All of the above done on idb01 and idb02"
+          },
+          {
+            "Username": "rthomas",
+            "Description": "_custom=Added Comment: Reindexed ads and admarkup on 2016-05-06 after deleting 5 million ads",
+            "Date": "1462588183"
+          }
+        ]
+      },
+      "Summary": "Reindex Podcasting.campaigns table on prod idb01 and idb02"
+    },
+    
+    {
+      "Assignedto": "rthomas",
+      "Rfaccount": "_none_",
+      "Environment": "Production",
+      "Description": "Podcasting 1.9.20 BUILD 1\r\nThis is an official release of Podcasting 1.9.20.  This is build number 1.  New features and changes are listed below.\r\n\r\nBUILD SUMMARY\r\n(See the release notes)\r\n\r\nNEW FEATURES / CHANGES\r\n\r\nAdded support for banner size smallskyscraper (120x240)\r\n\r\nBUG FIXES\r\n(See the release notes)\r\n\r\nGIT COMMITS\r\n(See the release notes)\r\n\r\nDOCUMENTATION\r\nPodcasting Release Notes ( http://build.dev.company.net/releases/Podcasting/1.9.20/ )\r\n\r\nbuild Build Report ( http://build.dev.company.net/build/?build_report=xchfqkk6d4 )\r\n\r\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/xchfqkk6d4/unit.txt )\r\n\r\nPodcasting Service Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1MkAx5j2Ia4K-f7iHrQ1WvnXhMfsqm-nyPkQYQ32eLfM/edit )\r\n\r\nPodcasting Ubercron Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1CMRKF2TV32aGQ2aO_mxFRg-fnZOpAPQGaiqjcq82348/edit )\r\n\r\nPodcasting Manager Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1vd8bOAFV75-m5DpCt-1ybFo4qeUa298KTXAV6gqttiw/edit )\r\n\r\n\r\nREQUIREMENTS\r\nList any external dependencies here, such as another product release.\r\n\r\nINSTALLATION\r\n\r\nPreproduction\r\nsudo roll preprod mgr --import xchfqkk6d4 --save b4Podcasting_1.9.20 --upgrade monitoring vip logs apache\r\n\r\nLive Production\r\nsudo roll live-prod mgr --import xchfqkk6d4 --save b4Podcasting_1.9.20 --upgrade monitoring vip logs apache\r\n\r\n\r\nOPEN ISSUES\r\nNone\r\n\r\nCopyright (c) 2016 My Company, LLC.  Confidential.",
+      "Completeby": "1456732800",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1456529326",
+            "Text": "Rolled to Preproduction.",
+            "Username": "rthomas",
+            "Id": "14565293266093"
+          },
+          {
+            "Date": "1456529575",
+            "Id": "1456529567969",
+            "Text": "Just assigning to you Joe, for Monday, since I don't know if Tory will be available.",
+            "Username": "rthomas"
+          },
+          {
+            "Date": "1456766114",
+            "Id": "14567661145609",
+            "Text": "rolled to prod",
+            "Username": "jhuckaby"
+          },
+          {
+            "Username": "rthomas",
+            "Text": "Looks good. Thanks",
+            "Id": "1456767895049",
+            "Date": "1456767895"
+          }
+        ]
+      },
+      "Priority": "Medium",
+      "ID": "2662",
+      "History": {
+        "Event": [
+          {
+            "Date": "1456529135",
+            "Comment": "",
+            "Username": "rthomas",
+            "Description": "Dev Complete",
+            "Tag": "Build 1",
+            "Id": "14565291351972"
+          },
+          {
+            "Id": "14565293266092",
+            "Description": "Preprod Release",
+            "Tag": "Build 1",
+            "Username": "rthomas",
+            "Comment": "",
+            "Date": "1456529326"
+          },
+          {
+            "Date": "1456529575",
+            "Comment": "",
+            "Tag": "Build 1",
+            "Description": "Prod Release",
+            "Username": "rthomas",
+            "Id": "1456529568937"
+          },
+          {
+            "Description": "assignedto=rthomas|jhuckaby;completeby=March 4, 2016|February 29, 2016;environment=Preproduction|Production;_custom=Added Comment: Just assigning to you Joe, for Monday, since I don't know if Rory will be available.;_custom=Added event: Prod Release (Build 1)",
+            "Username": "rthomas",
+            "Date": "1456529575"
+          },
+          {
+            "Username": "api",
+            "Description": "assignedto=jhuckaby|rthomas",
+            "Date": "1456766114"
+          },
+          {
+            "Description": "status=Open|Closed;_custom=Added Comment: Looks good. Thanks",
+            "Username": "rthomas",
+            "Date": "1456767895"
+          }
+        ]
+      },
+      "Status": "Closed",
+      "Createdate": "1456529135",
+      "Summary": "Podcasting 1.9.20 Released to Preproduction xchfqkk6d4",
+      "Customer": "_none_",
+      "Ccemail": "rthomas",
+      "Modifydate": "1456767895",
+      "Submittedby": "rthomas"
+    },
+    
+    {
+      "Description": "Increase threshold on Couchbase related alerts that we expect to see at our scale. Turning down the noise.\nAlso increasing threshold on integration errors since they aren't high volume and aren't getting corrected, e.g, leftover usedcars.com integration points.\n\nsudo roll prod mtx --import clear sampleproduct-schedule.xml --install clear sampleproduct-schedule.xml",
+      "Environment": "Production",
+      "ID": "2663",
+      "Comments": {
+        "Comment": [
+          {
+            "Id": "1456769346963",
+            "Text": "rolled to prod",
+            "Username": "jhuckaby",
+            "Date": "1456769347"
+          },
+          {
+            "Date": "1456769362",
+            "Username": "dsmith",
+            "Text": "done in prod",
+            "Id": "14567693620438"
+          }
+        ]
+      },
+      "Completeby": "1456769362",
+      "Priority": "Low",
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith",
+      "Submittedby": "dsmith",
+      "Modifydate": "1456769362",
+      "Ccemail": "_none_",
+      "Customer": "_none_",
+      "Summary": "Increase CLEAR thresholds for Sample Product",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Id": "1456769013905",
+            "Username": "dsmith",
+            "Description": "Opened",
+            "Tag": "Build 1",
+            "Date": "1456769309"
+          },
+          {
+            "Date": "1456769347",
+            "Description": "assignedto=jhuckaby|dsmith",
+            "Username": "api"
+          },
+          {
+            "Date": "1456769362",
+            "Description": "status=New|Closed",
+            "Username": "api"
+          }
+        ]
+      },
+      "Createdate": "1456769309"
+    },
+    
+    {
+      "Modifydate": "1456770319",
+      "Submittedby": "dsmith",
+      "Customer": "_none_",
+      "Ccemail": "_none_",
+      "Summary": "Increase CLEAR alert thresholds on Show Box",
+      "Createdate": "1456770174",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Id": "1456769921738",
+            "Tag": "Build 1",
+            "Description": "Opened",
+            "Username": "dsmith",
+            "Date": "1456770174"
+          },
+          {
+            "Description": "assignedto=syang|dsmith",
+            "Username": "api",
+            "Date": "1456770284"
+          },
+          {
+            "Description": "status=New|Closed",
+            "Username": "api",
+            "Date": "1456770319"
+          }
+        ]
+      },
+      "Environment": "Production",
+      "Description": "Increase alert thresholds on Couchbase related errors.  We expect a low volume of these at our scale.  Let's turn down the noise.\n\nsudo roll prod mtx --import clear showbox-schedule.xml --install clear showbox-schedule.xml",
+      "ID": "2664",
+      "Priority": "Low",
+      "Comments": {
+        "Comment": [
+          {
+            "Date": "1456770284",
+            "Id": "14567702843295",
+            "Text": "to prod",
+            "Username": "syang"
+          },
+          {
+            "Username": "dsmith",
+            "Text": "done in prod",
+            "Id": "14567703193146",
+            "Date": "1456770319"
+          }
+        ]
+      },
+      "Completeby": "1456770319",
+      "Rfaccount": "_none_",
+      "Assignedto": "dsmith"
+    },
+    
+    {
+      "Description": "Podcasting 1.9.21 BUILD 1\r\nThis is an official release of Podcasting 1.9.21.  This is build number 1.  New features and changes are listed below.\r\n\r\nBUILD SUMMARY\r\n(See the release notes)\r\n\r\nNEW FEATURES / CHANGES\r\n\r\nUpdated unit tests to avoid collision\r\n\r\nUse DCM adunits to get supported ad sizes and store necessary information in the db\r\n\r\nSupport for getAds API with ad_id passed it. Previously only supported campaign_id and adgroup_id\r\n\r\nBUG FIXES\r\n(See the release notes)\r\n\r\nGIT COMMITS\r\n(See the release notes)\r\n\r\nDOCUMENTATION\r\nPodcasting Release Notes ( http://build.dev.company.net/releases/Podcasting/1.9.21/ )\r\n\r\nbuild Build Report ( http://build.dev.company.net/build/?build_report=rgm3dzybtd )\r\n\r\nUnit Test Report ( http://build.dev.company.net/abc/data/util/releasemgr/rolls/rgm3dzybtd/unit.txt )\r\n\r\nPodcasting Service Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1MkAx5j2Ia4K-f7iHrQ1WvnXhMfsqm-nyPkQYQ32eLfM/edit )\r\n\r\nPodcasting Ubercron Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1CMRKF2TV32aGQ2aO_mxFRg-fnZOpAPQGaiqjcq82348/edit )\r\n\r\nPodcasting Manager Release Notes ( https://mydocs.net/a/test.cyangroup.com/document/d/1vd8bOAFV75-m5DpCt-1ybFo4qeUa298KTXAV6gqttiw/edit )\r\n\r\n\r\nREQUIREMENTS\r\nList any external dependencies here, such as another product release.\r\n\r\nINSTALLATION\r\n\r\nPreproduction\r\nsudo roll preprod mgr --import rgm3dzybtd --save b4Podcasting_1.9.21 --upgrade monitoring vip logs apache\r\n\r\nLive Production\r\nsudo roll live-prod mgr --import rgm3dzybtd --save b4Podcasting_1.9.21 --upgrade monitoring vip logs apache\r\n\r\n\r\nOPEN ISSUES\r\nNone\r\n\r\nCopyright (c) 2016 My Company, LLC.  Confidential.",
+      "Environment": "Production",
+      "ID": "2665",
+      "Completeby": "1457596800",
+      "Comments": {
+        "Comment": [
+          {
+            "Text": "Rolled to Preproduction.",
+            "Username": "rthomas",
+            "Id": "1456770636454",
+            "Date": "1456770636"
+          },
+          {
+            "Id": "14570498590369",
+            "Text": "Rolled to Preproduction.",
+            "Username": "rthomas",
+            "Date": "1457049859"
+          },
+          {
+            "Date": "1457050887",
+            "Id": "14570508878623",
+            "Text": "pushed to prod",
+            "Username": "syang"
+          },
+          {
+            "Id": "1457051382113",
+            "Text": "Looks good thx",
+            "Username": "rthomas",
+            "Date": "1457051382"
+          }
+        ]
+      },
+      "Priority": "Medium",
+      "Rfaccount": "_none_",
+      "Assignedto": "rthomas",
+      "Submittedby": "rthomas",
+      "Modifydate": "1457051382",
+      "Ccemail": "rthomas",
+      "Customer": "_none_",
+      "Summary": "Podcasting 1.9.21 Released to Preproduction rgm3dzybtd",
+      "Createdate": "1456770505",
+      "Status": "Closed",
+      "History": {
+        "Event": [
+          {
+            "Date": "1456770505",
+            "Comment": "",
+            "Username": "rthomas",
+            "Tag": "Build 1",
+            "Description": "Dev Complete",
+            "Id": "14567705055623"
+          },
+          {
+            "Id": "1456770636454",
+            "Description": "Preprod Release",
+            "Tag": "Build 1",
+            "Username": "rthomas",
+            "Comment": "",
+            "Date": "1456770636"
+          },
+          {
+            "Date": "1457049724",
+            "Description": "completeby=March 7, 2016|March 10, 2016;description=changed",
+            "Username": "api"
+          },
+          {
+            "Username": "rthomas",
+            "Description": "Preprod Release",
+            "Tag": "Build 1",
+            "Id": "14570498590369",
+            "Date": "1457049859",
+            "Comment": ""
+          },
+          {
+            "Date": "1457050577",
+            "Comment": "",
+            "Username": "rthomas",
+            "Description": "Prod Release",
+            "Tag": "Build 1",
+            "Id": "1457050571679"
+          },
+          {
+            "Description": "environment=Preproduction|Production;_custom=Added event: Prod Release (Build 1)",
+            "Username": "rthomas",
+            "Date": "1457050577"
+          },
+          {
+            "Description": "assignedto=rthomas|syang",
+            "Username": "rthomas",
+            "Date": "1457050702"
+          },
+          {
+            "Date": "1457050887",
+            "Description": "assignedto=syang|rthomas",
+            "Username": "api"
+          },
+          {
+            "Date": "1457051382",
+            "Description": "status=Open|Closed;_custom=Added Comment: Looks good thx",
+            "Username": "rthomas"
+          }
+        ]
+      }
+    }
+  ]
+}

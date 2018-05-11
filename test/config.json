@@ -1,0 +1,42 @@
+{
+	"log_dir": ".",
+	"log_filename": "storage.log",
+	"debug_level": 9,
+	"debug": 1,
+	"echo": 0,
+	
+	"Storage": {
+		"engine": "Filesystem",
+		"list_page_size": 10,
+		"concurrency": 4,
+		"cache_key_match": "",
+		"transactions": 0,
+		"log_event_types": { "all": 1 },
+		
+		"Filesystem": {
+			"base_dir": "data",
+			"key_namespaces": 0,
+			"raw_file_paths": 0
+		},
+		"AWS": {
+			"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
+			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
+			"region": "us-west-1",
+			"correctClockSkew": true,
+			"maxRetries": 5
+		},
+		"S3": {
+			"keyPrefix": "",
+			"params": {
+				"Bucket": "MY_S3_BUCKET_ID"
+			}
+		},
+		"Couchbase": {
+			"connectString": "couchbase://127.0.0.1",
+			"bucket": "default",
+			"password": "",
+			"serialize": false,
+			"keyPrefix": ""
+		}
+	}
+}
