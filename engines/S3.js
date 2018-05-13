@@ -38,6 +38,9 @@ module.exports = Class.create({
 		this.keyTemplate = (s3_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
 		delete s3_config.keyTemplate;
 		
+		this.fileExtensions = !!s3_config.fileExtensions;
+		delete s3_config.fileExtensions;
+		
 		if (this.debugLevel(10)) {
 			// S3 has a logger API but it's extremely verbose -- restrict to level 10 only
 			s3_config.logger = {
@@ -68,13 +71,22 @@ module.exports = Class.create({
 		return key;
 	},
 	
+	extKey: function(key) {
+		// possibly add suffix to key, if fileExtensions mode is enabled
+		// and key is not binary
+		if (this.fileExtensions && !this.storage.isBinaryKey(key)) {
+			key += '.json';
+		}
+		return key;
+	},
+	
 	put: function(key, value, callback) {
 		// store key+value in s3
 		var self = this;
 		key = this.prepKey(key);
 		
 		var params = {};
-		params.Key = key;
+		params.Key = this.extKey(key);
 		params.Body = value;
 		
 		// serialize json if needed
@@ -103,7 +115,7 @@ module.exports = Class.create({
 		key = this.prepKey(key);
 		
 		var params = {};
-		params.Key = key;
+		params.Key = this.extKey(key);
 		params.Body = inp;
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
@@ -125,7 +137,7 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Pinging S3 Object: " + key);
 		
-		this.s3.headObject( { Key: key }, function(err, data) {
+		this.s3.headObject( { Key: this.extKey(key) }, function(err, data) {
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
@@ -149,7 +161,7 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching S3 Object: " + key);
 		
-		this.s3.getObject( { Key: key }, function(err, data) {
+		this.s3.getObject( { Key: this.extKey(key) }, function(err, data) {
 			if (err) {
 				if (err.code == 'NoSuchKey') {
 					// key not found, special case, don't log an error
@@ -192,7 +204,7 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
-		var params = { Key: key };
+		var params = { Key: this.extKey(key) };
 		var download = this.s3.getObject(params);
 		
 		download.on('httpHeaders', function(statusCode, headers) {
@@ -234,7 +246,7 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
-		this.s3.deleteObject( { Key: key }, function(err, data) {
+		this.s3.deleteObject( { Key: this.extKey(key) }, function(err, data) {
 			if (err) {
 				self.logError('s3', "Failed to delete object: " + key + ": " + err.message);
 			}

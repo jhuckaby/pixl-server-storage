@@ -47,6 +47,7 @@ Here is the table of contents for this current document:
 		+ [Raw File Paths](#raw-file-paths)
 		+ [Key Template](#key-template)
 	* [Amazon S3](#amazon-s3)
+		+ [S3 File Extensions](#s3-file-extensions)
 		+ [S3 Key Prefix](#s3-key-prefix)
 		+ [S3 Key Template](#s3-key-template)
 	* [Couchbase](#couchbase)
@@ -383,6 +384,7 @@ Then configure your storage thusly:
 	},
 	"S3": {
 		"keyPrefix": "",
+		"fileExtensions": true,
 		"params": {
 			"Bucket": "MY_S3_BUCKET_ID"
 		}
@@ -394,9 +396,17 @@ Replace `YOUR_AMAZON_ACCESS_KEY` and `YOUR_AMAZON_SECRET_KEY` with your Amazon A
 
 The `AWS` object is passed directly to the `config.update()` function from the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module, so you can also include any properties supported there.  See the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/guide/node-configuring.html) for more details.
 
-The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.  The one exception is `keyPrefix` which is a custom property used by pixl-server-storage (see [S3 Key Prefix](#s3-key-prefix) below).
+The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.   There are a few special `S3` properties used by pixl-server-storage, which are described below.
 
 If you plan on using Amazon AWS in other parts of you application, you can actually move the `AWS` config object into your outer server configuration.  The storage module will look for it there.
+
+### S3 File Extensions
+
+It is highly recommended that you set the S3 `fileExtensions` property to `true`, as shown in the example above.  This causes pixl-server-storage to append a file extension to all JSON S3 records when storing them.  For example, a key like `users/jhuckaby` would be stored in S3 as `users/jhuckaby.json`.  The benefit of this is that it plays nice with tools that copy or sync S3 data, including the popular [Rclone](https://rclone.org/) application.
+
+This all happens behind the scenes, and is invisible to the pixl-server-storage APIs.  So you do not have to add any JSON record file extensions yourself, when storing, fetching or deleting your records.
+
+Note that [binary keys](#storing-binary-blobs) already have file extensions, so they are excluded from this feature.  This only affects JSON records.
 
 ### S3 Key Prefix
 
