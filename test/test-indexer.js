@@ -50,6 +50,228 @@ var index_config = {
 	remove_words: ["the","of","and","a","to","in","is","you","that","it","he","was","for","on","are","as","with","his","they","I","at","be","this","have","from","or","one","had","by","word","but","not","what","all","were","we","when","your","can","said","there","use","an","each","which","she","do","how","their","if","will","up","other","about","out","many","then","them","these","so","some","her","would","make","like","him","into","time","has","look","two","more","write","go","see","number","no","way","could","people","my","than","first","water","been","call","who","oil","its","now","find","long","down","day","did","get","come","made","may","part"]
 };
 
+var fixtures = {
+	searchRecordsExact2: {
+		'title:"Released to Preproduction"': { "2653": 1, "2654": 1, "2659": 1, "2662": 1, "2665": 1 },
+		'status:open title:"Released to Preproduction"': { "2653": 1, "2654": 1 },
+		'status:closed title:"Released to Preproduction"': { "2659": 1, "2662": 1, "2665": 1 },
+		'status:open title:"Released to Preproduction" -service +product': { "2653": 1 },
+		'status:open title:"Released to Preproduction" +service -product': { "2654": 1 },
+		
+		'status:open title:"Released to" +"Preproduction"': { "2653": 1, "2654": 1 },
+		
+		'status:open title:"Product 1.7.70 Released" -"Preproduction hzd86vdxtd"': { "2653": 1 },
+		'status:open title:"Service 1.1.38 Released" +"Preproduction hzd86vdxtd"': { "2654": 1 },
+		
+		'title:"xchfqkk6d4"': { "2662": 1 },
+		'title:"Increase CLEAR thresholds"': { "2663": 1 },
+		'title:"Increase CLEAR alert thresholds"': { "2664": 1 },
+		'title:"prod idb01" +idb02 status:closed': { "2661": 1 },
+		'title:"prod idb03" +idb02 status:closed': {},
+		'title:"prod idb01" +idb03 status:closed': {},
+		'title:"prod idb01" +idb02 status:open': {},
+		'title:"Released to PreproductionZ"': {},
+		'title:"KJFHSDLKFHLKSDFHKJDSF"': {},
+		'title:"0"': {},
+		'title:"a"': {},
+		'title:""': {}
+	},
+	searchRecordsDateExact: {
+		'modified:2016-02-21': {},
+		
+		'modified:2016-02-22': { "2656": 1 },
+		'modified:2016/02/22': { "2656": 1 },
+		'modified:2016_02_22': { "2656": 1 },
+		'modified:1456164397': { "2656": 1 }, // epoch date
+		
+		'modified:2016-02-23': { "2658": 1 },
+		'modified:2016-02-25': { "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1 },
+		'modified:2016-02-29': { "2662": 1, "2663": 1, "2664": 1 },
+		'modified:2016-03-03': { "2665": 1 },
+		'modified:2016-05-06': { "2661": 1 },
+		'modified:2016-05-07': {},
+		'modified:2016-02-22 | 2016-02-23': { "2656": 1, "2658": 1 },
+		'modified:2016-03-03 | 2016-05-06': { "2665": 1, "2661": 1 },
+		'modified:2016-02-22 | 2016-02-23 | 2016-03-03 | 2016-05-06': { "2656": 1, "2658": 1, "2665": 1, "2661": 1 }
+	},
+	searchRecordsDateRangeOpen: {
+		'modified:<2000-01-01': {},
+		'modified:<2016-02-22': {},
+		
+		'modified:<=2016-02-22': { "2656": 1 },
+		'modified:<2016-02-23': { "2656": 1 },
+		
+		'modified:>=2000-01-01': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'modified:>=2016-02-22': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		'modified:>2016-02-22': { "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'modified:>=2016-02-29': { "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		'modified:>2016-02-29': { "2665": 1, "2661": 1 },
+		
+		'modified:>=2016-03-03': { "2665": 1, "2661": 1 },
+		'modified:>2016-03-03': { "2661": 1 },
+		
+		'modified:<=2016-05-06': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		'modified:<2016-05-06': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1 },
+		
+		'modified:>2016-05-06': {},
+		'modified:>2020-12-31': {}
+	},
+	searchRecordsDateRangeClosed: {
+		'modified:2000-01-01..2016-02-21': {},
+		'modified:2000-01-01..2016-02-22': { "2656": 1 },
+		'modified:2016-02-22..2016-02-24': { "2656": 1, "2658": 1 },
+		'modified:2016-02-24..2016-02-28': { "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1 },
+		'modified:2016-02-29..2016-02-29': { "2662": 1, "2663": 1, "2664": 1 },
+		'modified:2016-03-01..2020-12-31': { "2665": 1, "2661": 1 },
+		'modified:2016-05-04..2016-05-05': {},
+		'modified:2016-05-07..2016-06-01': {}
+	},
+	searchRecordsNumberExact: {
+		'num_comments:0': { "2660": 1 },
+		'num_comments:1': { "2656": 1 },
+		'num_comments:2': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		'num_comments:3': {},
+		'num_comments:4': { "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
+		'num_comments:5': { "2654": 1 },
+		'num_comments:6': { "2655": 1 },
+		'num_comments:7': {},
+		'num_comments:99999': {},
+		'num_comments:0|1': { "2660": 1, "2656": 1 },
+		'num_comments:5|6': { "2654": 1, "2655": 1 },
+		'num_comments:0|1|5|6': { "2660": 1, "2656": 1, "2654": 1, "2655": 1 }
+	},
+	searchRecordsNumberRangeOpen: {
+		'num_comments:<0': {},
+		'num_comments:<=0': { "2660": 1 },
+		
+		'num_comments:>=0': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:>0': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:<1': { "2660": 1 },
+		'num_comments:<=1': { "2660": 1, "2656": 1 },
+		
+		'num_comments:>=1': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:>1': { "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:<3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		'num_comments:<=3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		
+		'num_comments:>=3': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:>3': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		
+		'num_comments:>=5': { "2655": 1, "2654": 1 },
+		'num_comments:>5': { "2655": 1 },
+		
+		'num_comments:>=6': { "2655": 1 },
+		'num_comments:>6': {},
+		
+		'num_comments:>=7': {},
+		'num_comments:>7': {},
+		'num_comments:>99999': {},
+		
+		'num_comments:<=6': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:<7': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'num_comments:<99999': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 }
+	},
+	searchRecordsNumberRangeClosed: {
+		'num_comments:0..0': { "2660": 1 },
+		'num_comments:0..1': { "2660": 1, "2656": 1 },
+		'num_comments:0..2': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		'num_comments:0..3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		'num_comments:0..4': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
+		'num_comments:0..5': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1 },
+		'num_comments:0..6': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:0..7': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:0..99999': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		
+		'num_comments:1..6': { "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:2..6': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:3..6': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:4..6': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
+		'num_comments:5..6': { "2654": 1, "2655": 1 },
+		'num_comments:6..6': { "2655": 1 },
+		
+		'num_comments:6..7': { "2655": 1 },
+		'num_comments:6..99999': { "2655": 1 },
+		'num_comments:7..7': {},
+		'num_comments:7..99999': {},
+		
+		// 'num_comments:0..0': { "2660": 1 },
+		'num_comments:1..1': { "2656": 1 },
+		'num_comments:2..2': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		'num_comments:3..3': {},
+		'num_comments:4..4': { "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
+		'num_comments:5..5': { "2654": 1 },
+		// 'num_comments:6..6': { "2655": 1 }
+	},
+	searchRecordsAll: {
+		'*': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 }
+	},
+	searchRecordsPxQL: {
+		// basic
+		'(title =~ "xchfqkk6d4")': { "2662": 1 },
+		'(title =~ "Released to Preproduction")': { "2653": 1, "2654": 1, "2659": 1, "2662": 1, "2665": 1 },
+		'(status = "open" & title =~ "Released to Preproduction")': { "2653": 1, "2654": 1 },
+		'(status = "closed" & title =~ "Released to Preproduction")': { "2659": 1, "2662": 1, "2665": 1 },
+		
+		// useless extra parens
+		'(status = "closed" & (title =~ "Released to Preproduction"))': { "2659": 1, "2662": 1, "2665": 1 },
+		'((status = "closed") & title =~ "Released to Preproduction")': { "2659": 1, "2662": 1, "2665": 1 },
+		'((status = "closed") & (title =~ "Released to Preproduction"))': { "2659": 1, "2662": 1, "2665": 1 },
+		
+		// date formats
+		'(modified = "2016-02-22")': { "2656": 1 },
+		'(modified = "2016/02/22")': { "2656": 1 },
+		'(modified = "2016_02_22")': { "2656": 1 },
+		'(modified = "1456164397")': { "2656": 1 }, // epoch date
+		
+		// date ranges
+		'(modified < "2000-01-01")': {},
+		'(modified < "2016-02-22")': {},
+		
+		'(modified <= "2016-02-22")': { "2656": 1 },
+		'(modified < "2016-02-23")': { "2656": 1 },
+		
+		'(modified<="2016-02-22")': { "2656": 1 }, // no spaces
+		'(modified<"2016-02-23")': { "2656": 1 }, // no spaces
+		
+		// numbers
+		'(num_comments = 0)': { "2660": 1 },
+		'(num_comments = 1)': { "2656": 1 },
+		'(num_comments = 2)': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
+		
+		'(num_comments = "0")': { "2660": 1 }, // quotes should work with numbers
+		'(num_comments = "1")': { "2656": 1 }, // quotes should work with numbers
+		'(num_comments = "2")': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 }, // quotes should work with numbers
+		
+		'(num_comments < 0)': {},
+		'(num_comments <= 0)': { "2660": 1 },
+		
+		'(num_comments >= 0)': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'(num_comments > 0)': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
+		
+		'(num_comments < 1)': { "2660": 1 },
+		'(num_comments <= 1)': { "2660": 1, "2656": 1 },
+		
+		// complex boolean
+		'((status = "open" | status = "closed" | status = "wallaby") & (title =~ "amazon" & title =~ "monitor") & modified = "2016_02_22")': { "2656": 1 },
+		
+		// bad queries (expect errors)
+		'(nonexist = "foo")': false, // index not found
+		'(title =~ "preproduction" ^^ status = "open")': false, // invalid operator
+		'(title =~ "preproduction" && status = "open)': false, // missing close quote
+		'(title =~ "preproduction" && status = "open"))': false, // double close paren
+		'(title =~ "preproduction" && (status = "open")': false // missing close paren
+	}
+};
+
 module.exports = {
 	tests: [
 	
@@ -343,32 +565,7 @@ module.exports = {
 		
 		function searchRecordsExact2(test) {
 			var self = this;
-			
-			var map = {
-				'title:"Released to Preproduction"': { "2653": 1, "2654": 1, "2659": 1, "2662": 1, "2665": 1 },
-				'status:open title:"Released to Preproduction"': { "2653": 1, "2654": 1 },
-				'status:closed title:"Released to Preproduction"': { "2659": 1, "2662": 1, "2665": 1 },
-				'status:open title:"Released to Preproduction" -service +product': { "2653": 1 },
-				'status:open title:"Released to Preproduction" +service -product': { "2654": 1 },
-				
-				'status:open title:"Released to" +"Preproduction"': { "2653": 1, "2654": 1 },
-				
-				'status:open title:"Product 1.7.70 Released" -"Preproduction hzd86vdxtd"': { "2653": 1 },
-				'status:open title:"Service 1.1.38 Released" +"Preproduction hzd86vdxtd"': { "2654": 1 },
-				
-				'title:"xchfqkk6d4"': { "2662": 1 },
-				'title:"Increase CLEAR thresholds"': { "2663": 1 },
-				'title:"Increase CLEAR alert thresholds"': { "2664": 1 },
-				'title:"prod idb01" +idb02 status:closed': { "2661": 1 },
-				'title:"prod idb03" +idb02 status:closed': {},
-				'title:"prod idb01" +idb03 status:closed': {},
-				'title:"prod idb01" +idb02 status:open': {},
-				'title:"Released to PreproductionZ"': {},
-				'title:"KJFHSDLKFHLKSDFHKJDSF"': {},
-				'title:"0"': {},
-				'title:"a"': {},
-				'title:""': {}
-			};
+			var map = fixtures.searchRecordsExact2;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -379,25 +576,7 @@ module.exports = {
 		
 		function searchRecordsDateExact(test) {
 			var self = this;
-			
-			var map = {
-				'modified:2016-02-21': {},
-				
-				'modified:2016-02-22': { "2656": 1 },
-				'modified:2016/02/22': { "2656": 1 },
-				'modified:2016_02_22': { "2656": 1 },
-				'modified:1456164397': { "2656": 1 }, // epoch date
-				
-				'modified:2016-02-23': { "2658": 1 },
-				'modified:2016-02-25': { "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1 },
-				'modified:2016-02-29': { "2662": 1, "2663": 1, "2664": 1 },
-				'modified:2016-03-03': { "2665": 1 },
-				'modified:2016-05-06': { "2661": 1 },
-				'modified:2016-05-07': {},
-				'modified:2016-02-22 | 2016-02-23': { "2656": 1, "2658": 1 },
-				'modified:2016-03-03 | 2016-05-06': { "2665": 1, "2661": 1 },
-				'modified:2016-02-22 | 2016-02-23 | 2016-03-03 | 2016-05-06': { "2656": 1, "2658": 1, "2665": 1, "2661": 1 }
-			};
+			var map = fixtures.searchRecordsDateExact;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -408,31 +587,7 @@ module.exports = {
 		
 		function searchRecordsDateRangeOpen(test) {
 			var self = this;
-			
-			var map = {
-				'modified:<2000-01-01': {},
-				'modified:<2016-02-22': {},
-				
-				'modified:<=2016-02-22': { "2656": 1 },
-				'modified:<2016-02-23': { "2656": 1 },
-				
-				'modified:>=2000-01-01': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'modified:>=2016-02-22': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				'modified:>2016-02-22': { "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'modified:>=2016-02-29': { "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				'modified:>2016-02-29': { "2665": 1, "2661": 1 },
-				
-				'modified:>=2016-03-03': { "2665": 1, "2661": 1 },
-				'modified:>2016-03-03': { "2661": 1 },
-				
-				'modified:<=2016-05-06': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				'modified:<2016-05-06': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1 },
-				
-				'modified:>2016-05-06': {},
-				'modified:>2020-12-31': {}
-			};
+			var map = fixtures.searchRecordsDateRangeOpen;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -443,17 +598,7 @@ module.exports = {
 		
 		function searchRecordsDateRangeClosed(test) {
 			var self = this;
-			
-			var map = {
-				'modified:2000-01-01..2016-02-21': {},
-				'modified:2000-01-01..2016-02-22': { "2656": 1 },
-				'modified:2016-02-22..2016-02-24': { "2656": 1, "2658": 1 },
-				'modified:2016-02-24..2016-02-28': { "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1 },
-				'modified:2016-02-29..2016-02-29': { "2662": 1, "2663": 1, "2664": 1 },
-				'modified:2016-03-01..2020-12-31': { "2665": 1, "2661": 1 },
-				'modified:2016-05-04..2016-05-05': {},
-				'modified:2016-05-07..2016-06-01': {}
-			};
+			var map = fixtures.searchRecordsDateRangeClosed;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -464,21 +609,7 @@ module.exports = {
 		
 		function searchRecordsNumberExact(test) {
 			var self = this;
-			
-			var map = {
-				'num_comments:0': { "2660": 1 },
-				'num_comments:1': { "2656": 1 },
-				'num_comments:2': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				'num_comments:3': {},
-				'num_comments:4': { "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
-				'num_comments:5': { "2654": 1 },
-				'num_comments:6': { "2655": 1 },
-				'num_comments:7': {},
-				'num_comments:99999': {},
-				'num_comments:0|1': { "2660": 1, "2656": 1 },
-				'num_comments:5|6': { "2654": 1, "2655": 1 },
-				'num_comments:0|1|5|6': { "2660": 1, "2656": 1, "2654": 1, "2655": 1 }
-			};
+			var map = fixtures.searchRecordsNumberExact;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -489,44 +620,7 @@ module.exports = {
 		
 		function searchRecordsNumberRangeOpen(test) {
 			var self = this;
-			
-			var map = {
-				'num_comments:<0': {},
-				'num_comments:<=0': { "2660": 1 },
-				
-				'num_comments:>=0': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:>0': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:<1': { "2660": 1 },
-				'num_comments:<=1': { "2660": 1, "2656": 1 },
-				
-				'num_comments:>=1': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:>1': { "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:<3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				'num_comments:<=3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				
-				'num_comments:>=3': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:>3': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				
-				'num_comments:>=5': { "2655": 1, "2654": 1 },
-				'num_comments:>5': { "2655": 1 },
-				
-				'num_comments:>=6': { "2655": 1 },
-				'num_comments:>6': {},
-				
-				'num_comments:>=7': {},
-				'num_comments:>7': {},
-				'num_comments:>99999': {},
-				
-				'num_comments:<=6': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:<7': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'num_comments:<99999': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 }
-			};
+			var map = fixtures.searchRecordsNumberRangeOpen;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -537,38 +631,7 @@ module.exports = {
 		
 		function searchRecordsNumberRangeClosed(test) {
 			var self = this;
-			
-			var map = {
-				'num_comments:0..0': { "2660": 1 },
-				'num_comments:0..1': { "2660": 1, "2656": 1 },
-				'num_comments:0..2': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				'num_comments:0..3': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				'num_comments:0..4': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
-				'num_comments:0..5': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1 },
-				'num_comments:0..6': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:0..7': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:0..99999': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				
-				'num_comments:1..6': { "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:2..6': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:3..6': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:4..6': { "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 },
-				'num_comments:5..6': { "2654": 1, "2655": 1 },
-				'num_comments:6..6': { "2655": 1 },
-				
-				'num_comments:6..7': { "2655": 1 },
-				'num_comments:6..99999': { "2655": 1 },
-				'num_comments:7..7': {},
-				'num_comments:7..99999': {},
-				
-				// 'num_comments:0..0': { "2660": 1 },
-				'num_comments:1..1': { "2656": 1 },
-				'num_comments:2..2': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				'num_comments:3..3': {},
-				'num_comments:4..4': { "2653": 1, "2659": 1, "2662": 1, "2665": 1 },
-				'num_comments:5..5': { "2654": 1 },
-				// 'num_comments:6..6': { "2655": 1 }
-			};
+			var map = fixtures.searchRecordsNumberRangeClosed;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -577,10 +640,7 @@ module.exports = {
 		
 		function searchRecordsAll(test) {
 			var self = this;
-			
-			var map = {
-				'*': { "2660": 1, "2656": 1, "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1, "2653": 1, "2659": 1, "2662": 1, "2665": 1, "2654": 1, "2655": 1 }
-			};
+			var map = fixtures.searchRecordsAll;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
@@ -631,69 +691,58 @@ module.exports = {
 		
 		function searchRecordsPxQL(test) {
 			var self = this;
-			
-			var map = {
-				
-				// basic
-				'(title =~ "xchfqkk6d4")': { "2662": 1 },
-				'(title =~ "Released to Preproduction")': { "2653": 1, "2654": 1, "2659": 1, "2662": 1, "2665": 1 },
-				'(status = "open" & title =~ "Released to Preproduction")': { "2653": 1, "2654": 1 },
-				'(status = "closed" & title =~ "Released to Preproduction")': { "2659": 1, "2662": 1, "2665": 1 },
-				
-				// useless extra parens
-				'(status = "closed" & (title =~ "Released to Preproduction"))': { "2659": 1, "2662": 1, "2665": 1 },
-				'((status = "closed") & title =~ "Released to Preproduction")': { "2659": 1, "2662": 1, "2665": 1 },
-				'((status = "closed") & (title =~ "Released to Preproduction"))': { "2659": 1, "2662": 1, "2665": 1 },
-				
-				// date formats
-				'(modified = "2016-02-22")': { "2656": 1 },
-				'(modified = "2016/02/22")': { "2656": 1 },
-				'(modified = "2016_02_22")': { "2656": 1 },
-				'(modified = "1456164397")': { "2656": 1 }, // epoch date
-				
-				// date ranges
-				'(modified < "2000-01-01")': {},
-				'(modified < "2016-02-22")': {},
-				
-				'(modified <= "2016-02-22")': { "2656": 1 },
-				'(modified < "2016-02-23")': { "2656": 1 },
-				
-				'(modified<="2016-02-22")': { "2656": 1 }, // no spaces
-				'(modified<"2016-02-23")': { "2656": 1 }, // no spaces
-				
-				// numbers
-				'(num_comments = 0)': { "2660": 1 },
-				'(num_comments = 1)': { "2656": 1 },
-				'(num_comments = 2)': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 },
-				
-				'(num_comments = "0")': { "2660": 1 }, // quotes should work with numbers
-				'(num_comments = "1")': { "2656": 1 }, // quotes should work with numbers
-				'(num_comments = "2")': { "2657": 1, "2658": 1, "2661": 1, "2663": 1, "2664": 1 }, // quotes should work with numbers
-				
-				'(num_comments < 0)': {},
-				'(num_comments <= 0)': { "2660": 1 },
-				
-				'(num_comments >= 0)': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2660": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'(num_comments > 0)': { "2656": 1, "2658": 1, "2653": 1, "2654": 1, "2655": 1, "2657": 1, "2659": 1, "2662": 1, "2663": 1, "2664": 1, "2665": 1, "2661": 1 },
-				
-				'(num_comments < 1)': { "2660": 1 },
-				'(num_comments <= 1)': { "2660": 1, "2656": 1 },
-				
-				// complex boolean
-				'((status = "open" | status = "closed" | status = "wallaby") & (title =~ "amazon" & title =~ "monitor") & modified = "2016_02_22")': { "2656": 1 },
-				
-				// bad queries (expect errors)
-				'(nonexist = "foo")': false, // index not found
-				'(title =~ "preproduction" ^^ status = "open")': false, // invalid operator
-				'(title =~ "preproduction" && status = "open)': false, // missing close quote
-				'(title =~ "preproduction" && status = "open"))': false, // double close paren
-				'(title =~ "preproduction" && (status = "open")': false // missing close paren
-			};
+			var map = fixtures.searchRecordsPxQL;
 			
 			this.multiIndexSearch(map, index_config, test, function() {
 				test.done();
 			});
+		},
+		
+		function searchSingleRecords(test) {
+			// test known set of searches and results on each record
+			var self = this;
+			var all_records = fixtures.searchRecordsAll['*'];
+			var searches = [];
+			
+			var map = {};
+			for (var cat in fixtures) {
+				Tools.mergeHashInto( map, fixtures[cat] );
+			}
+			
+			for (var query in map) {
+				var expected = map[query];
+				if (expected) {
+					for (var record_id in expected) {
+						searches.push({ query: query, record_id: record_id, result: true });
+					}
+					for (var record_id in all_records) {
+						if (!(record_id in expected)) {
+							searches.push({ query: query, record_id: record_id, result: false });
+						}
+					}
+				}
+			}
+			
+			async.eachSeries( searches,
+				function(search, callback) {
+					var squery = search.query;
+					var record_id = search.record_id;
+					var expected_result = search.result;
+					
+					self.storage.searchSingle( squery, record_id, index_config, function(err, result) {
+						test.ok( !err, "No error searching record: " + err );
+						
+						test.debug("Single Search: "+squery+" -- result for " + record_id + ": " + result);
+						test.ok( result === expected_result, "Got correct results from search: " + result );
+						
+						callback();
+					}); // searchSingle
+				},
+				function(err) {
+					// all searches complete
+					test.done();
+				}
+			); // eachSeries
 		},
 		
 		// sort records

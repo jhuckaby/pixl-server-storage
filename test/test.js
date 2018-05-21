@@ -162,7 +162,7 @@ module.exports = {
 					
 					test.ok( !err, "No error searching record: " + err );
 					
-					test.debug("Search ("+squery+") results:", results);
+					test.debug("Search: "+squery+" -- results:", results);
 					test.ok( !!results, "Got results from search" );
 					test.ok( typeof(results) == 'object', "Results is an object: " + typeof(results) );
 					
