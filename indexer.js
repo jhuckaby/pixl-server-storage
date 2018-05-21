@@ -11,12 +11,13 @@ var stemmer = require('porter-stemmer').stemmer;
 var unidecode = require('unidecode');
 var he = require('he');
 
+var IndexerSingle = require("./indexer-single.js");
 var DateIndexType = require("./index_types/Date.js");
 var NumberIndexType = require("./index_types/Number.js");
 
 module.exports = Class.create({
 	
-	__mixins: [ DateIndexType, NumberIndexType ],
+	__mixins: [ IndexerSingle, DateIndexType, NumberIndexType ],
 	
 	removeWordCache: null,
 	
@@ -26,9 +27,9 @@ module.exports = Class.create({
 		
 		// if no transactions, or transaction already in progress, jump to original func
 		if (!this.transactions || this.currentTransactionPath) {
-			return this._indexRecord(id, record, config, function(err) {
+			return this._indexRecord(id, record, config, function(err, state) {
 				if (err) self.logError('index', "Indexing failed on record: " + id + ": " + err);
-				callback(err);
+				callback(err, state);
 			});
 		}
 		
@@ -39,7 +40,7 @@ module.exports = Class.create({
 		this.beginTransaction(path, function(err, clone) {
 			// transaction has begun
 			// call _indexRecord on CLONE (transaction-aware storage instance)
-			clone._indexRecord(id, record, config, function(err) {
+			clone._indexRecord(id, record, config, function(err, state) {
 				if (err) {
 					// index generated an error
 					self.logError('index', "Indexing failed on record: " + id + ": " + err);
@@ -62,7 +63,7 @@ module.exports = Class.create({
 						} // commit error
 						else {
 							// success!  call original callback
-							if (callback) callback();
+							if (callback) callback(null, state);
 						}
 					}); // commit
 				} // no error
@@ -239,7 +240,8 @@ module.exports = Class.create({
 							// now handle the sorters
 							async.eachLimit( config.sorters || [], self.concurrency,
 								function(sorter, callback) {
-									self.updateSorter( record, sorter, state, callback );
+									if (sorter.delete) self.deleteSorter( id, sorter, state, callback );
+									else self.updateSorter( record, sorter, state, callback );
 								},
 								function(err) {
 									// all sorters sorted
@@ -251,7 +253,7 @@ module.exports = Class.create({
 									});
 									
 									self.unlock( config.base_path + '/' + id );
-									if (callback) callback(err);
+									if (callback) callback(err, state);
 								}
 							); // eachLimit (sorters)
 						} ); // put (_data)
@@ -891,7 +893,13 @@ module.exports = Class.create({
 		var path = config.base_path + '/' + sorter.id + '/sort';
 		
 		this.logDebug(10, "Removing record from sorter: " + sorter.id + ": " + id);
-		this.hashDelete( path, id, callback );
+		this.hashDelete( path, id, function(err) {
+			// only report actual I/O errors
+			if (err && (err.code != 'NoSuchKey')) {
+				return callback(err);
+			}
+			callback();
+		} );
 	},
 	
 	filterWords_markdown: function(value) {
@@ -1158,7 +1166,7 @@ module.exports = Class.create({
 		
 		this.shareLock( 'C|'+path, true, function(err, lock) {
 			// got shared lock
-			self._searchRecords( query, config, function(err, results) {
+			self._searchRecords( query, config, function(err, results, state) {
 				// search complete
 				var elapsed = pf.end();
 				
@@ -1169,7 +1177,7 @@ module.exports = Class.create({
 				});
 				
 				self.shareUnlock( 'C|'+path );
-				callback( err, results );
+				callback( err, results, state );
 			} ); // search
 		} ); // lock
 	},
@@ -1189,7 +1197,7 @@ module.exports = Class.create({
 				this.logDebug(8, "Fetching all records: " + config.base_path);
 				return this.hashGetAll( config.base_path + '/_id', function(err, results) {
 					// ignore error, just return empty hash
-					callback( null, results || {} );
+					callback( null, results || {}, {} );
 				} );
 			}
 			else if (query.match(/^\([\s\S]+\)$/)) {
@@ -1208,7 +1216,7 @@ module.exports = Class.create({
 		
 		if (!query.criteria || !query.criteria.length) {
 			this.logError('index', "Invalid search query", query);
-			return callback(null, {});
+			return callback(null, {}, {});
 		}
 		
 		this.logDebug(8, "Performing index search", query);
@@ -1228,7 +1236,7 @@ module.exports = Class.create({
 				var def = Tools.findObject( config.fields, { id: crit.index } );
 				if (!def) {
 					this.logError('index', "Invalid search query: Index not found: " + crit.index, query);
-					return callback(null, {});
+					return callback(null, {}, state);
 				}
 				crit.def = def;
 				
@@ -1285,7 +1293,7 @@ module.exports = Class.create({
 							state.record_ids = {};
 						}
 						self.logDebug(10, "Search complete", state.record_ids);
-						callback(null, state.record_ids);
+						callback(null, state.record_ids, Tools.copyHashRemoveKeys(state, { config:1, record_ids:1, first:1 }));
 					}
 				); // eachSeries (tasks)
 			} // weigh done
