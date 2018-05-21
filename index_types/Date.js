@@ -13,6 +13,25 @@ var async = require('async');
 var Class = require("pixl-class");
 var Tools = require("pixl-tools");
 
+// utility
+var parseDate = function(str) {
+	// parse YYYY_MM_DD, YYYY_MM or YYYY specifically
+	var args = {};
+	if (str.match(/^(\d{4})_(\d{2})_(\d{2})$/)) {
+		args.yyyy = RegExp.$1; args.mm = RegExp.$2; args.dd = RegExp.$3;
+		args.yyyy_mm = args.yyyy + '_' + args.mm;
+	}
+	else if (str.match(/^(\d{4})_(\d{2})$/)) { 
+		args.yyyy = RegExp.$1; args.mm = RegExp.$2; 
+		args.yyyy_mm = args.yyyy + '_' + args.mm;
+	}
+	else if (str.match(/^(\d{4})$/)) { 
+		args.yyyy = RegExp.$1; 
+	}
+	else args = null;
+	return args;
+};
+
 module.exports = Class.create({
 	
 	prepIndex_date: function(words, def, state) {
@@ -125,25 +144,6 @@ module.exports = Class.create({
 		else if (word.match(/^(\d{4})$/)) word += "_01_01";
 		query.word = word;
 		
-		// utility
-		var parseDate = function(str) {
-			// parse YYYY_MM_DD, YYYY_MM or YYYY specifically
-			var args = {};
-			if (str.match(/^(\d{4})_(\d{2})_(\d{2})$/)) {
-				args.yyyy = RegExp.$1; args.mm = RegExp.$2; args.dd = RegExp.$3;
-				args.yyyy_mm = args.yyyy + '_' + args.mm;
-			}
-			else if (str.match(/^(\d{4})_(\d{2})$/)) { 
-				args.yyyy = RegExp.$1; args.mm = RegExp.$2; 
-				args.yyyy_mm = args.yyyy + '_' + args.mm;
-			}
-			else if (str.match(/^(\d{4})$/)) { 
-				args.yyyy = RegExp.$1; 
-			}
-			else args = null;
-			return args;
-		};
-		
 		// syntax check
 		var date = parseDate(word);
 		if (!date) {
@@ -202,6 +202,92 @@ module.exports = Class.create({
 				}
 			); // eachSeries
 		} ); // get (summary)
+	},
+	
+	searchSingle_date: function(query, record_id, idx_data, state) {
+		// search date index vs single record (sync)
+		var self = this;
+		var record_ids = state.record_ids;
+		var word = query.word || query.words[0];
+		var def = query.def;
+		var temp_results = {};
+		var words = [];
+
+		if (!query.operator) query.operator = '=';
+		
+		word = word.replace(/\D+/g, '_');
+		query.word = word;
+		
+		if (word.match(/^\d{5,}$/)) {
+			// epoch date (local server timezone)
+			var dargs = Tools.getDateArgs( parseInt(word) );
+			word = dargs.yyyy + '_' + dargs.mm + '_' + dargs.dd;
+			query.word = word;
+		}
+		
+		// check for simple equals
+		if (query.operator == '=') {
+			this._searchSingleWordIndex( query, record_id, idx_data, state );
+			return;
+		}
+		
+		// adjust special month/date search tricks for first of month/year
+		if (word.match(/^(\d{4})_(\d{2})$/)) word += "_01";
+		else if (word.match(/^(\d{4})$/)) word += "_01_01";
+		query.word = word;
+		
+		// syntax check
+		var date = parseDate(word);
+		if (!date) {
+			this.logError('index', "Invalid date format: " + word);
+			return;
+		}
+		
+		// create "fake" summary index for record
+		var summary = { id: def.id, values: {} };
+		if (idx_data[def.id] && idx_data[def.id].word_hash) {
+			summary.values = idx_data[def.id].word_hash;
+		}
+		
+		var values = summary.values;
+		var lesser = !!query.operator.match(/</);
+		
+		// operator includes exact match
+		if (query.operator.match(/=/)) words.push( word );
+		
+		// add matching date tags based on operator
+		for (var value in values) {
+			var temp = parseDate(value) || {};
+			if (temp.dd) {
+				// only compare if yyyy and mm match
+				if (temp.yyyy_mm == date.yyyy_mm) {
+					if (lesser) { if (value < word) words.push(value); }
+					else { if (value > word) words.push(value); }
+				}
+			}
+			else if (temp.mm) {
+				if (lesser) { if (temp.yyyy_mm < date.yyyy_mm) words.push(value); }
+				else { if (temp.yyyy_mm > date.yyyy_mm) words.push(value); }
+			}
+			else if (temp.yyyy) {
+				if (lesser) { if (temp.yyyy < date.yyyy) words.push(value); }
+				else { if (temp.yyyy > date.yyyy) words.push(value); }
+			}
+		}
+		
+		// now perform OR search for all applicable words
+		words.forEach( function(word) {
+			// create "fake" hash index for word, containing only our one record
+			var items = {};
+			if (idx_data[def.id] && idx_data[def.id].word_hash && idx_data[def.id].word_hash[word]) {
+				items[ record_id ] = idx_data[def.id].word_hash[word];
+			}
+			
+			for (var key in items) temp_results[key] = 1;
+		} );
+		
+		this.mergeIndex( record_ids, temp_results, state.first ? 'or' : state.mode );
+		state.first = false;
 	}
 	
 });
