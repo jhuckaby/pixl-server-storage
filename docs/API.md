@@ -75,6 +75,7 @@ var storage = server.Storage;
 	* [searchRecords](#searchrecords)
 	* [sortRecords](#sortrecords)
 	* [getFieldSummary](#getfieldsummary)
+	* [searchSingle](#searchsingle)
 
 # General Methods
 
@@ -1146,7 +1147,7 @@ For more details and a complete example, see the [Indexing Records](Indexer.md#i
 ## unindexRecord
 
 ```
-storage.unindexRecord( ID, CONFIG, [CALLBACK] );
+storage.unindexRecord( RECORD_ID, CONFIG, [CALLBACK] );
 ```
 
 The `unindexRecord()` method removes a data record from the [Indexer](Indexer.md) system.  You *do not* need to include the data record itself for unindexing.  The method takes two arguments, plus an optional callback:
@@ -1172,7 +1173,7 @@ For more details and a complete example, see the [Unindexing Records](Indexer.md
 storage.searchRecords( QUERY, CONFIG, CALLBACK );
 ```
 
-The `searchRecords()` method performs an index search.  Pass in a search query, your index [configuration](Indexer.md#configuration) object, and a callback.  Your callback will be passed an Error object (or false on success), and a hash of all the matched record IDs.  Here is an example:
+The `searchRecords()` method performs an index search.  Pass in a search query, your [index configuration](Indexer.md#configuration) object, and a callback.  Your callback will be passed an Error object (or false on success), and a hash of all the matched record IDs.  Here is an example:
 
 ```js
 storage.searchRecords( 'modified:2018/01/07 tags:bug', config, function(err, results) {
@@ -1222,7 +1223,7 @@ For more details on sorting search results, see the [Sorting Results](Indexer.md
 ## getFieldSummary
 
 ```
-storage.getFieldSummary( ID, CONFIG, CALLBACK );
+storage.getFieldSummary( FIELD_ID, CONFIG, CALLBACK );
 ```
 
 The `getFieldSummary()` method fetches a summary of all word counts for an index field.  This requires a field indexed with the [master list](Indexer.md#master-list) feature enabled.  Then you can fetch a "summary" of the data values, which returns a hash containing all the unique words from the index, and their total counts (occurrences) in the data.  Example use:
@@ -1237,3 +1238,22 @@ stotage.getFieldSummary( 'status', config, function(err, values) {
 ```
 
 Summaries work best for fields that contain a relatively small amount of unique words, such as a "status" field.
+
+## searchSingle
+
+```
+storage.searchSingle( QUERY, RECORD_ID, CONFIG, CALLBACK );
+```
+
+The `searchSingle()` method performs a search on a *single* record, simply indicating if it matches the search criteria or not.  Pass in any [search query](Indexer.md#searching-records), the ID of the record you want to check, your [index configuration](Indexer.md#configuration) object, and a callback.  Your callback will be passed an Error object (or false on success), and a Boolean indicating if the specified record would be included in the search results, or not.  Here is an example:
+
+```js
+storage.searchSingle( 'modified:2018/01/07 tags:bug', "TICKET0001", config, function(err, result) {
+	// search complete
+	if (err) throw err;
+	
+	// result will be true in this case
+} );
+```
+
+This is an internal method designed for "testing" searches against a single record.  One possible use is a "live search" system, which would test each changed record against a query, and then making individual changes to a live result set, and publishing those changes to subscribers.
