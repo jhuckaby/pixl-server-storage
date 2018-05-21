@@ -55,7 +55,7 @@ var storage = server.Storage;
 	* [Changing Fields](#changing-fields)
 - [Performance Tips](#performance-tips)
 - [Indexer Internals](#indexer-internals)
-	* [Dates and Number Fields](#dates-and-number-fields)
+	* [Date and Number Fields](#date-and-number-fields)
 	* [Special Metadata](#special-metadata)
 
 ## Caveats
@@ -983,7 +983,7 @@ The `tags` field also has the [master_list](#master-list) property set, so a spe
 }
 ```
 
-### Dates and Number Fields
+### Date and Number Fields
 
 Date and number fields are still technically indexed as "words", but some internal trickery is applied to allow for range searches.  Essentially numbers and dates are placed into several range buckets.  Along with a [Master List](#master-list) which is automatically enabled for these fields, the system can search across a range of values.
 
