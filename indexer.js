@@ -140,6 +140,7 @@ module.exports = Class.create({
 		
 		config.fields.forEach( function(def) {
 			var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.substitute(def.source, record, true);
+			if ((value === null) && ("default_value" in def)) value = def.default_value;
 			if (value !== null) fields.push(def);
 		} );
 		
@@ -173,6 +174,7 @@ module.exports = Class.create({
 					fields.push({ _primary: 1 });
 				}
 				state.idx_data = idx_data;
+				state.changed = {};
 				
 				// walk all fields in parallel (everything gets enqueued anyway)
 				async.each( fields,
@@ -185,7 +187,9 @@ module.exports = Class.create({
 							return;
 						}
 						
-						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.substitute(def.source, record);
+						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.substitute(def.source, record, true);
+						if ((value === null) && ("default_value" in def)) value = def.default_value;
+						
 						var words = self.getWordList( ''+value, def, config );
 						var checksum = Tools.digestHex( words.join(' '), 'md5' );
 						var data = { words: words, checksum: checksum };
@@ -199,13 +203,17 @@ module.exports = Class.create({
 						
 						if (def.delete) {
 							// special mode: delete index data
-							if (old_data) self.deleteIndex( old_data, def, state, callback );
+							if (old_data) {
+								state.changed[ def.id ] = 1;
+								self.deleteIndex( old_data, def, state, callback );
+							}
 							else callback();
 						}
 						else if (old_data) {
 							// index exists, check if data has changed
 							if (checksum != old_data.checksum) {
 								// must reindex
+								state.changed[ def.id ] = 1;
 								self.updateIndex( old_data, data, def, state, callback );
 							}
 							else {
@@ -216,6 +224,7 @@ module.exports = Class.create({
 						}
 						else {
 							// index doesn't exist for this record, create immediately
+							state.changed[ def.id ] = 1;
 							self.writeIndex( data, def, state, callback );
 						}
 					}, // iterator
@@ -279,7 +288,7 @@ module.exports = Class.create({
 		this.beginTransaction(path, function(err, clone) {
 			// transaction has begun
 			// call _unindexRecord on CLONE (transaction-aware storage instance)
-			clone._unindexRecord(id, config, function(err) {
+			clone._unindexRecord(id, config, function(err, state) {
 				if (err) {
 					// index generated an error
 					// emergency abort, rollback
@@ -300,7 +309,7 @@ module.exports = Class.create({
 						} // commit error
 						else {
 							// success!  call original callback
-							if (callback) callback();
+							if (callback) callback(null, state);
 						}
 					}); // commit
 				} // no error
@@ -365,6 +374,7 @@ module.exports = Class.create({
 				}
 				
 				state.idx_data = idx_data;
+				state.changed = {};
 				
 				// walk all fields in parallel (everything gets enqueued anyway)
 				async.each( fields,
@@ -380,6 +390,7 @@ module.exports = Class.create({
 						
 						if (data) {
 							// index exists, proceed with delete
+							state.changed[ def.id ] = 1;
 							self.deleteIndex( data, def, state, callback );
 						}
 						else callback();
@@ -417,7 +428,7 @@ module.exports = Class.create({
 									});
 									
 									self.unlock( config.base_path + '/' + id );
-									if (callback) callback(err);
+									if (callback) callback(err, state);
 								}
 							); // eachLimit (sorters)
 						} ); // delete (_data)
@@ -875,6 +886,7 @@ module.exports = Class.create({
 		var config = state.config;
 		
 		var value = Tools.lookupPath(sorter.source, record);
+		if ((value === null) && ("default_value" in sorter)) value = sorter.default_value;
 		if (value === null) {
 			if (state.new_record) value = ((sorter.type == 'number') ? 0 : '');
 			else return callback();
