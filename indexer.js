@@ -107,19 +107,15 @@ module.exports = Class.create({
 			if (callback) callback( new Error("Invalid index configuration key: _primary") );
 			return;
 		}
-		if (Tools.findObject(config.fields, { id: "_id" })) {
-			if (callback) callback( new Error("Invalid index configuration ID: _id") );
-			return;
-		}
-		if (Tools.findObject(config.fields, { id: "_data" })) {
-			if (callback) callback( new Error("Invalid index configuration ID: _data") );
-			return;
-		}
 		for (var idx = 0, len = config.fields.length; idx < len; idx++) {
 			var def = config.fields[idx];
 			
 			if (!def.id || !def.id.match(/^\w+$/)) {
-				if (callback) callback( new Error("Invalid index configuration ID: " + def.id) );
+				if (callback) callback( new Error("Invalid index field ID: " + def.id) );
+				return;
+			}
+			if (def.id.match(/^(_id|_data|_sorters)$/)) {
+				if (callback) callback( new Error("Invalid index field ID: " + def.id) );
 				return;
 			}
 			
@@ -237,23 +233,23 @@ module.exports = Class.create({
 							return;
 						}
 						
-						// save idx data for record
-						self.put( config.base_path + '/_data/' + id, idx_data, function(err) {
-							if (err) {
-								self.unlock( config.base_path + '/' + id );
-								pf.end();
-								if (callback) callback(err);
-								return;
-							}
-							
-							// now handle the sorters
-							async.eachLimit( config.sorters || [], self.concurrency,
-								function(sorter, callback) {
-									if (sorter.delete) self.deleteSorter( id, sorter, state, callback );
-									else self.updateSorter( record, sorter, state, callback );
-								},
-								function(err) {
-									// all sorters sorted
+						// now handle the sorters
+						async.eachLimit( config.sorters || [], self.concurrency,
+							function(sorter, callback) {
+								if (sorter.delete) self.deleteSorter( id, sorter, state, callback );
+								else self.updateSorter( record, sorter, state, callback );
+							},
+							function(err) {
+								// all sorters sorted
+								// save idx data for record
+								self.put( config.base_path + '/_data/' + id, idx_data, function(err) {
+									if (err) {
+										self.unlock( config.base_path + '/' + id );
+										pf.end();
+										if (callback) callback(err);
+										return;
+									}
+									
 									var elapsed = pf.end();
 									
 									if (!err) self.logTransaction('index', config.base_path, {
@@ -263,9 +259,9 @@ module.exports = Class.create({
 									
 									self.unlock( config.base_path + '/' + id );
 									if (callback) callback(err, state);
-								}
-							); // eachLimit (sorters)
-						} ); // put (_data)
+								} ); // put (_data)
+							}
+						); // eachLimit (sorters)
 					} // done with fields
 				); // each (fields)
 			} ); // get (_data)
@@ -892,10 +888,20 @@ module.exports = Class.create({
 			else return callback();
 		}
 		
+		// store value in idx_data as well
+		if (!state.idx_data._sorters) state.idx_data._sorters = {};
+		else if ((sorter.id in state.idx_data._sorters) && (value == state.idx_data._sorters[sorter.id])) {
+			// sorter value unchanged, return immediately
+			this.logDebug(10, "Sorter value unchanged, skipping write: " + sorter.id + ": " + state.id + ": " + value);
+			return callback();
+		}
+		
+		state.idx_data._sorters[sorter.id] = value;
+		
 		var path = config.base_path + '/' + sorter.id + '/sort';
 		var opts = { page_size: config.sorter_page_size || 1000 };
 		
-		this.logDebug(10, "Adding record to sorter: " + sorter.id + ": " + state.id + ": " + value);
+		this.logDebug(10, "Setting value in sorter: " + sorter.id + ": " + state.id + ": " + value);
 		this.hashPut( path, state.id, value, opts, callback );
 	},
 	
@@ -1468,7 +1474,7 @@ module.exports = Class.create({
 		}
 		
 		var sorter = Tools.findObject( config.sorters, { id: sorter_id } );
-		if (!sorter) return callback( new Error("Invalid sorter: " + sorter_id) );
+		if (!sorter) return callback( new Error("Cannot find sorter: " + sorter_id) );
 		
 		// apply sort values to record hash
 		var path = config.base_path + '/' + sorter.id + '/sort';
@@ -1509,7 +1515,7 @@ module.exports = Class.create({
 				});
 				
 				self.logDebug(8, "Sort complete, returning results");
-				callback( null, record_ids );
+				callback( null, record_ids, sort_pairs, comparator );
 			}
 		); // hashEachPage
 	},
