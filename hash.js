@@ -154,158 +154,93 @@ module.exports = Class.create({
 				
 				data.items[state.hkey] = state.hvalue;
 				
+				var finish = function(err) {
+					if (err) return callback(err);
+					
+					if (data.length > state.hash.page_size) {
+						// enqueue page reindex task
+						self.logDebug(9, "Hash page has grown beyond max keys, running index split: " + state.data_path, {
+							num_keys: data.length,
+							page_size: state.hash.page_size
+						});
+						self._hashSplitIndex(state, callback);
+					} // reindex
+					else {
+						// no reindex needed
+						callback();
+					}
+				}; // finish
+				
 				// save page and possibly hash header
 				self.put(state.data_path, data, function(err) {
 					if (err) return callback(err);
 					
-					if (new_key) self.put(state.path, state.hash, callback);
-					else callback();
+					if (new_key) self.put(state.path, state.hash, finish);
+					else finish();
 				}); // put
-				
-				// reindex time?
-				if (data.length == state.hash.page_size + 1) {
-					// enqueue page reindex task
-					self.logDebug(9, "Hash page has grown beyond max keys, scheduling index split: " + state.data_path, {
-						num_keys: data.length,
-						page_size: state.hash.page_size
-					});
-					self.enqueue({
-						action: 'custom', 
-						label: 'hashSplitIndex',
-						handler: self.hashSplitIndex.bind( self.rawStorage || self ),
-						state: state
-					});
-				} // reindex
 			} // hash_page
 		}); // get
 	},
 	
-	hashSplitIndex: function(task, callback) {
-		// async split index (called via dequeue)
-		// transaction version
-		var self = this;
-		
-		// if no transactions, or transaction already in progress, jump to original func
-		if (!this.transactions || this.currentTransactionPath) {
-			return this._hashSplitIndex(task, callback);
-		}
-		
-		// use base hash path for transaction lock
-		var path = task.state.path;
-		
-		// here we go
-		this.beginTransaction(path, function(err, clone) {
-			// transaction has begun
-			// call _hashSplitIndex on CLONE (transaction-aware storage instance)
-			clone._hashSplitIndex(task, function(err) {
-				if (err) {
-					// hash split generated an error
-					// emergency abort, rollback
-					self.abortTransaction(path, function() {
-						// call original callback with error that triggered rollback
-						callback( err );
-					}); // abort
-				}
-				else {
-					// no error, commit transaction
-					self.commitTransaction(path, function(err) {
-						if (err) {
-							// commit failed, trigger automatic rollback
-							self.abortTransaction(path, function() {
-								// call original callback with commit error
-								callback( err );
-							}); // abort
-						} // commit error
-						else {
-							// success!  call original callback
-							callback();
-						}
-					}); // commit
-				} // no error
-			}); // _hashSplitIndex
-		}); // beginTransaction
-	},
-	
-	_hashSplitIndex: function(task, callback) {
-		// async split index (called via dequeue)
+	_hashSplitIndex: function(state, callback) {
+		// hash split index
 		// split hash level into 16 new index buckets
-		// do not interrupt reads while doing this
 		var self = this;
-		var state = task.state;
 		state.index_depth++;
 		
 		this.logDebug(9, "Splitting hash data into new index: " + state.data_path + " (" + state.index_depth + ")");
 		
-		// lock hash for this
-		this._hashLock(state.path, true, function() {
+		// load data page which will be converted to a hash index
+		self.get(state.data_path, function(err, data) {
+			// check for error or if someone stepped on our toes
+			if (err) {
+				// normal, hash may have been deleted
+				self.logError('hash', "Failed to fetch data record for hash split: " + state.data_path + ": " + err);
+				return callback();
+			}
+			if (data.type == 'hash_index') {
+				// normal, hash may already have been indexed
+				self.logDebug(9, "Data page has been reindexed already, skipping: " + state.data_path, data);
+				return callback();
+			}
 			
-			// load data page which will be converted to a hash index
-			self.get(state.data_path, function(err, data) {
-				// check for error or if someone stepped on our toes
-				if (err) {
-					// normal, hash may have been deleted
-					self.logError('hash', "Failed to fetch data record for hash split: " + state.data_path + ": " + err);
-					self._hashUnlock( state.path );
-					return callback();
-				}
-				if (data.type == 'hash_index') {
-					// normal, hash may already have been indexed
-					self.logDebug(9, "Data page has been reindexed already, skipping: " + state.data_path, data);
-					self._hashUnlock( state.path );
-					return callback();
-				}
+			// rehash keys at new index depth
+			var pages = {};
+			
+			for (var hkey in data.items) {
+				var key_digest = Tools.digestHex(hkey, 'md5');
+				var ch = key_digest.substring(state.index_depth, state.index_depth + 1);
 				
-				// rehash keys at new index depth
-				var pages = {};
+				if (!pages[ch]) pages[ch] = { type: 'hash_page', length: 0, items: {} };
+				pages[ch].items[hkey] = data.items[hkey];
+				pages[ch].length++;
 				
-				for (var hkey in data.items) {
-					var key_digest = Tools.digestHex(hkey, 'md5');
-					var ch = key_digest.substring(state.index_depth, state.index_depth + 1);
-					
-					if (!pages[ch]) pages[ch] = { type: 'hash_page', length: 0, items: {} };
-					pages[ch].items[hkey] = data.items[hkey];
-					pages[ch].length++;
-					
-					if (pages[ch].length == state.hash.page_size + 1) {
-						self.enqueue({
-							action: 'custom', 
-							label: 'hashSplitIndex_nested',
-							handler: self.hashSplitIndex.bind( self.rawStorage || self ),
-							state: {
-								"path": state.path,
-								"data_path": state.data_path + '/' + ch,
-								"hash": state.hash,
-								"index_depth": state.index_depth
-							}
-						});
+				// Note: In the very rare case where a subpage also overflows,
+				// the next hashPut will take care of the nested reindex.
+			} // foreach key
+			
+			// save all pages in parallel, then rewrite data page as an index
+			async.forEachOfLimit(pages, self.concurrency, 
+				function (page, ch, callback) {
+					self.put( state.data_path + '/' + ch, page, callback );
+				},
+				function(err) {
+					if (err) {
+						return callback( new Error("Failed to write data records for hash split: " + state.data_path + "/*: " + err.message) );
 					}
-				} // foreach key
-				
-				// save all pages in parallel, then rewrite data page as an index
-				async.forEachOfLimit(pages, self.concurrency, 
-					function (page, ch, callback) {
-						self.put( state.data_path + '/' + ch, page, callback );
-					},
-					function(err) {
+					
+					// final conversion of original data path
+					self.put( state.data_path, { type: 'hash_index' }, function(err) {
 						if (err) {
-							self._hashUnlock( state.path );
-							return callback( new Error("Failed to write data records for hash split: " + state.data_path + "/*: " + err.message) );
+							return callback( new Error("Failed to write data record for hash split: " + state.data_path + ": " + err.message) );
 						}
 						
-						// final conversion of original data path
-						self.put( state.data_path, { type: 'hash_index' }, function(err) {
-							if (err) {
-								self._hashUnlock( state.path );
-								return callback( new Error("Failed to write data record for hash split: " + state.data_path + ": " + err.message) );
-							}
-							
-							self._hashUnlock( state.path );
-							callback();
-						}); // final put
-					} // complete
-				); // forEachOf
-			}); // get
-		}); // lock
+						self.logDebug(9, "Hash split complete: " + state.data_path);
+						callback();
+					}); // final put
+				} // complete
+			); // forEachOf
+		}); // get
 	},
 	
 	hashPutMulti: function(path, records, create_opts, callback) {
@@ -718,155 +653,101 @@ module.exports = Class.create({
 				// save page and hash header
 				self.put(state.data_path, data, function(err) {
 					if (err) return callback(err);
-					self.put(state.path, state.hash, callback);
+					
+					self.put(state.path, state.hash, function(err) {
+						if (err) return callback(err);
+						
+						// index unsplit time?
+						if (!data.length && (state.index_depth > -1)) {
+							// index unsplit task
+							self.logDebug(9, "Hash page has no more keys, running unsplit check: " + state.data_path);
+							self._hashUnsplitIndexCheck(state, callback);
+						} // unsplit
+						else {
+							// no unsplit check needed
+							callback();
+						}
+						
+					}); // put
 				}); // put
-				
-				// index unsplit time?
-				if (!data.length && (state.index_depth > -1)) {
-					// enqueue index unsplit task
-					self.logDebug(9, "Hash page has no more keys, scheduling index unsplit check: " + state.data_path);
-					self.enqueue({
-						action: 'custom', 
-						label: 'hashUnsplitIndexCheck',
-						handler: self.hashUnsplitIndexCheck.bind( self.rawStorage || self ),
-						state: state
-					});
-				} // reindex
-				
 			} // hash_page
 		}); // get
 	},
 	
-	hashUnsplitIndexCheck: function(task, callback) {
-		// async unsplit check (called via dequeue)
-		// transaction version
-		var self = this;
-		
-		// if no transactions, or transaction already in progress, jump to original func
-		if (!this.transactions || this.currentTransactionPath) {
-			return this._hashUnsplitIndexCheck(task, callback);
-		}
-		
-		// use base hash path for transaction lock
-		var path = task.state.path;
-		
-		// here we go
-		this.beginTransaction(path, function(err, clone) {
-			// transaction has begun
-			// call _hashUnsplitIndexCheck on CLONE (transaction-aware storage instance)
-			clone._hashUnsplitIndexCheck(task, function(err) {
-				if (err) {
-					// hash unsplit generated an error
-					// emergency abort, rollback
-					self.abortTransaction(path, function() {
-						// call original callback with error that triggered rollback
-						callback( err );
-					}); // abort
-				}
-				else {
-					// no error, commit transaction
-					self.commitTransaction(path, function(err) {
-						if (err) {
-							// commit failed, trigger automatic rollback
-							self.abortTransaction(path, function() {
-								// call original callback with commit error
-								callback( err );
-							}); // abort
-						} // commit error
-						else {
-							// success!  call original callback
-							callback();
-						}
-					}); // commit
-				} // no error
-			}); // _hashUnsplitIndexCheck
-		}); // beginTransaction
-	},
-	
-	_hashUnsplitIndexCheck: function(task, callback) {
-		// async unsplit index (called via dequeue)
+	_hashUnsplitIndexCheck: function(state, callback) {
+		// unsplit hash index
 		// check if all sub-pages are empty, and if so, delete all and convert index back into page
-		// do not interrupt reads while doing this
 		var self = this;
-		var state = task.state;
 		var data_path = state.data_path.replace(/\/\w+$/, '');
 		var found_keys = false;
 		var sub_pages = [];
 		
 		this.logDebug(9, "Checking all hash index sub-pages for unsplit: " + data_path + "/*");
 		
-		// lock hash for this
-		this._hashLock(state.path, true, function() {
+		// make sure page is still an index
+		self.get(data_path, function(err, data) {
+			if (err) {
+				self.logDebug(9, "Hash page could not be loaded, aborting unsplit: " + data_path);
+				return callback();
+			}
 			
-			// make sure page is still an index
-			self.get(data_path, function(err, data) {
-				if (err) {
-					self.logDebug(9, "Hash page could not be loaded, aborting unsplit: " + data_path);
-					self._hashUnlock(state.path);
-					return callback();
-				}
-				
-				if (data.type != 'hash_index') {
-					self.logDebug(9, "Hash page is no longer an index, aborting unsplit: " + data_path);
-					self._hashUnlock(state.path);
-					return callback();
-				}
-				
-				// test each sub-page, counting keys
-				// abort on first key (i.e. no need to load all pages in that case)
-				async.eachLimit( [0,1,2,3,4,5,6,7,8,9,'a','b','c','d','e','f'], self.concurrency,
-					function(ch, callback) {
-						self.get( data_path + '/' + ch, function(err, data) {
-							if (data) sub_pages.push( ch );
-							if (data && ((data.type != 'hash_page') || data.length)) {
-								self.logDebug(9, "Index page still has keys: " + data_path + '/' + ch);
-								found_keys = true;
-								callback( new Error("ABORT") );
-							}
-							else callback();
-						} );
-					},
-					function(err) {
-						// scanned all pages
-						if (found_keys || !sub_pages.length) {
-							// nothing to be done
-							self.logDebug(9, "Nothing to do, aborting unsplit: " + data_path);
-							self._hashUnlock(state.path);
-							return callback();
+			if (data.type != 'hash_index') {
+				self.logDebug(9, "Hash page is no longer an index, aborting unsplit: " + data_path);
+				return callback();
+			}
+			
+			// test each sub-page, counting keys
+			// abort on first key (i.e. no need to load all pages in that case)
+			async.eachLimit( [0,1,2,3,4,5,6,7,8,9,'a','b','c','d','e','f'], self.concurrency,
+				function(ch, callback) {
+					self.get( data_path + '/' + ch, function(err, data) {
+						if (data) sub_pages.push( ch );
+						if (data && ((data.type != 'hash_page') || data.length)) {
+							self.logDebug(9, "Index page still has keys: " + data_path + '/' + ch);
+							found_keys = true;
+							callback( new Error("ABORT") );
 						}
-						
-						self.logDebug(9, "Proceeding with unsplit: " + data_path);
-						
-						// proceed with unsplit
-						async.eachLimit( sub_pages, self.concurrency,
-							function(ch, callback) {
-								self.delete( data_path + '/' + ch, callback );
-							},
-							function(err) {
-								// all pages deleted, now rewrite index
+						else callback();
+					} );
+				},
+				function(err) {
+					// scanned all pages
+					if (found_keys || !sub_pages.length) {
+						// nothing to be done
+						self.logDebug(9, "Nothing to do, aborting unsplit: " + data_path);
+						return callback();
+					}
+					
+					self.logDebug(9, "Proceeding with unsplit: " + data_path);
+					
+					// proceed with unsplit
+					async.eachLimit( sub_pages, self.concurrency,
+						function(ch, callback) {
+							self.delete( data_path + '/' + ch, callback );
+						},
+						function(err) {
+							// all pages deleted, now rewrite index
+							if (err) {
+								// this should never happen, but we must continue the op.
+								// we cannot leave the index in a partially unsplit state.
+								self.logError('hash', "Failed to delete index sub-pages: " + data_path + "/*: " + err);
+							}
+							
+							self.put( data_path, { type: 'hash_page', length: 0, items: {} }, function(err) {
+								// all done
 								if (err) {
-									// this should never happen, but we must continue the op.
-									// we cannot leave the index in a partially unsplit state.
-									self.logError('hash', "Failed to delete index sub-pages: " + data_path + "/*: " + err);
+									self.logError('hash', "Failed to put index page: " + data_path + ": " + err);
 								}
-								
-								self.put( data_path, { type: 'hash_page', length: 0, items: {} }, function(err) {
-									// all done
-									self._hashUnlock(state.path);
-									if (err) {
-										self.logError('hash', "Failed to put index page: " + data_path + ": " + err);
-									}
-									else {
-										self.logDebug(9, "Unsplit operation complete: " + data_path);
-									}
-									callback();
-								} ); // put
-							} // pages deleted
-						); // eachLimit
-					} // key check
-				); // eachLimit
-			} ); // load
-		} ); // lock
+								else {
+									self.logDebug(9, "Unsplit operation complete: " + data_path);
+								}
+								callback();
+							} ); // put
+						} // pages deleted
+					); // eachLimit
+				} // key check
+			); // eachLimit
+		} ); // load
 	},
 	
 	hashDeleteMulti: function(path, hkeys, callback) {
