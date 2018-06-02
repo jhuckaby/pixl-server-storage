@@ -133,6 +133,7 @@ Here is the full list of available properties for each index definition:
 | `use_stemmer` | Boolean | Optionally use a stemmer to normalize words.  Highly recommended for [Full Text Indexes](#full-text-indexes).  See [Stemming](#stemming).  Defaults to `false` (disabled). |
 | `filter` | String | Optionally filter text with specified method before indexing.  See [Text Filters](#text-filters).  Defaults to disabled. |
 | `master_list` | Boolean | Optionally keep a list of all unique words for the index.  See [Master List](#master-list).  Defaults to `false` (disabled). |
+| `default_value` | String | Optional default value, for when record has no value for the field, or it is set to `null`.  See [Default Values](#default-values). |
 | `no_cleanup` | Boolean | *(Advanced)* Set this to `true` to skip all text cleanup, and index it raw instead.  See [Text Cleanup](#text-cleanup).  Only use this if you know what you are doing. |
 | `delete` | Boolean | *(Advanced)* Set this to `true` to force the indexer to delete the data for the field.  See [Deleting Fields](#deleting-fields) below.
 
@@ -440,6 +441,23 @@ While there is no native support for booleans, they are indexed as "words".  So 
 The indexer does **not** support null, undefined or empty values.  Meaning, no indexing takes place for these values, and thus you cannot search for "nothing".  If your app needs to handle this case, you simply need to come up with your own unique "null word", and pass that when you specifically want nothing indexed.  Consider using a string like `_NULL_` (underscores are word characters, so they get indexed as part of the word).
 
 If your index field has a [master list](#master-list) and you query for a [field summary](#field-summaries), you will get back a `_null_` key with a record count, along with all your "actual" words in the index.  You can then massage this key in your UI, and show something like "(None)" instead.
+
+### Default Values
+
+You can optionally specify a "default value" for your indexes and sorters.  This is done by including an `default_value` property.  Records that are either completely missing a field value, or have it explicitly set to `null`, will be indexed as the default value.  Example configuration:
+
+```js
+"fields": [
+	{
+		"id": "status",
+		"source": "/Status",
+		"master_list": true,
+		"default_value": "_none_"
+	}
+]
+```
+
+This would index all record statuses as `_none_` if the data field was missing (`undefined`) or explicitly set to `null`.  Combined with the [Master List](#master-list) feature, this allows you to count all your records that don't have a value for the field.
 
 ### Unicode Characters
 
