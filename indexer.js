@@ -754,13 +754,14 @@ module.exports = Class.create({
 		if (def.type) {
 			var func = 'prepIndex_' + def.type;
 			if (self[func]) {
-				new_data.words = new_words = self[func]( new_words, def, state );
-				if (new_words === false) {
+				var result = self[func]( new_words, def, state );
+				if (result === false) {
 					if (callback) {
 						callback( new Error("Invalid data for index: " + def.id + ": " + new_words.join(' ')) );
 					}
 					return;
 				}
+				new_data.words = new_words = result;
 			}
 		}
 		
