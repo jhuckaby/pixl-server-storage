@@ -199,7 +199,7 @@ module.exports = Class.create({
 				q.drain = function() {
 					// all pages saved, complete
 					self._listUnlock(key);
-					callback(lastErr, null);
+					callback(lastErr, list);
 				};
 				
 				q.push( tasks, function(err) {
@@ -290,7 +290,7 @@ module.exports = Class.create({
 				q.drain = function() {
 					// all pages saved, complete
 					self._listUnlock(key);
-					callback(lastErr, null);
+					callback(lastErr, list);
 				};
 				
 				q.push( tasks, function(err) {
