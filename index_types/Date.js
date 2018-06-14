@@ -95,7 +95,7 @@ module.exports = Class.create({
 			var dargs = Tools.getDateArgs( Tools.timeNow(true) );
 			value = dargs.yyyy;
 		}
-		else if (value.match(/^\d+$/)) {
+		else if (value.match(/^\d+(\.\d+)?$/)) {
 			// convert epoch date (local server timezone)
 			var dargs = Tools.getDateArgs( parseInt(value) );
 			value = dargs.yyyy_mm_dd;
@@ -103,7 +103,7 @@ module.exports = Class.create({
 		else if (!value.match(/^(\d{4})\D+(\d{2})\D+(\d{2})$/)) {
 			// try to convert using node date (local timezone)
 			var dargs = Tools.getDateArgs( value + " 00:00:00" );
-			value = dargs.yyyy_mm_dd;
+			value = dargs.epoch ? dargs.yyyy_mm_dd : '';
 		}
 		
 		value = value.replace(/\D+/g, '_');
