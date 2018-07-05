@@ -945,9 +945,9 @@ module.exports = Class.create({
 		// more text cleanup
 		if (!def.no_cleanup) {
 			value = unidecode( value ); // convert unicode to ascii
-			value = value.replace(/\w+\:\/\/\S+/g, ''); // urls are nasty to index
+			value = value.replace(/\w+\:\/\/([\w\-\.]+)\S*/g, '$1'); // index domains, not full urls
 			value = value.replace(/\'/g, ''); // index nancy's as nancys
-			value = value.replace(/\d+\.\d[\d\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_$/, ''); }); // 2.5 --> 2_5
+			value = value.replace(/\d+\.\d[\d\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_+$/, ''); }); // 2.5 --> 2_5
 		}
 		value = value.toLowerCase();
 		
@@ -989,7 +989,7 @@ module.exports = Class.create({
 	parseSearchQuery: function(value, config) {
 		// parse search query string into array of criteria
 		var criteria = [];
-		var cur_index = config.default_search_index || '';
+		var cur_index = config.default_search_field || '';
 		
 		this.logDebug(9, "Parsing simple search query: " + value);
 		
@@ -1334,34 +1334,73 @@ module.exports = Class.create({
 		var cur_items = state.record_ids;
 		var new_items = {};
 		
-		this.hashEachPage( path,
-			function(items, callback) {
-				switch (mode) {
-					case 'and':
-						for (var key in items) {
-							if (key in cur_items) new_items[key] = 1;
-						}
-					break;
-					
-					case 'or':
-						for (var key in items) {
-							cur_items[key] = 1;
-						}
-					break;
-					
-					case 'not':
-						for (var key in items) {
-							delete cur_items[key];
-						}
-					break;
-				}
+		// query optimizations
+		var num_cur_items = Tools.numKeys(cur_items);
+		
+		// if current items is empty and mode = and|not, we can exit early
+		if (!num_cur_items && ((mode == 'and') || (mode == 'not'))) {
+			process.nextTick( callback );
+			return;
+		}
+		
+		// Decide on row scan or hash merge:
+		// If query weight (hash length) divided by page size is greater than num_cur_items
+		// then it would probably be faster to apply the logic using _data getMulti (a.k.a row scan).
+		// Otherwise, perform a normal hash merge (which has to read every hash page).
+		var hash_page_size = config.hash_page_size || 1000;
+		
+		if ((mode == 'and') && query.weight && (query.weight / hash_page_size > num_cur_items)) {
+			this.logDebug(10, "Performing row scan on " + num_cur_items + " items", query);
+			
+			var record_ids = Object.keys( cur_items );
+			var data_paths = record_ids.map( function(record_id) {
+				return config.base_path + '/_data/' + record_id;
+			} );
+			
+			this.getMulti( data_paths, function(err, datas) {
+				if (err) return callback(err);
+				
+				datas.forEach( function(data, idx) {
+					var record_id = record_ids[idx];
+					if (!data || !data[def.id] || !data[def.id].words || (data[def.id].words.indexOf(query.word) == -1)) {
+						delete cur_items[record_id];
+					}
+				} );
+				
 				callback();
-			},
-			function(err) {
-				if (mode == 'and') state.record_ids = new_items;
-				callback(err);
-			}
-		);
+			} ); // getMulti
+		} // row scan
+		else {
+			this.logDebug(10, "Performing '" + mode + "' hash merge on " + num_cur_items + " items", query);
+			this.hashEachPage( path,
+				function(items, callback) {
+					switch (mode) {
+						case 'and':
+							for (var key in items) {
+								if (key in cur_items) new_items[key] = 1;
+							}
+						break;
+						
+						case 'or':
+							for (var key in items) {
+								cur_items[key] = 1;
+							}
+						break;
+						
+						case 'not':
+							for (var key in items) {
+								delete cur_items[key];
+							}
+						break;
+					}
+					callback();
+				},
+				function(err) {
+					if (mode == 'and') state.record_ids = new_items;
+					callback(err);
+				}
+			);
+		} // hash merge
 	},
 	
 	searchWordIndexLiteral: function(query, state, callback) {
