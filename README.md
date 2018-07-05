@@ -380,7 +380,11 @@ Then configure your storage thusly:
 		"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
 		"region": "us-west-1",
 		"correctClockSkew": true,
-		"maxRetries": 5
+		"maxRetries": 5,
+		"httpOptions": {
+			"connectTimeout": 5000,
+			"timeout": 5000
+		}
 	},
 	"S3": {
 		"keyPrefix": "",
@@ -672,7 +676,7 @@ It is wasteful to call this multiple times for the same record and the same date
 
 # Advisory Locking
 
-The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key, and can be exclusive or shared.  You can also choose to wait for a lock to be released, or fail immediately if the key is already locked.  To lock a key in exclusive mode, call [lock()](docs/API.md#lock), and to unlock it call [unlock()](docs/API.md#unlock).
+The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key, and can be exclusive or shared.  You can also choose to wait for a lock to be released by passing `true` as the 2nd argument, or fail immediately if the key is already locked by passing `false`.  To lock a key in exclusive mode, call [lock()](docs/API.md#lock), and to unlock it call [unlock()](docs/API.md#unlock).
 
 Here is a simple use case:
 
@@ -710,8 +714,8 @@ In addition to exclusive locks, you can request a "shared" lock.  Shared locking
 storage.shareLock( 'test1', true, function() {
 	// key is locked, now we can fetch data safely
 	storage.get( key, function(err, data) {
+		storage.shareUnlock('test1');
 		if (err) {
-			storage.shareUnlock('test1');
 			throw err;
 		}
 	} ); // get
@@ -726,7 +730,7 @@ Shared locks obey the following rules:
 	- The exclusive lock must wait for all current shared clients to unlock.
 	- Additional shared clients must wait until after the exclusive lock is acquired, and released.
 
-Shared locks are using internally for accessing complex structures like lists, hashes and searching records in an index.
+Shared locks are used internally for accessing complex structures like lists, hashes and searching records in an index.
 
 Please note that all locks are implemented in RAM, so they only exist in the current Node.js process.  This is really only designed for single-process daemons, and clusters with one master server doing writes.
 
