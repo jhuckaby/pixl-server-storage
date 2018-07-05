@@ -419,7 +419,7 @@ By default, all text goes through some basic cleanup prior to indexing.  This is
 
 - Unicode characters are down-converted to ASCII equivalents, or stripped off.
 	- See [Unicode Characters](#unicode-characters) below for details.
-- URLs are stripped off.
+- URLs are stripped down to their domains only.
 	- Word indexers do a very poor job of indexing URLs, and few people actually search for them.
 	- URLs cause quite a bit of indexer churn, because they create a bunch of small "words" that are of low search quality.
 - Single quotes are stripped off.
