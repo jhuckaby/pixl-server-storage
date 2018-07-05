@@ -632,13 +632,13 @@ Number indexes work in the same way as dates.  You can perform exact matches, an
 status:open num_comments:>=5
 ```
 
-Simple queries were designed with user input in mind, like a Google search bar.  To that end, you can define a `default_search_index` property in your main index configuration, which designates one of your fields as the default to be used for searches if no field is specified.  For example, if you set the `default_search_index` to `body`, then you could accept queries like this:
+Simple queries were designed with user input in mind, like a Google search bar.  To that end, you can define a `default_search_field` property in your main index configuration, which designates one of your fields as the default to be used for searches if no field is specified.  For example, if you set the `default_search_field` to `body`, then you could accept queries like this:
 
 ```
 wildlife +jungle "big cats" -bees
 ```
 
-The idea here is, the user doesn't have to specify the `body:` prefix in their search.  They can just send in raw words, and `default_search_index` will detect this and redirect the query to the appropriate index.  This can, of course, be combined with other index searches with prefixes, such as:
+The idea here is, the user doesn't have to specify the `body:` prefix in their search.  They can just send in raw words, and `default_search_field` will detect this and redirect the query to the appropriate index.  This can, of course, be combined with other index searches with prefixes, such as:
 
 ```
 wildlife +jungle "big cats" -bees status:open
