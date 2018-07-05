@@ -1,6 +1,6 @@
 # Hashes
 
-A hash is a collection of JSON records, indexed by key, that can grow to virtually any size without using much memory.  The collection is split into one or more "pages" and each page holds up to N records (configurable).  When the hash grows beyond the page size, it is automatically re-indexed into nested pages (this happens asynchronously in the background).  The hash store and fetch operations are very fast, and hashes can also be iterated over (keys are retrieved in undefined order).
+A hash is a collection of JSON records, indexed by key, that can grow to virtually any size without using much memory.  The collection is split into one or more "pages" and each page holds up to N records (configurable).  When the hash grows beyond the page size, it is automatically re-indexed into nested pages.  The hash store and fetch operations are very fast, and hashes can also be iterated over (keys are retrieved in undefined order).
 
 The benefit of using a hash over simply calling [get()](API.md#get) and [put()](API.md#put) is that a hash can be iterated over, the key count can be retrieved at any time, and repeated operations are accelerated due to the nature of the paging system.  Also, hash keys are not [normalized](../README.md#key-normalization) like storage paths are, so you could have full Unicode / Emoji hash keys if you wanted.
 
