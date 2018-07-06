@@ -371,7 +371,7 @@ module.exports = Class.create({
 						}
 						
 						// read just enough to ensure we get the header
-						var chunk = Buffer.alloc ? Buffer.alloc(8192) : (new Buffer(8192));
+						var chunk = Buffer.alloc(8192);
 						fs.read(fh, chunk, 0, 8192, null, function(err, num_bytes, chunk) {
 							fs.close(fh, function() {});
 							
