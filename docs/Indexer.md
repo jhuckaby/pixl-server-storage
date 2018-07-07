@@ -40,6 +40,7 @@ var storage = server.Storage;
 	* [Text Cleanup](#text-cleanup)
 	* [Boolean Values](#boolean-values)
 	* [Null Values](#null-values)
+	* [Default Values](#default-values)
 	* [Unicode Characters](#unicode-characters)
 	* [Stemming](#stemming)
 - [Unindexing Records](#unindexing-records)

@@ -10,6 +10,7 @@
 		"list_page_size": 10,
 		"concurrency": 4,
 		"cache_key_match": "",
+		"expiration_updates": true,
 		"transactions": 0,
 		"log_event_types": { "all": 1 },
 		

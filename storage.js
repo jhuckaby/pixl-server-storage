@@ -1,5 +1,5 @@
 // PixlServer Storage System
-// Copyright (c) 2015 Joseph Huckaby
+// Copyright (c) 2015 - 2018 Joseph Huckaby
 // Released under the MIT License
 
 var util = require("util");
@@ -33,13 +33,15 @@ module.exports = Class.create({
 			commit:0, index:0, unindex:0, search:0, sort:0, maint:1 
 		},
 		max_recent_events: 0,
-		cache_key_match: ''
+		cache_key_match: '',
+		expiration_updates: false
 	},
 	
 	locks: null,
 	cache: null,
 	cacheKeyRegex: null,
 	started: false,
+	customRecordTypes: null,
 	
 	earlyStart: function() {
 		// check for early transaction recovery
@@ -88,6 +90,9 @@ module.exports = Class.create({
 		this.lastMinuteMetrics = {};
 		this.recentEvents = {};
 		
+		// allow others to register custom record types for maint
+		this.customRecordTypes = {};
+		
 		// bind to server tick, so we can aggregate perf metrics
 		this.server.on('tick', this.tick.bind(this));
 		this.server.on('minute', this.tickMinute.bind(this));
@@ -124,6 +129,7 @@ module.exports = Class.create({
 		this.concurrency = this.config.get('concurrency');
 		this.logEventTypes = this.config.get('log_event_types');
 		this.maxRecentEvents = this.config.get('max_recent_events');
+		this.expHash = this.config.get('expiration_updates');
 		
 		this.cacheKeyRegex = null;
 		if (this.config.get('cache_key_match')) {
@@ -139,6 +145,12 @@ module.exports = Class.create({
 	isBinaryKey: function(key) {
 		// binary keys have a built-in file extension, JSON keys do not
 		return !!key.match(/\.\w+$/);
+	},
+	
+	addRecordType: function(type, handlers) {
+		// add custom record type handler (for maint)
+		// handlers: { delete: function }
+		this.customRecordTypes[type] = handlers;
 	},
 	
 	put: function(key, value, callback) {
@@ -522,10 +534,21 @@ module.exports = Class.create({
 					// should never fail, but who knows
 					if (err) self.logError('cleanup', "Failed to push cleanup list: " + cleanup_list_path + ": " + err);
 					
-					self.hashPut( cleanup_hash_path, task.key, { expires: task.expiration }, { page_size: 1000 }, function(err) {
-						// should never fail, but who knows
-						if (err) self.logError('cleanup', "Failed to put cleanup hash: " + cleanup_hash_path + ": " + err);
-						
+					if (self.expHash) {
+						self.hashPut( cleanup_hash_path, task.key, { expires: task.expiration }, { page_size: 1000 }, function(err) {
+							// should never fail, but who knows
+							if (err) self.logError('cleanup', "Failed to put cleanup hash: " + cleanup_hash_path + ": " + err);
+							
+							self.logTransaction('expire_set', task.key, {
+								epoch: dargs.epoch,
+								yyyy_mm_dd: dargs.yyyy_mm_dd,
+								list_path: cleanup_list_path
+							});
+							
+							callback();
+						} ); // hashPut
+					} // expHash
+					else {
 						self.logTransaction('expire_set', task.key, {
 							epoch: dargs.epoch,
 							yyyy_mm_dd: dargs.yyyy_mm_dd,
@@ -533,7 +556,7 @@ module.exports = Class.create({
 						});
 						
 						callback();
-					} ); // hashPut
+					}
 				} ); // listPush
 			break; // expire_set
 			
@@ -570,25 +593,41 @@ module.exports = Class.create({
 				if (err) stats.num_errors++;
 				
 				// also delete metadata (expires epoch)
-				self.hashDelete( cleanup_hash_path, key, function(herr) { 
-					if (!err) stats.num_deleted++;
-					callback(); 
-				} );
-			};
-			
-			// get record to determine type
-			self.get( key, function(err, data) {
-				if (!data) data = {};
-				if (data.type && (data.type == 'list')) {
-					self.listDelete( key, true, finishDelete );
-				}
-				else if (data.type && (data.type == 'hash')) {
-					self.hashDeleteAll( key, true, finishDelete );
+				if (self.expHash) {
+					self.hashDelete( cleanup_hash_path, key, function(herr) { 
+						if (!err) stats.num_deleted++;
+						callback(); 
+					} );
 				}
 				else {
-					self.delete( key, finishDelete );
+					callback();
 				}
-			} ); // get
+			};
+			
+			if (self.isBinaryKey(key)) {
+				// straight up delete for binary records
+				self.delete( key, finishDelete );
+			}
+			else {
+				// get JSON record to determine type
+				self.get( key, function(err, data) {
+					if (!data) data = {};
+					if (data.type && (data.type == 'list')) {
+						self.listDelete( key, true, finishDelete );
+					}
+					else if (data.type && (data.type == 'hash')) {
+						self.hashDeleteAll( key, true, finishDelete );
+					}
+					else if (data.type && self.customRecordTypes[data.type] && self.customRecordTypes[data.type].delete) {
+						self.logDebug(6, "Invoking custom record delete handler for type: " + data.type + ": " + key);
+						var func = self.customRecordTypes[data.type].delete;
+						func( key, data, finishDelete );
+					}
+					else {
+						self.delete( key, finishDelete );
+					}
+				} ); // get
+			}
 		}; // deleteExpiredRecord
 		
 		this.listEach( cleanup_list_path, 
@@ -597,25 +636,30 @@ module.exports = Class.create({
 				var key = item.key;
 				
 				// see if expiration date is still overdue
-				self.hashGet( cleanup_hash_path, key, function(err, data) {
-					if (data && data.expires) {
-						var eargs = Tools.getDateArgs( data.expires );
-						if ((eargs.epoch <= dargs.epoch) || (eargs.yyyy_mm_dd == dargs.yyyy_mm_dd)) {
-							// still expired, kill it
-							deleteExpiredRecord(key, callback);
+				if (self.expHash) {
+					self.hashGet( cleanup_hash_path, key, function(err, data) {
+						if (data && data.expires) {
+							var eargs = Tools.getDateArgs( data.expires );
+							if ((eargs.epoch <= dargs.epoch) || (eargs.yyyy_mm_dd == dargs.yyyy_mm_dd)) {
+								// still expired, kill it
+								deleteExpiredRecord(key, callback);
+							}
+							else {
+								// oops, expiration changed, skip
+								stats.num_skipped++;
+								self.logDebug(9, "Expiration on record " + key + " has changed to " + eargs.yyyy_mm_dd + ", skipping delete");
+								callback();
+							}
 						}
 						else {
-							// oops, expiration changed, skip
-							stats.num_skipped++;
-							self.logDebug(9, "Expiration on record " + key + " has changed to " + eargs.yyyy_mm_dd + ", skipping delete");
-							callback();
+							// no expiration date, just delete it
+							deleteExpiredRecord(key, callback);
 						}
-					}
-					else {
-						// no expiration date, just delete it
-						deleteExpiredRecord(key, callback);
-					}
-				} ); // hashGet
+					} ); // hashGet
+				} // expHash
+				else {
+					deleteExpiredRecord(key, callback);
+				}
 			},
 			function(err) {
 				// list iteration complete

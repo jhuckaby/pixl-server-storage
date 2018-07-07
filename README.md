@@ -40,6 +40,7 @@ Here is the table of contents for this current document:
 	* [maintenance](#maintenance)
 	* [log_event_types](#log_event_types)
 	* [max_recent_events](#max_recent_events)
+	* [expiration_updates](#expiration_updates)
 	* [debug (standalone)](#debug-standalone)
 - [Engines](#engines)
 	* [Local Filesystem](#local-filesystem)
@@ -61,6 +62,7 @@ Here is the table of contents for this current document:
 - [Storing Binary Blobs](#storing-binary-blobs)
 - [Using Streams](#using-streams)
 - [Expiring Data](#expiring-data)
+	* [Custom Record Types](#custom-record-types)
 - [Advisory Locking](#advisory-locking)
 - [Logging](#logging)
 	* [Debug Logging](#debug-logging)
@@ -238,6 +240,12 @@ The `log_event_types` property allows you to configure exactly which transaction
 ## max_recent_events
 
 The `max_recent_events` property allows the storage system to track the latest N events in memory, which are then provided in the call to [getStats()](docs/API.md#getstats).  For details, see the [Performance Metrics](#performance-metrics) section below.
+
+## expiration_updates
+
+The `expiration_updates` property activates additional features in the [expiration system](#expiring-data).  Namely, setting this property to `true` allow you to update expiration dates of existing records.  Otherwise only a single expiration date may be set once per each record.
+
+Note that this feature incurs additional overhead, because the expiration date of every record needs to be stored in a global [Hash](docs/Hashes.md).  This slows down both the expiration set operation, and the nightly maintenance sweep to delete expired records.  For this reason, the `expiration_dates` property defaults to `false` (disabled).
 
 ## debug (standalone)
 
@@ -673,6 +681,28 @@ storage.expire( 'test1', '2015-05-12' );
 ```
 
 It is wasteful to call this multiple times for the same record and the same date.  It adds extra work for the maintenance job, as each call adds an event in a list that must be iterated over.  It should only be called once per record, or when extending the expiration date to a future day.
+
+Please note that if you require the ability to update expiration dates on existing records, you must explicitly set the [expiration_updates](#expiration_updates) configuration property to `true`.  This activates additional internal bookkeeping, which keeps track of all current record expiration dates, so they can be efficiently updated.  Note that this does incur some additional overhead.
+
+## Custom Record Types
+
+You can register custom record types if they require special handling for deletion.  For example, your application may define its own record type that has other related records which must also be deleted.  Instead of setting separate expiration dates for all your related records, you can set one single expiration date on the primary record, and register it as a custom type.  Then, when the [daily maintenance](#daily-maintenance) runs, your custom handler function will be called for your custom records, and you can delete the all related records yourself.
+
+Your custom records are identified by a special top-level `type` property in their JSON.  This property must be set to a unique string that you pre-register with the storage system at startup.  Note that only JSON records are supported for custom deletion -- binary records are not.
+
+To register a custom record type, call the [addRecordType()](docs/API.md#addrecordtype) method, and pass in a custom type key (string), and an object containing key/value pairs for actions and handlers.  Currently only the `delete` action is defined, for handling maintenance (expiration) of your custom record type.  Example use:
+
+```js
+storage.addRecordType( 'my_custom_type', {
+	delete: function(key, value, callback) {
+		// custom handler function, called from daily maint for expired records
+		// execute my own custom deletion routine here, then fire the callback
+		callback();
+	}
+});
+```
+
+So the idea here is whenever the [daily maintenance](#daily-maintenance) job runs, and encounters JSON records with a `type` property set to `my_custom_type`, your custom handler function would be called to handle the deletes for the expired records.  This would happen instead of a typical call to [delete()](docs/API.md#delete), which is the default behavior.
 
 # Advisory Locking
 

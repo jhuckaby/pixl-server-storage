@@ -29,6 +29,7 @@ var storage = server.Storage;
 	* [shareLock](#sharelock)
 	* [shareUnlock](#shareunlock)
 	* [expire](#expire)
+	* [addRecordType](#addrecordtype)
 	* [getStats](#getstats)
 - [List Methods](#list-methods)
 	* [listCreate](#listcreate)
@@ -342,6 +343,26 @@ storage.expire( 'test1', exp_date );
 ```
 
 The earliest you can set a record to expire is the next day, as the maintenance script only runs once per day, typically in the early morning, and it only processes records expiring on the current day.
+
+## addRecordType
+
+```js
+storage.addRecordType( TYPE, HANDLERS );
+```
+
+The `addRecordType()` method registers a custom record type, for deletion via the daily maintenance system.  Your custom records are identified by a `type` property set to a unique string which you register a handler for.  Then, your handler is called to delete expired records of your defined types.  Example use:
+
+```js
+storage.addRecordType( 'my_custom_type', {
+	delete: function(key, value, callback) {
+		// custom handler function, called from daily maint for expired records
+		// execute my own custom deletion routine here, then fire the callback
+		callback();
+	}
+});
+```
+
+See [Custom Record Types](../README.md#custom-record-types) for more details.
 
 ## getStats
 
