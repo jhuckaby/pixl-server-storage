@@ -355,7 +355,13 @@ module.exports = Class.create({
 			if (err) return callback(err);
 			
 			// if no files found, then good, no recovery necessary, return ASAP
-			if (!files || !files.length) return callback();
+			if (!files || !files.length) {
+				if (self.server.config.get('recover')) {
+					self.logDebug(1, "Database recovery is complete (no recovery actions were required).");
+					self.logDebug(1, "Resuming normal startup");
+				}
+				return callback();
+			}
 			
 			// damn, unclean shutdown, iterate over recovery logs
 			async.eachSeries( files,

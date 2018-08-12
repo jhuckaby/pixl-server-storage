@@ -243,7 +243,7 @@ The `max_recent_events` property allows the storage system to track the latest N
 
 ## expiration_updates
 
-The `expiration_updates` property activates additional features in the [expiration system](#expiring-data).  Namely, setting this property to `true` allow you to update expiration dates of existing records.  Otherwise only a single expiration date may be set once per each record.
+The `expiration_updates` property activates additional features in the [expiration system](#expiring-data).  Namely, setting this property to `true` allows you to update expiration dates of existing records.  Otherwise only a single expiration date may be set once per each record.
 
 Note that this feature incurs additional overhead, because the expiration date of every record needs to be stored in a global [Hash](docs/Hashes.md).  This slows down both the expiration set operation, and the nightly maintenance sweep to delete expired records.  For this reason, the `expiration_dates` property defaults to `false` (disabled).
 
