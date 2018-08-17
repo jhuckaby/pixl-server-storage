@@ -1,5 +1,5 @@
 // Couchbase Storage Plugin
-// Copyright (c) 2015 Joseph Huckaby
+// Copyright (c) 2015 - 2018 Joseph Huckaby
 // Released under the MIT License
 
 // Requires the 'couchbase' module from npm
@@ -44,12 +44,23 @@ module.exports = Class.create({
 		
 		// support old legacy naming convention: connect_string
 		this.cluster = new CouchbaseAPI.Cluster( this.config.get('connectString') || this.config.get('connect_string') );
-		if (this.config.get('password')) {
+		
+		if (this.config.get('username') && this.config.get('password')) {
+			// couchbase 2.5+ new auth style
+			this.cluster.authenticate(this.config.get('username'), this.config.get('password'));
+			
+			this.bucket = this.cluster.openBucket( this.config.get('bucket'), function(err) {
+				callback(err);
+			} );
+		}
+		else if (!this.config.get('username') && this.config.get('password')) {
+			// couchbase 2.0 old auth style
 			this.bucket = this.cluster.openBucket( this.config.get('bucket'), this.config.get('password'), function(err) {
 				callback(err);
 			} );
 		}
 		else {
+			// no auth
 			this.bucket = this.cluster.openBucket( this.config.get('bucket'), function(err) {
 				callback(err);
 			} );
@@ -119,13 +130,12 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head couchbase value given key
 		var self = this;
-		key = this.prepKey(key);
 		
 		// The Couchbase Node.JS 2.0 API has no way to head / ping an object.
 		// So, we have to do this the RAM-hard way...
 		
 		this.get( key, function(err, data) {
-			if (err) {
+			if (err && (err.code != CouchbaseAPI.errors.keyNotFound)) {
 				// some other error
 				err.message = "Failed to head key: " + key + ": " + err.message;
 				self.logError('couchbase', err.message);
@@ -154,7 +164,7 @@ module.exports = Class.create({
 		
 		this.bucket.get( key, function(err, result) {
 			if (!result) {
-				if (err) {
+				if (err && (err.code != CouchbaseAPI.errors.keyNotFound)) {
 					// some other error
 					err.message = "Failed to fetch key: " + key + ": " + err.message;
 					self.logError('couchbase', err.message);
@@ -195,12 +205,11 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
-		key = this.prepKey(key);
 		
 		// The Couchbase Node.JS 2.0 API has no stream support.
 		// So, we have to do this the RAM-hard way...
 		this.get( key, function(err, buf) {
-			if (err) {
+			if (err && (err.code != CouchbaseAPI.errors.keyNotFound)) {
 				// some other error
 				err.message = "Failed to fetch key: " + key + ": " + err.message;
 				self.logError('couchbase', err.message);
@@ -229,7 +238,7 @@ module.exports = Class.create({
 		this.bucket.remove( key, {}, function(err) {
 			if (err) {
 				// if error was a non-existent key, make sure we use the standard code
-				if (err.message.match(/not\s+exist/i)) err.code = "NoSuchKey";
+				if (err.code == CouchbaseAPI.errors.keyNotFound) err.code = "NoSuchKey";
 				
 				self.logError('couchbase', "Failed to delete object: " + key + ": " + err.message);
 			}

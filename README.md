@@ -465,6 +465,7 @@ Then configure your storage thusly:
 	"Couchbase": {
 		"connectString": "couchbase://127.0.0.1",
 		"bucket": "default",
+		"username": "",
 		"password": "",
 		"serialize": false,
 		"keyPrefix": ""
@@ -481,6 +482,8 @@ The `serialize` property, when set to `true`, will cause all object values to be
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
+
+Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to supply both a `username` and `password` for a valid user created in the Couchbase UI.  Prior to v5+ you could omit the `username` and only specify a `password`, or no password at all if your bucket has no authentication.
 
 # Key Normalization
 
