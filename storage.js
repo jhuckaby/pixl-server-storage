@@ -335,7 +335,7 @@ module.exports = Class.create({
 		
 		// ram cache
 		if (cacheable && (key in this.cache)) {
-			return callback( null, this.cache[key] );
+			return process.nextTick( callback, null, this.cache[key] );
 		}
 		
 		// invoke engine and track perf

@@ -358,7 +358,20 @@ module.exports = Class.create({
 			if (!files || !files.length) {
 				if (self.server.config.get('recover')) {
 					self.logDebug(1, "Database recovery is complete (no recovery actions were required).");
-					self.logDebug(1, "Resuming normal startup");
+					// self.logDebug(1, "Resuming normal startup");
+					
+					// we got here from '--recover' mode, so print message and exit now
+					var msg = '';
+					msg += "\n";
+					msg += "Database recovery is complete.  No actions were required.\n";
+					msg += self.server.__name + " can now be started normally.\n";
+					msg += "\n";
+					process.stdout.write(msg);
+					
+					var pid_file = self.server.config.get('pid_file');
+					if (pid_file) try { fs.unlinkSync( pid_file ); } catch(e) {;}
+					
+					process.exit(0);
 				}
 				return callback();
 			}
@@ -445,6 +458,10 @@ module.exports = Class.create({
 									msg += self.server.__name + " can now be started normally.\n";
 									msg += "\n";
 									process.stdout.write(msg);
+									
+									var pid_file = self.server.config.get('pid_file');
+									if (pid_file) try { fs.unlinkSync( pid_file ); } catch(e) {;}
+									
 									process.exit(0);
 								}
 								else {
