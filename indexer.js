@@ -996,6 +996,8 @@ module.exports = Class.create({
 		// basic pre-cleanup
 		value = value.replace(/\s*\:\s*/g, ':');
 		value = value.replace(/\s*\|\s*/g, '|');
+		
+		// escape literals (they will be re-unescaped below after splitting)
 		value = value.replace(/\"(.+?)\"/g, function(m_all, m_g1) { return '"' + escape(m_g1) + '"'; } );
 		
 		var parts = value.split(/\s+/);
@@ -1069,7 +1071,11 @@ module.exports = Class.create({
 					}
 					else {
 						var words = this.getWordList(part, def, config);
-						if (words.length) crit.word = words[0];
+						if (words.length > 1) {
+							crit.literal = 1;
+							crit.words = words;
+						}
+						else if (words.length) crit.word = words[0];
 					}
 					
 					if (crit.word || (crit.words && crit.words.length)) criteria.push( crit );
