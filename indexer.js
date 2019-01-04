@@ -947,7 +947,7 @@ module.exports = Class.create({
 			value = unidecode( value ); // convert unicode to ascii
 			value = value.replace(/\w+\:\/\/([\w\-\.]+)\S*/g, '$1'); // index domains, not full urls
 			value = value.replace(/\'/g, ''); // index nancy's as nancys
-			value = value.replace(/\w+\.\w[\w\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_+$/, ''); }); // 2.5 --> 2_5
+			value = value.replace(/\d+\.\d[\d\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_+$/, ''); }); // 2.5 --> 2_5
 		}
 		value = value.toLowerCase();
 		
