@@ -515,10 +515,7 @@ module.exports = Class.create({
 			
 			// Allow user to get items from end of list
 			if (idx < 0) { idx += list.length; }
-			if (idx < 0) {
-				self._listShareUnlock(key);
-				return callback( new Error("Index out of range"), null, list );
-			}
+			if (idx < 0) { idx = 0; }
 			
 			if (idx + len > list.length) { len = list.length - idx; }
 			
