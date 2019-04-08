@@ -514,7 +514,9 @@ module.exports = Class.create({
 			var func = task;
 			task = { action: 'custom', handler: func };
 		}
-		this.logDebug(9, "Enqueuing async task: " + (task.label || task.action), task);
+		this.logDebug(9, "Enqueuing async task: " + (task.label || task.action), 
+			this.debugLevel(10) ? task : null
+		);
 		this.queue.push( task );
 	},
 	
