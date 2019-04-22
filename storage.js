@@ -523,7 +523,9 @@ module.exports = Class.create({
 	dequeue: function(task, callback) {
 		// run task and fire callback
 		var self = this;
-		this.logDebug(9, "Running async task: " + (task.label || task.action), task);
+		this.logDebug(9, "Running async task: " + (task.label || task.action), 
+			this.debugLevel(10) ? task : null
+		);
 		
 		switch (task.action) {
 			case 'expire_set':
