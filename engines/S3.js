@@ -1,11 +1,15 @@
 // Amazon AWS S3 Storage Plugin
-// Copyright (c) 2015 Joseph Huckaby
+// Copyright (c) 2015 - 2019 Joseph Huckaby
 // Released under the MIT License
+
+// Requires the 'aws-sdk' module from npm
+// npm install aws-sdk
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
 var AWS = require('aws-sdk');
+var Cache = require("pixl-cache");
 
 module.exports = Class.create({
 	
@@ -48,6 +52,23 @@ module.exports = Class.create({
 			};
 		}
 		
+		// optional LRU cache
+		this.cache = null;
+		var cache_opts = s3_config.cache;
+		if (cache_opts && cache_opts.enabled) {
+			this.logDebug(3, "Setting up LRU cache", cache_opts);
+			this.cache = new Cache( Tools.copyHashRemoveKeys(cache_opts, { enabled: 1 }) );
+			this.cache.on('expire', function(item, reason) {
+				self.logDebug(9, "Expiring LRU cache object: " + item.key + " due to: " + reason, {
+					key: item.key,
+					reason: reason,
+					totalCount: self.cache.count,
+					totalBytes: self.cache.bytes
+				});
+			});
+		}
+		delete s3_config.cache;
+		
 		AWS.config.update( aws_config );
 		this.s3 = new AWS.S3( s3_config );
 	},
@@ -83,6 +104,8 @@ module.exports = Class.create({
 	put: function(key, value, callback) {
 		// store key+value in s3
 		var self = this;
+		var orig_key = key;
+		var is_binary = this.storage.isBinaryKey(key);
 		key = this.prepKey(key);
 		
 		var params = {};
@@ -90,7 +113,7 @@ module.exports = Class.create({
 		params.Body = value;
 		
 		// serialize json if needed
-		if (this.storage.isBinaryKey(key)) {
+		if (is_binary) {
 			this.logDebug(9, "Storing S3 Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
@@ -104,6 +127,11 @@ module.exports = Class.create({
 				self.logError('s3', "Failed to store object: " + key + ": " + err.message);
 			}
 			else self.logDebug(9, "Store complete: " + key);
+			
+			// possibly cache in LRU
+			if (self.cache && !is_binary) {
+				self.cache.set( orig_key, params.Body, { date: Tools.timeNow(true) } );
+			}
 			
 			if (callback) callback(err, data);
 		} );
@@ -133,9 +161,23 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head s3 value given key
 		var self = this;
+		var orig_key = key;
 		key = this.prepKey(key);
 		
 		this.logDebug(9, "Pinging S3 Object: " + key);
+		
+		// check cache first
+		if (this.cache && this.cache.has(orig_key)) {
+			process.nextTick( function() {
+				var item = self.cache.getMeta(orig_key);
+				self.logDebug(9, "Cached head complete: " + orig_key);
+				callback( null, {
+					mod: item.date,
+					len: item.value.length
+				} );
+			} );
+			return;
+		} // cache
 		
 		this.s3.headObject( { Key: this.extKey(key) }, function(err, data) {
 			if (err) {
@@ -157,9 +199,29 @@ module.exports = Class.create({
 	get: function(key, callback) {
 		// fetch s3 value given key
 		var self = this;
+		var orig_key = key;
+		var is_binary = this.storage.isBinaryKey(key);
 		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching S3 Object: " + key);
+		
+		// check cache first
+		if (this.cache && !is_binary && this.cache.has(orig_key)) {
+			process.nextTick( function() {
+				var data = self.cache.get(orig_key);
+				
+				try { data = JSON.parse( data ); }
+				catch (e) {
+					self.logError('file', "Failed to parse JSON record: " + orig_key + ": " + e);
+					callback( e, null );
+					return;
+				}
+				self.logDebug(9, "Cached JSON fetch complete: " + orig_key, self.debugLevel(10) ? data : null);
+				
+				callback( null, data );
+			} );
+			return;
+		} // cache
 		
 		this.s3.getObject( { Key: this.extKey(key) }, function(err, data) {
 			if (err) {
@@ -178,12 +240,18 @@ module.exports = Class.create({
 			}
 			
 			var body = null;
-			if (self.storage.isBinaryKey(key)) {
+			if (is_binary) {
 				body = data.Body;
 				self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
 			}
 			else {
 				body = data.Body.toString();
+				
+				// possibly cache in LRU
+				if (self.cache) {
+					self.cache.set( orig_key, body, { date: Tools.timeNow(true) } );
+				}
+				
 				try { body = JSON.parse( body ); }
 				catch (e) {
 					self.logError('s3', "Failed to parse JSON record: " + key + ": " + e);
@@ -242,6 +310,7 @@ module.exports = Class.create({
 	delete: function(key, callback) {
 		// delete s3 key given key
 		var self = this;
+		var orig_key = key;
 		key = this.prepKey(key);
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
@@ -251,6 +320,11 @@ module.exports = Class.create({
 				self.logError('s3', "Failed to delete object: " + key + ": " + err.message);
 			}
 			else self.logDebug(9, "Delete complete: " + key);
+			
+			// possibly delete from LRU cache as well
+			if (self.cache && self.cache.has(orig_key)) {
+				self.cache.delete(orig_key);
+			}
 			
 			if (callback) callback(err, data);
 		} );

@@ -1,5 +1,5 @@
 // Local File Storage Plugin
-// Copyright (c) 2015 Joseph Huckaby
+// Copyright (c) 2015 - 2019 Joseph Huckaby
 // Released under the MIT License
 
 var path = require('path');
@@ -11,6 +11,7 @@ var crypto = require('crypto');
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
+var Cache = require("pixl-cache");
 
 module.exports = Class.create({
 	
@@ -35,6 +36,7 @@ module.exports = Class.create({
 	
 	setup: function() {
 		// setup storage system (also called for config reload)
+		var self = this;
 		this.baseDir = this.config.get('base_dir') || process.cwd();
 		this.keyNamespaces = this.config.get('key_namespaces') || 0;
 		this.pretty = this.config.get('pretty') || 0;
@@ -70,6 +72,22 @@ module.exports = Class.create({
 			var msg = "FATAL ERROR: Temp directory could not be created: " + this.tempDir + ": " + e;
 			this.logError('file', msg);
 			throw new Error(msg);
+		}
+		
+		// optional LRU cache
+		this.cache = null;
+		var cache_opts = this.config.get('cache');
+		if (cache_opts && cache_opts.enabled) {
+			this.logDebug(3, "Setting up LRU cache", cache_opts);
+			this.cache = new Cache( Tools.copyHashRemoveKeys(cache_opts, { enabled: 1 }) );
+			this.cache.on('expire', function(item, reason) {
+				self.logDebug(9, "Expiring LRU cache object: " + item.key + " due to: " + reason, {
+					key: item.key,
+					reason: reason,
+					totalCount: self.cache.count,
+					totalBytes: self.cache.bytes
+				});
+			});
 		}
 	},
 	
@@ -188,9 +206,10 @@ module.exports = Class.create({
 		// store key+value on disk
 		var self = this;
 		var file = this.getFilePath(key);
+		var is_binary = this.storage.isBinaryKey(key);
 		
 		// serialize json if needed
-		if (this.storage.isBinaryKey(key)) {
+		if (is_binary) {
 			this.logDebug(9, "Storing Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
@@ -228,6 +247,11 @@ module.exports = Class.create({
 						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
 						self.logError('file', msg);
 						return callback( new Error(msg), null );
+					}
+					
+					// possibly cache in LRU
+					if (self.cache && !is_binary) {
+						self.cache.set( key, value, { date: Tools.timeNow(true) } );
 					}
 					
 					// all done
@@ -297,6 +321,19 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Pinging Object: " + key, file);
 		
+		// check cache first
+		if (this.cache && this.cache.has(key)) {
+			process.nextTick( function() {
+				var item = self.cache.getMeta(key);
+				self.logDebug(9, "Cached head complete: " + key);
+				callback( null, {
+					mod: item.date,
+					len: item.value.length
+				} );
+			} );
+			return;
+		} // cache
+		
 		fs.stat(file, function(err, stats) {
 			if (err) {
 				if (err.message.match(/ENOENT/)) {
@@ -324,8 +361,27 @@ module.exports = Class.create({
 		// fetch value given key
 		var self = this;
 		var file = this.getFilePath(key);
+		var is_binary = this.storage.isBinaryKey(key);
 		
 		this.logDebug(9, "Fetching Object: " + key, file);
+		
+		// check cache first
+		if (this.cache && !is_binary && this.cache.has(key)) {
+			process.nextTick( function() {
+				var data = self.cache.get(key);
+				
+				try { data = JSON.parse( data ); }
+				catch (e) {
+					self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
+					callback( e, null );
+					return;
+				}
+				self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
+				
+				callback( null, data );
+			} );
+			return;
+		} // cache
 		
 		var opts = {};
 		if (!this.storage.isBinaryKey(key)) opts = { encoding: 'utf8' };
@@ -345,7 +401,12 @@ module.exports = Class.create({
 				return callback( err, null );
 			}
 			
-			if (file.match(/\.json$/i)) {
+			// possibly cache in LRU
+			if (self.cache && !is_binary) {
+				self.cache.set( key, data, { date: Tools.timeNow(true) } );
+			}
+			
+			if (!is_binary) {
 				try { data = JSON.parse( data ); }
 				catch (e) {
 					self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
@@ -414,6 +475,11 @@ module.exports = Class.create({
 			else {
 				self.logDebug(9, "Delete complete: " + key);
 				
+				// possibly delete from LRU cache as well
+				if (self.cache && self.cache.has(key)) {
+					self.cache.delete(key);
+				}
+				
 				// cleanup parent dirs if empty
 				var done = false;
 				var dir = path.dirname(file);
@@ -453,6 +519,7 @@ module.exports = Class.create({
 	commitTempFile: function(key, temp_file, callback) {
 		// quickly rename temp file over record, given key
 		// this is used by the transaction system for commits
+		// this will ONLY be called for JSON records (binary records skip the transaction system entirely)
 		var self = this;
 		
 		this.logDebug(9, "Storing record data from temp file: " + key + ": " + temp_file);
@@ -506,7 +573,7 @@ module.exports = Class.create({
 			self._renameFile( temp_file, file, function (err) {
 				if (err) {
 					// failed to rename file
-					if (err.code == 'EXDEV') {
+					if ((err.code == 'EXDEV') && !self.cache) {
 						// cross-device rename attempted, switch to NFS mode and recurse
 						self.logDebug(2, "Cross-device rename detected in commitTempFile, switching to NFS mode");
 						self.config.set('nfs', true);
@@ -534,17 +601,34 @@ module.exports = Class.create({
 							return callback( new Error(msg) );
 						}
 						
-						fs.close(fh, function(err) {
-							if (err) {
-								var msg = "Failed to close file: " + key + ": " + file + ": " + err.message;
-								self.logError('file', msg);
-								return callback( new Error(msg) );
-							}
-							
-							// all done
-							self.logDebug(9, "Store operation complete: " + key);
-							callback();
-						}); // fs.close
+						var finish = function() {
+							fs.close(fh, function(err) {
+								if (err) {
+									var msg = "Failed to close file: " + key + ": " + file + ": " + err.message;
+									self.logError('file', msg);
+									return callback( new Error(msg) );
+								}
+								
+								// all done
+								self.logDebug(9, "Store operation complete: " + key);
+								callback();
+							}); // fs.close
+						}; // finish
+						
+						if (self.cache) {
+							// LRU cache is enabled, so load file contents to store in cache
+							fs.readFile( fh, { encoding: 'utf8' }, function (err, data) {
+								if (err) {
+									var msg = "Failed to read file: " + key + ": " + file + ": " + err.message;
+									self.logError('file', msg);
+									return callback( new Error(msg) );
+								}
+								
+								self.cache.set( key, data, { date: Tools.timeNow(true) } );
+								finish();
+							}); // fs.readFile
+						}
+						else finish();
 					}); // fs.fsync
 				} ); // fs.open
 			} ); // rename

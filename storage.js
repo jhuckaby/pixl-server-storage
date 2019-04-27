@@ -899,6 +899,15 @@ module.exports = Class.create({
 				msg: "Last Second Performance Metrics", 
 				data: metrics 
 			});
+			if (this.engine.cache) {
+				this.logger.print({ 
+					component: this.__name,
+					category: 'cache', 
+					code: 'second', 
+					msg: "Last Second Cache Stats", 
+					data: this.engine.cache.getStats()
+				});
+			}
 		}
 		
 		// import perf into minutePerf
@@ -922,6 +931,15 @@ module.exports = Class.create({
 				msg: "Last Minute Performance Metrics", 
 				data: metrics 
 			});
+			if (this.engine.cache) {
+				this.logger.print({ 
+					component: this.__name,
+					category: 'cache', 
+					code: 'second', 
+					msg: "Last Minute Cache Stats", 
+					data: this.engine.cache.getStats()
+				});
+			}
 		}
 		
 		// and reset minute perf

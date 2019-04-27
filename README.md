@@ -257,7 +257,7 @@ The storage system can be backed by a number of different "engines", which actua
 
 ## Local Filesystem
 
-The local filesystem engine is called `Filesystem`, and reads/writes files to local disk.  It distributes files by hashing their keys using [MD5](https://en.wikipedia.org/wiki/MD5), and splitting up the path into several subdirectories.  So even with tens of millions of records, no one single directory will ever have more than 255 files.  For example:
+The local filesystem engine is called `Filesystem`, and reads/writes files to local disk.  It distributes files by hashing their keys using [MD5](https://en.wikipedia.org/wiki/MD5), and splitting up the path into several subdirectories.  So even with tens of millions of records, no one single directory will ever have more than 256 files.  For example:
 
 ```
 Plain Key:
@@ -370,6 +370,38 @@ If your `key_template` property contains any hash marks (`#`), they will be dyna
 
 This would replace the 4 hash marks with the first 4 characters from the key's MD5, followed by the full key itself e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
 
+### Filesystem Cache
+
+You can optionally enable caching for the filesystem, which keeps a copy of the most recently used JSON records in RAM.  This can increase performance if you have a small set of popular keys that are frequently accessed.  Note that the cache does *not* defer writes -- it only passively holds copies in memory, to intercept and accelerate repeat reads.
+
+To enable the filesystem cache, include a `cache` object in your `Filesystem` configuration with the following properties:
+
+```js
+{
+	"engine": "Filesystem",
+	"Filesystem": {
+		"base_dir": "/var/data/myserver",
+		"cache": {
+			"enabled": true,
+			"maxItems": 1000,
+			"maxBytes": 10485760
+		}
+	}
+}
+```
+
+The properties are as follows:
+
+| Property Name | Type | Description |
+|---------------|------|-------------|
+| `enabled` | Boolean | Set this to `true` to enable the filesystem caching system. |
+| `maxItems` | Integer | This is the maximum number of objects to allow in the cache. |
+| `maxBytes` | Integer | This is the maximum number of bytes to allow in the cache. |
+
+The cache will automatically expire objects in LRU fashion when either of the limits are exceeded (whichever is hit first).  Set the properties to `0` for no limit.
+
+Note that binary records are **not** cached.  This system is for JSON records only.
+
 ## Amazon S3
 
 If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, here is how to do so.  First, you need to manually install the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module into your app:
@@ -399,6 +431,11 @@ Then configure your storage thusly:
 		"fileExtensions": true,
 		"params": {
 			"Bucket": "MY_S3_BUCKET_ID"
+		},
+		"cache": {
+			"enabled": true,
+			"maxItems": 1000,
+			"maxBytes": 10485760
 		}
 	}
 }
@@ -410,7 +447,7 @@ The `AWS` object is passed directly to the `config.update()` function from the [
 
 The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.   There are a few special `S3` properties used by pixl-server-storage, which are described below.
 
-If you plan on using Amazon AWS in other parts of you application, you can actually move the `AWS` config object into your outer server configuration.  The storage module will look for it there.
+If you plan on using Amazon AWS in other parts of your application, you can actually move the `AWS` config object into your outer server configuration.  The storage module will look for it there.
 
 ### S3 File Extensions
 
@@ -448,6 +485,36 @@ Note that Amazon [recommends adding a hash prefix](https://docs.aws.amazon.com/A
 This would replace the 4 hash marks with the first 4 characters from the key's MD5, followed by the full key itself, e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
 
 Besides hash marks, the special macro `[key]` will be substituted with the full key, and `[md5]` will be substituted with a full MD5 hash of the key.  These can be used anywhere in the template string.
+
+### S3 Cache
+
+It is *highly* recommended that you enable caching for S3, which keeps a copy of the most recently used JSON records in RAM.  Not only will this increase overall performance, but it is especially important if you use any of the advanced storage features like [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) or the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md).
+
+The reason why caching is so important is because Amazon S3 is only [eventually consistent](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel) when replacing existing records, so corruption can occur when writing compound objects (i.e. a list or a hash) and then quickly reading them back in.  To protect against this, all writes can be cached in RAM, so subsequent reads can often bypass S3 and just read from the RAM cache instead, ensuring that the correct (latest) data is read.
+
+To enable the S3 cache, include a `cache` object in your `S3` configuration with the following properties:
+
+```js
+"cache": {
+	"enabled": true,
+	"maxItems": 1000,
+	"maxBytes": 10485760
+}
+```
+
+The properties are as follows:
+
+| Property Name | Type | Description |
+|---------------|------|-------------|
+| `enabled` | Boolean | Set this to `true` to enable the S3 caching system. |
+| `maxItems` | Integer | This is the maximum number of objects to allow in the cache. |
+| `maxBytes` | Integer | This is the maximum number of bytes to allow in the cache. |
+
+The cache will automatically expire objects in LRU fashion when either of the limits are met (whichever is reached first).  Set the properties to `0` for no limit.
+
+It is recommended that you set the `maxItems` and `maxBytes` high enough to allow new data written to live for *at least* several seconds before getting expired out of the cache.  This depends on the overall storage throughput of your application, but 1,000 max items and 10 MB max bytes is probably fine for most use cases.
+
+Note that binary records are **not** cached, as they are generally large.  Only JSON records are cached, as they are usually much smaller and used in [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md).
 
 ## Couchbase
 
