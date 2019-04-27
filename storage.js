@@ -935,7 +935,7 @@ module.exports = Class.create({
 				this.logger.print({ 
 					component: this.__name,
 					category: 'cache', 
-					code: 'second', 
+					code: 'minute', 
 					msg: "Last Minute Cache Stats", 
 					data: this.engine.cache.getStats()
 				});
