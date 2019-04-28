@@ -240,7 +240,7 @@ Please start it in recovery mode by issuing this command:
 Adding the `--recover` command-line flag allows it to continue starting up, and then abort (rollback) any transactions that were active when it died.  It switches into "debug" mode during recovery (i.e. skips the background daemon fork), and echoes the main event log to the console, so you can see exactly what is happening.  When it is complete, another message will be printed to the console, and it will exit again:
 
 ```
-Database recovery is complete.  Please see logs for full details.
+Database recovery is complete.  Please see logs/recovery.log for full details.
 [YOUR_APP_NAME] can now be started normally.
 ```
 
@@ -252,7 +252,16 @@ You can then start your application normally, i.e. without the `--recover` flag.
 }
 ```
 
-This will cause the recovery process to be completely automatic, perform everything during normal startup, and not require any additional restarts.  However, if you opt for this feature, it is recommended that you also monitor your application event logs, so you can see when/if a recovery event occurred.  Recovery operations are logged as `debug` events at level 1.
+This will cause the recovery process to be completely automatic, perform everything during normal startup, and not require any additional restarts.  However, if you opt for this feature, it is recommended that you also monitor your application event logs, so you can see when/if a recovery event occurred.  All recovery operations are logged in a `recovery.log` file, which will be in the same directory as your other application logs (e.g. `log_dir` from pixl-server).
+
+In addition, your application can optionally detect that a recovery took place on startup, and run further actions such as notifying the user.  To do this, look for a property on the `Storage` component named `recovery_count`.  If this property exists and is non-zero, then recovery operations took place, and the specified number of transactions were rolled back.  Furthermore, the path to the recovery log can be found in a property named `recovery_log`.  Example:
+
+```js
+// check for storage recovery
+if (this.server.Storage.recovery_count) {
+	this.sendSomeKindOfNotification("Database recovery took place.  See " + this.server.Storage.recovery_log + " for details.");
+}
+```
 
 ## Transaction Internals
 

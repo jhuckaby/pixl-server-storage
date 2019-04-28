@@ -376,6 +376,15 @@ module.exports = Class.create({
 				return callback();
 			}
 			
+			// take over logging for this part
+			var orig_log_path = self.logger.path;
+			var recovery_log_path = Path.join( Path.dirname(orig_log_path), 'recovery.log' );
+			var recovery_trans_count = 0;
+			
+			self.logDebug(1, "Beginning database recovery, see " + recovery_log_path + " for details");
+			self.logger.path = recovery_log_path;
+			self.logDebug(1, "Beginning database recovery");
+			
 			// damn, unclean shutdown, iterate over recovery logs
 			async.eachSeries( files,
 				function(filename, callback) {
@@ -427,6 +436,7 @@ module.exports = Class.create({
 							self.transactions[ trans.path ] = trans;
 							
 							// abort (rollback) transaction
+							recovery_trans_count++;
 							self.abortTransaction( trans.path, callback );
 							
 						}); // fs.read
@@ -439,7 +449,7 @@ module.exports = Class.create({
 					
 					fs.readdir(data_dir, function(err, files) {
 						if (err) return callback(err);
-						if (!files || !files.length) return callback();
+						if (!files) files = [];
 						
 						async.eachLimit( files, self.concurrency,
 							function(filename, callback) {
@@ -448,13 +458,21 @@ module.exports = Class.create({
 							},
 							function() {
 								// recovery complete
-								self.logDebug(1, "Database recovery is complete.");
+								self.logDebug(1, "Database recovery is complete. " + recovery_trans_count + " transactions rolled back.");
+								
+								// restore original log setup
+								self.logger.path = orig_log_path;
+								self.logDebug(1, "Database recovery is complete, see " + recovery_log_path + " for details.");
+								
+								// save info in case app wants to sniff this on startup and notify user
+								self.recovery_log = recovery_log_path;
+								self.recovery_count = recovery_trans_count;
 								
 								if (self.server.config.get('recover')) {
 									// we got here from '--recover' mode, so print message and exit now
 									var msg = '';
 									msg += "\n";
-									msg += "Database recovery is complete.  Please see logs for full details.\n";
+									msg += "Database recovery is complete.  Please see " + recovery_log_path + " for full details.\n";
 									msg += self.server.__name + " can now be started normally.\n";
 									msg += "\n";
 									process.stdout.write(msg);
