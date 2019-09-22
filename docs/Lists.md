@@ -22,6 +22,7 @@ var storage = server.Storage;
 - [Splicing Lists](#splicing-lists)
 - [Sorted Lists](#sorted-lists)
 - [Iterating Over List Items](#iterating-over-list-items)
+- [Updating List Items](#updating-list-items)
 - [Searching Lists](#searching-lists)
 - [Copying and Renaming](#copying-and-renaming)
 - [Deleting Lists](#deleting-lists)
@@ -170,6 +171,53 @@ function(err) {
 ```
 
 Your iterator function is passed the item and a special callback function, which must be called when you are done with the current item.  Pass it an error if you want to prematurely abort the loop, and jump to the final callback (the error will be passed through to it).  Otherwise, pass nothing to the iterator callback, to notify all is well and you want the next item in the list.
+
+Alternatively, you can use [listEachPage()](API.md#listeachpage), which iterates over the internal list [pages](#list-page-size), and only fires your iterator function once per page, instead of once per item.  This is typically faster as it requires fewer function calls.  Example:
+
+```javascript
+storage.listEachPage( 'list1', function(items, callback) {
+	// do something with items, then fire callback
+	callback();
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
+
+## Updating List Items
+
+To iterate over and possibly update items, you can use the [listEachUpdate()](API.md#listeachupdate) method.  Your iterator callback accepts a second boolean argument which can indicate that you made changes.  Example:
+
+```javascript
+storage.listEachUpdate( 'list1', function(item, idx, callback) {
+	// do something with item, then fire callback
+	item.something = "something new!";
+	callback(null, true);
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
+
+As you can see, the iterator callback accepts two arguments, an error (or something false for success), and a boolean which should be set to `true` if you made changes.  The storage engine uses this to decide which list pages require updating.
+
+For a speed optimization, you can optionally iterate over entire list [pages](#list-page-size) rather than individual items.  To do this, use the [listEachPageUpdate()](API.md#listeachpageupdate) method.  In this case your iterator callback is passed an array of items on each page.  Example:
+
+```javascript
+storage.listEachPageUpdate( 'list1', function(items, callback) {
+	// do something with items, then fire callback
+	items.forEach( function(item) {
+		item.something = "something new!";
+	} );
+	callback(null, true);
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
 
 ## Searching Lists
 

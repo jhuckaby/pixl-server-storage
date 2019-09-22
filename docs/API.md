@@ -48,6 +48,9 @@ var storage = server.Storage;
 	* [listCopy](#listcopy)
 	* [listRename](#listrename)
 	* [listEach](#listeach)
+	* [listEachPage](#listeachpage)
+	* [listEachUpdate](#listeachupdate)
+	* [listEachPageUpdate](#listeachpageupdate)
 	* [listGetInfo](#listgetinfo)
 	* [listDelete](#listdelete)
 - [Hash Methods](#hash-methods)
@@ -721,6 +724,79 @@ Your `CALLBACK` function is finally called when the loop is complete and all ite
 storage.listEach( 'list1', function(item, idx, callback) {
 	// do something with item, then fire callback
 	callback();
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
+
+## listEachPage
+
+```javascript
+storage.listEachPage( KEY, ITERATOR, CALLBACK );
+```
+
+The `listEachPage()` method iterates over a list one *page* at a time, invoking your `ITERATOR` function for each page.  The list pages are loaded one at a time, as to not fill up memory with huge lists.
+
+Your iterator function is passed each page's items as an array, and a special callback function which must be called when you are done with the current page.  Pass it an error if you want to prematurely abort the loop, and jump to the final callback (the error will be passed through to it).  Otherwise, pass nothing to the iterator callback, to notify all is well and you want the next page in the list.
+
+Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
+
+```javascript
+storage.listEachPage( 'list1', function(items, callback) {
+	// do something with items, then fire callback
+	callback();
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
+
+## listEachUpdate
+
+```javascript
+storage.listEachUpdate( KEY, ITERATOR, CALLBACK );
+```
+
+The `listEachUpdate()` method iterates over a list one item at a time, invoking your `ITERATOR` function for each item.  You can then choose to update any of the items, which will be written back to storage.  The list pages are loaded one at a time, as to not fill up memory with huge lists.
+
+Your iterator function is passed the item, the item index number, and a special callback function which must be called when you are done with the current item.  The iterator callback accepts two arguments, an error (or something false for success), and a boolean which should be set to `true` if you made changes.  The storage engine uses this to decide which list pages require updating.
+
+Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
+
+```javascript
+storage.listEachUpdate( 'list1', function(item, idx, callback) {
+	// do something with item, then fire callback
+	item.something = "something new!";
+	callback(null, true);
+}, 
+function(err) {
+	if (err) throw err;
+	// all items iterated over
+} );
+```
+
+## listEachPageUpdate
+
+```javascript
+storage.listEachPageUpdate( KEY, ITERATOR, CALLBACK );
+```
+
+The `listEachPageUpdate()` method iterates over a list one *page* at a time, invoking your `ITERATOR` function for each page.  You can then choose to update any of the items, which will be written back to storage.  The list pages are loaded one at a time, as to not fill up memory with huge lists.
+
+Your iterator function is passed each page's items as an array, and a special callback function which must be called when you are done with the current page.  The iterator callback accepts two arguments, an error (or something false for success), and a boolean which should be set to `true` if you made changes to any items on the current page.  The storage engine uses this to decide which list pages require updating.
+
+Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
+
+```javascript
+storage.listEachPageUpdate( 'list1', function(items, callback) {
+	// do something with items, then fire callback
+	items.forEach( function(item) {
+		item.something = "something new!";
+	} );
+	callback(null, true);
 }, 
 function(err) {
 	if (err) throw err;

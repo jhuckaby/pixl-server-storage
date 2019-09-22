@@ -963,6 +963,149 @@ module.exports = Class.create({
 		} ); // _listShareLock
 	},
 	
+	listEachPage: function(key, iterator, callback) {
+		// fire iterator for every page in list
+		var self = this;
+		
+		this._listShareLock(key, true, function() {
+			// share locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listShareUnlock(key);
+					callback(err);
+					return;
+				}
+				var page_idx = list.first_page;
+				var item_idx = 0;
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						// load each page
+						self._listLoadPage(key, page_idx++, false, function(err, page) {
+							if (err) return callback(err);
+							
+							// call iterator for page items
+							if (page && page.items && page.items.length) {
+								iterator(page.items, callback);
+							}
+							else callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages iterated
+						self._listShareUnlock(key);
+						callback( err || null );
+					} // pages complete
+				); // whilst
+			} ); // loaded
+		} ); // _listShareLock
+	},
+	
+	listEachUpdate: function(key, iterator, callback) {
+		// fire iterator for every element in list, only load one page at a time
+		// iterator can signal that a change was made to any items, triggering an update
+		var self = this;
+		
+		this._listLock(key, true, function() {
+			// exclusively locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listUnlock(key);
+					callback(err);
+					return;
+				}
+				var page_idx = list.first_page;
+				var item_idx = 0;
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						// load each page
+						var page_key = key + '/' + page_idx;
+						
+						self._listLoadPage(key, page_idx++, false, function(err, page) {
+							if (err) return callback(err);
+							
+							// iterate over page items
+							if (page && page.items && page.items.length) {
+								var num_updated = 0;
+								
+								async.eachSeries( page.items, 
+									function(item, callback) {
+										iterator(item, item_idx++, function(err, updated) {
+											if (updated) num_updated++;
+											callback(err);
+										});
+									}, 
+									function(err) {
+										if (err) return callback(err);
+										if (num_updated) self.put( page_key, page, callback );
+										else callback();
+									}
+								); // async.eachSeries
+							}
+							else callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages iterated
+						self._listUnlock(key);
+						callback( err || null );
+					} // pages complete
+				); // whilst
+			} ); // loaded
+		} ); // _listLock
+	},
+	
+	listEachPageUpdate: function(key, iterator, callback) {
+		// fire iterator for every page in list
+		// iterator can signal that a change was made to any page, triggering an update
+		var self = this;
+		
+		this._listLock(key, true, function() {
+			// exclusively locked
+			self._listLoad(key, false, function(err, list) {
+				// list loaded, proceed
+				if (err) {
+					self._listUnlock(key);
+					callback(err);
+					return;
+				}
+				var page_idx = list.first_page;
+				var item_idx = 0;
+				
+				async.whilst(
+					function() { return page_idx <= list.last_page; },
+					function(callback) {
+						// load each page
+						var page_key = key + '/' + page_idx;
+						
+						self._listLoadPage(key, page_idx++, false, function(err, page) {
+							if (err) return callback(err);
+							
+							// call iterator for page items
+							if (page && page.items && page.items.length) {
+								iterator(page.items, function(err, updated) {
+									if (!err && updated) self.put( page_key, page, callback );
+									else callback(err);
+								});
+							}
+							else callback();
+						} ); // page loaded
+					},
+					function(err) {
+						// all pages iterated
+						self._listUnlock(key);
+						callback( err || null );
+					} // pages complete
+				); // whilst
+			} ); // loaded
+		} ); // _listLock
+	},
+	
 	listInsertSorted: function(key, insert_item, comparator, callback) {
 		// insert item into list while keeping it sorted
 		var self = this;

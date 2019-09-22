@@ -1,12 +1,12 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
+This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), [Redis](https://redis.io/), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
 
 ## Features at a Glance
 
 * Uses very little memory in most cases.
 * Store JSON or binary (raw) data records.
-* Supports multiple back-ends including Amazon S3, Couchbase and local filesystem.
+* Supports multiple back-ends including Amazon S3, Couchbase, Redis, and local filesystem.
 * Linked lists with very fast push, pop, shift, unshift, and random reads/writes.
 * Hash tables with key iterators, and very fast reads / writes.
 * Advisory locking system with shared and exclusive locks.
@@ -47,11 +47,14 @@ Here is the table of contents for this current document:
 		+ [Key Namespaces](#key-namespaces)
 		+ [Raw File Paths](#raw-file-paths)
 		+ [Key Template](#key-template)
+		+ [Filesystem Cache](#filesystem-cache)
 	* [Amazon S3](#amazon-s3)
 		+ [S3 File Extensions](#s3-file-extensions)
 		+ [S3 Key Prefix](#s3-key-prefix)
 		+ [S3 Key Template](#s3-key-template)
+		+ [S3 Cache](#s3-cache)
 	* [Couchbase](#couchbase)
+	* [Redis](#redis)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)
 	* [Storing Records](#storing-records)
@@ -253,7 +256,7 @@ The `debug` property is only used when using [Standalone Mode](#standalone-mode)
 
 # Engines
 
-The storage system can be backed by a number of different "engines", which actually perform the reads and writes.  A simple local filesystem implementation is included, as well as modules for Amazon S3 and Couchbase.  Each one requires a bit of extra configuration.
+The storage system can be backed by a number of different "engines", which actually perform the reads and writes.  A simple local filesystem implementation is included, as well as modules for Amazon S3, Couchbase and Redis.  Each one requires a bit of extra configuration.
 
 ## Local Filesystem
 
@@ -551,6 +554,33 @@ The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
 
 Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to supply both a `username` and `password` for a valid user created in the Couchbase UI.  Prior to v5+ you could omit the `username` and only specify a `password`, or no password at all if your bucket has no authentication.
+
+## Redis
+
+If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [redis](https://www.npmjs.com/package/redis) module into your app:
+
+```
+npm install redis
+```
+
+Then configure your storage thusly:
+
+```javascript
+{
+	"engine": "Redis",
+	"Redis": {
+		"host": "127.0.0.1",
+		"port": 6379,
+		"keyPrefix": ""
+	}
+}
+```
+
+Set the `host` and `port` for your own Redis server setup.  Please see [Redis Options Properties](https://github.com/NodeRedis/node_redis#options-object-properties) for other things you can include here, such as authentication and database selection.
+
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
+
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
 
 # Key Normalization
 

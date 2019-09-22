@@ -508,6 +508,8 @@ module.exports = Class.create({
 			'listDelete', 
 			'listCopy', 
 			'listRename', 
+			'listEachUpdate',
+			'listEachPageUpdate',
 			'hashCreate', 
 			'hashPut', 
 			'hashPutMulti', 

@@ -292,6 +292,105 @@ module.exports = {
 			} );
 		},
 		
+		function listEach(test) {
+			// iterate over list items using listEach
+			var num_items = 0;
+			this.storage.listEach( 'list2',
+				function(item, idx, callback) {
+					test.ok( !!item, "Got item" );
+					test.ok( item.number == idx, "Item has correct number property" );
+					num_items++;
+					callback();
+				},
+				function(err) {
+					test.ok( !err, "No error iterating list: " + err );
+					test.ok( num_items == 11, "Iterated 11 items: " + num_items );
+					test.done();
+				}
+			);
+		},
+		
+		function listEachPage(test) {
+			// iterate over list pages
+			var num_pages = 0;
+			this.storage.listEachPage( 'list2',
+				function(items, callback) {
+					test.ok( !!items, "Got items from page" );
+					test.ok( !!items.length, "Nonzero items from page" );
+					num_pages++;
+					callback();
+				},
+				function(err) {
+					test.ok( !err, "No error iterating list: " + err );
+					test.ok( num_pages == 2, "Iterated 2 pages: " + num_pages );
+					test.done();
+				}
+			);
+		},
+		
+		function listEachUpdate(test) {
+			// update some items
+			var self = this;
+			
+			this.storage.listEachUpdate( 'list2',
+				function(item, idx, callback) {
+					if (idx % 2 == 1) {
+						item.odd = true;
+						callback(null, true);
+					}
+					else callback();
+				},
+				function(err) {
+					test.ok( !err, "No error iterating list: " + err );
+					
+					self.storage.listGet( 'list2', 0, 0, function(err, items) {
+						test.ok( !err, "No error fetching list2: " + err );
+						test.ok( !!items, "Items is true" );
+						test.ok( items.length == 11, "List has 11 items: " + items.length );
+						
+						for (var idx = 0, len = items.length; idx < len; idx++) {
+							var item = items[idx];
+							if (idx % 2 == 1) test.ok( !!item.odd, "Odd item is now odd" );
+							else test.ok( !item.odd, "Even item is not odd" );
+						}
+						
+						test.done();
+					} );
+				}
+			);
+		},
+		
+		function listEachPageUpdate(test) {
+			// update some items, a page at a time
+			var self = this;
+			
+			this.storage.listEachPageUpdate( 'list2',
+				function(items, callback) {
+					items.forEach( function(item) {
+						if (!item.odd) item.even = true;
+					} );
+					callback(null, true);
+				},
+				function(err) {
+					test.ok( !err, "No error iterating list: " + err );
+					
+					self.storage.listGet( 'list2', 0, 0, function(err, items) {
+						test.ok( !err, "No error fetching list2: " + err );
+						test.ok( !!items, "Items is true" );
+						test.ok( items.length == 11, "List has 11 items: " + items.length );
+						
+						for (var idx = 0, len = items.length; idx < len; idx++) {
+							var item = items[idx];
+							if (idx % 2 == 0) test.ok( !!item.even, "Even item is now even" );
+							else test.ok( !item.even, "Odd item is not even" );
+						}
+						
+						test.done();
+					} );
+				}
+			);
+		},
+		
 		function listPop2(test) {
 			test.expect(3);
 			this.storage.listPop( 'list2', function(err, item) {
