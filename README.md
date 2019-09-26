@@ -578,7 +578,7 @@ Then configure your storage thusly:
 
 Set the `host` and `port` for your own Redis server setup.  Please see [Redis Options Properties](https://github.com/NodeRedis/node_redis#options-object-properties) for other things you can include here, such as authentication and database selection.
 
-The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared bucket situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
 
