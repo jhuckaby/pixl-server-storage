@@ -43,6 +43,7 @@ var TransStorageFunctions = {
 		// get current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) return callback( new Error("The transaction has completed.  This instance can no longer be used.") );
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		// binary keys not part of transaction system
 		if (this.isBinaryKey(key)) return this.rawStorage.put(key, value, callback);
@@ -55,33 +56,17 @@ var TransStorageFunctions = {
 		// flag key as written
 		trans.keys[key] = 'W';
 		
-		// write to local dir
-		var file = this.getFilePath(key);
+		// store in memory during transaction
+		trans.values[key] = {
+			mod: Tools.timeNow(true),
+			len: Buffer.byteLength(value, 'utf8'),
+			data: JSON.parse( value )
+		};
 		
-		var temp_file = file + '.tmp.' + this.tempFileCounter;
-		this.tempFileCounter = (this.tempFileCounter + 1) % 10000000;
-		
-		// write temp file (atomic mode)
-		fs.writeFile( temp_file, value, function (err) {
-			if (err) {
-				// failed to write file
-				var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
-				return callback( new Error(msg), null );
-			}
-			
-			// rename temp file to final
-			fs.rename( temp_file, file, function (err) {
-				if (err) {
-					// failed to write file
-					var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
-					return callback( new Error(msg), null );
-				}
-				
-				// all done
-				self.logDebug(9, "Store operation complete: " + key);
-				callback(null, null);
-			} ); // rename
-		} ); // write
+		setImmediate( function() {
+			self.logDebug(9, "Store operation complete (in transaction): " + key);
+			callback( null, null );
+		} );
 	},
 	
 	head: function(key, callback) {
@@ -92,6 +77,7 @@ var TransStorageFunctions = {
 		// get current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) return callback( new Error("The transaction has completed.  This instance can no longer be used.") );
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		// binary keys not part of transaction system
 		if (this.isBinaryKey(key)) return this.rawStorage.head(key, callback);
@@ -101,29 +87,14 @@ var TransStorageFunctions = {
 		
 		if (trans.keys[key] == 'W') {
 			// we've written the key, so fetch our version
-			var file = this.getFilePath(key);
-			
 			this.logDebug(9, "Pinging Object from transaction: " + key);
 			
-			fs.stat(file, function(err, stats) {
-				if (err) {
-					if (err.message.match(/ENOENT/)) {
-						err.message = "File not found";
-						err.code = "NoSuchKey";
-					}
-					else {
-						// log fs errors that aren't simple missing files (i.e. I/O errors)
-						self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err.message);
-					}
-					
-					err.message = "Failed to fetch key: " + key + ": " + err.message;
-					return callback( err, null );
-				}
-				
+			setImmediate( function() {
 				self.logDebug(9, "Head complete: " + key);
+				var value = trans.values[key];
 				callback( null, {
-					mod: Math.floor(stats.mtime.getTime() / 1000),
-					len: stats.size
+					mod: value.mod,
+					len: value.len
 				} );
 			} );
 		}
@@ -147,6 +118,7 @@ var TransStorageFunctions = {
 		// get current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) return callback( new Error("The transaction has completed.  This instance can no longer be used.") );
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		// binary keys not part of transaction system
 		if (this.isBinaryKey(key)) return this.rawStorage.get(key, callback);
@@ -156,34 +128,12 @@ var TransStorageFunctions = {
 		
 		if (trans.keys[key] == 'W') {
 			// we've written the key, so fetch our version
-			var file = this.getFilePath(key);
+			this.logDebug(9, "Fetching Object in transaction: " + key);
 			
-			this.logDebug(9, "Fetching Object in transaction: " + key, file);
-			
-			fs.readFile(file, { encoding: 'utf8' }, function (err, data) {
-				if (err) {
-					if (err.message.match(/ENOENT/)) {
-						err.message = "File not found";
-						err.code = "NoSuchKey";
-					}
-					else {
-						// log fs errors that aren't simple missing files (i.e. I/O errors)
-						self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err.message);
-					}
-					
-					err.message = "Failed to fetch key: " + key + ": " + err.message;
-					return callback( err, null );
-				}
-				
-				try { data = JSON.parse( data ); }
-				catch (e) {
-					self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
-					callback( e, null );
-					return;
-				}
+			setImmediate( function() {
+				var data = trans.values[key].data;
 				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
-				
-				callback( null, data );
+				callback( err, Tools.copyHash(data, true) );
 			} );
 		}
 		else if (trans.keys[key] == 'D') {
@@ -206,6 +156,7 @@ var TransStorageFunctions = {
 		// get current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) return callback( new Error("The transaction has completed.  This instance can no longer be used.") );
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		// binary keys not part of transaction system
 		if (this.isBinaryKey(key)) return this.rawStorage.delete(key, callback);
@@ -225,27 +176,15 @@ var TransStorageFunctions = {
 			return;
 		}
 		
-		// flag key as deleted
-		trans.keys[key] = 'D';
-		
-		// delete file from local dir
-		var file = this.getFilePath(key);
-		
 		this.logDebug(9, "Deleting Object from transaction: " + key);
 		
-		fs.unlink(file, function(err) {
-			if (err) {
-				if (err.message.match(/ENOENT/)) {
-					err.message = "File not found";
-					err.code = "NoSuchKey";
-				}
-				self.logError('file', "Failed to delete object: " + key + ": " + err.message);
-			}
-			else {
-				self.logDebug(9, "Delete complete: " + key);
-			} // success
-			
-			if (callback) callback(err);
+		// flag key as deleted
+		trans.keys[key] = 'D';
+		delete trans.values[key];
+		
+		setImmediate( function() {
+			self.logDebug(9, "Delete complete: " + key);
+			if (callback) callback(null, null);
 		} );
 	},
 	
@@ -253,6 +192,7 @@ var TransStorageFunctions = {
 		// enqueue task for execution AFTER commit
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) throw new Error("The transaction has completed.  This instance can no longer be used.");
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		trans.queue.push( task );
 	},
@@ -261,6 +201,7 @@ var TransStorageFunctions = {
 		// abort current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) throw new Error("The transaction has completed.  This instance can no longer be used.");
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		this.rawStorage.abortTransaction( this.currentTransactionPath, callback );
 	},
@@ -269,6 +210,7 @@ var TransStorageFunctions = {
 		// commit current transaction
 		var trans = this.transactions[ this.currentTransactionPath ];
 		if (!trans) throw new Error("The transaction has completed.  This instance can no longer be used.");
+		if (trans.aborting) return callback( new Error("The transaction is being aborted.  This instance can no longer be used.") );
 		
 		this.rawStorage.commitTransaction( this.currentTransactionPath, callback );
 	}
@@ -323,6 +265,9 @@ module.exports = Class.create({
 		
 		// keep in-memory hash of active transactions
 		this.transactions = {};
+		
+		// transaction IDs are sequence numbers starting from 1
+		this.nextTransID = 1;
 		
 		// create temp trans dirs
 		this.transDir = 'transactions';
@@ -384,6 +329,11 @@ module.exports = Class.create({
 			self.logDebug(1, "Beginning database recovery, see " + recovery_log_path + " for details");
 			self.logger.path = recovery_log_path;
 			self.logDebug(1, "Beginning database recovery");
+			
+			// sort logs by their IDs descending, so we roll back transactions in reverse order
+			files.sort( function(a, b) {
+				return parseInt(b) - parseInt(a);
+			});
 			
 			// damn, unclean shutdown, iterate over recovery logs
 			async.eachSeries( files,
@@ -590,7 +540,7 @@ module.exports = Class.create({
 		
 		this._transLock(path, true, function() {
 			// got lock for transaction
-			var id = Tools.digestHex(path, 'md5');
+			var id = '' + Math.floor(self.nextTransID++);
 			var log_file = Path.join( self.transDir, "logs", id + '.log' );
 			var trans = { id: id, path: path, log: log_file, date: Tools.timeNow(), pid: process.pid };
 			
@@ -598,6 +548,7 @@ module.exports = Class.create({
 			
 			// transaction is ready to begin
 			trans.keys = {};
+			trans.values = {};
 			trans.queue = [];
 			self.transactions[path] = trans;
 			
@@ -687,6 +638,8 @@ module.exports = Class.create({
 				}
 				
 				// delete transaction log
+				self.logDebug(9, "Deleting transaction log: " + trans.log);
+				
 				fs.unlink( trans.log, function(err) {
 					if (err && !err.message.match(/ENOENT/)) {
 						self.logError('rollback', "Unable to delete rollback log: " + trans.log + ": " + err);
@@ -713,6 +666,7 @@ module.exports = Class.create({
 							self.unlock( 'C|'+path );
 							self._transUnlock(path);
 							self.transactions[path].keys = {}; // release memory
+							self.transactions[path].values = {}; // release memory
 							self.transactions[path].queue = []; // release memory
 							delete self.transactions[path];
 							
@@ -748,6 +702,7 @@ module.exports = Class.create({
 			
 			// transaction is complete
 			trans.keys = {}; // release memory
+			trans.values = {}; // release memory
 			delete this.transactions[path];
 			
 			this._transUnlock(path);
@@ -763,6 +718,7 @@ module.exports = Class.create({
 		}
 		
 		// start commit and track perf
+		var num_bytes = 0;
 		var pf = this.perf.begin('commit');
 		
 		async.waterfall(
@@ -778,7 +734,7 @@ module.exports = Class.create({
 				function(fh, callback) {
 					// store file handle, write file header
 					trans.fh = fh;
-					var header = Tools.copyHashRemoveKeys(trans, { keys: 1, queue: 1, fh: 1, committing: 1 });
+					var header = Tools.copyHashRemoveKeys(trans, { keys: 1, values: 1, queue: 1, fh: 1, committing: 1 });
 					fs.write( fh, JSON.stringify(header) + "\n", callback );
 				},
 				function(num_bytes, buf, callback) {
@@ -821,32 +777,10 @@ module.exports = Class.create({
 						function(record_state, key, callback) {
 							if (record_state == 'W') {
 								// overwrite record with our transaction's state
-								var key_id = Tools.digestHex( key, 'md5' );
-								var file = Path.join( self.transDir, "data", trans.id + '-' + key_id + '.json' );
-								var is_cached = (self.cacheKeyRegex && key.match(self.cacheKeyRegex));
-								
-								// engine may override this for speed (i.e. Filesystem Engine)
-								if (("commitTempFile" in self.engine) && !is_cached) {
-									self.commitTempFile(key, file, callback);
-								}
-								else {
-									// we gotta do it the hard way (probably S3 or Couchbase)
-									fs.readFile(file, { encoding: 'utf8' }, function (err, data) {
-										if (err) return callback(err);
-										
-										try { data = JSON.parse( data ); }
-										catch (err) { return callback(err); }
-										
-										// save data
-										self.put( key, data, function(err) {
-											if (err) return callback(err);
-											
-											// delete temp file
-											fs.unlink( file, callback );
-										} );
-									} ); // fs.readFile
-								} // no engine commit
-							} // state 'W'
+								var value = trans.values[key];
+								num_bytes += value.len;
+								self.put( key, value.data, callback );
+							}
 							else if (record_state == 'D') {
 								self.delete(key, function(err) {
 									if (err) {
@@ -865,23 +799,6 @@ module.exports = Class.create({
 						},
 						callback
 					); // forEachOfLimit
-				},
-				function(callback) {
-					// We must fsync the data directory as well, to ensure all file renames were flushed
-					// As per: http://stackoverflow.com/questions/3764822/how-to-durably-rename-a-file-in-posix
-					// Note: This probably only has a net effect on ext3/ext4 filesystems
-					fs.open( Path.join(self.transDir, "data"), "r", function(err, dh) {
-						if (err) return callback(err);
-						
-						fs.fsync(dh, function(err) {
-							// ignoring error here, as some filesystems may not allow this
-							fs.close(dh, callback);
-						});
-					} );
-				},
-				function(callback) {
-					// cleanup, delete rollback log
-					fs.unlink( trans.log, callback );
 				}
 			],
 			function(err) {
@@ -898,24 +815,62 @@ module.exports = Class.create({
 				self.logTransaction('commit', path, {
 					id: trans.id,
 					elapsed_ms: elapsed,
-					actions: num_actions
+					actions: num_actions,
+					bytes_written: num_bytes
 				});
 				
 				// transaction is complete
-				trans.keys = {}; // release memory
+				delete trans.values; // release memory
 				delete self.transactions[path];
-				
-				self.unlock( 'C|'+path );
-				self._transUnlock(path);
-				callback();
 				
 				// enqueue any pending tasks that got added during the transaction
 				if (trans.queue.length) {
 					trans.queue.forEach( self.enqueue.bind(self) );
 					trans.queue = []; // release memory
 				}
+				
+				// engine may need to sync data records separately (i.e. fsync)
+				// do this after releasing transaction lock, but hold log delete until after
+				if (self.engine.sync) {
+					self.enqueue( function(task, callback) {
+						self.transPostSync( trans, callback );
+					} );
+				}
+				else {
+					// no sync needed for engine, just delete rollback log
+					self.logDebug(9, "No sync needed, deleting transaction log: " + trans.log);
+					fs.unlink( trans.log, function() {} );
+					delete trans.keys; // release memory
+				}
+				
+				self.unlock( 'C|'+path );
+				self._transUnlock(path);
+				callback();
 			}
 		); // waterfall
+	},
+	
+	transPostSync: function(trans, callback) {
+		// call sync after commit completes
+		var self = this;
+		var wrote_keys = Object.keys(trans.keys).filter( function(key) {
+			return trans.keys[key] == 'W';
+		});
+		delete trans.keys; // release memory
+		
+		async.eachLimit( wrote_keys, self.concurrency,
+			function(key, callback) {
+				self.engine.sync( key, function() {
+					// ignore error here, as key may be deleted
+					callback();
+				});
+			},
+			function(err) {
+				// finally we can safely delete the transaction log
+				self.logDebug(9, "All " + wrote_keys.length + " syncs complete, deleting transaction log: " + trans.log);
+				fs.unlink( trans.log, callback );
+			}
+		); // forEachOfLimit
 	},
 	
 	transFatalError: function(err) {
