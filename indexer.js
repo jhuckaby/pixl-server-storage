@@ -135,7 +135,7 @@ module.exports = Class.create({
 		var fields = [];
 		
 		config.fields.forEach( function(def) {
-			var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.substitute(def.source, record, true);
+			var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.sub(def.source, record, true);
 			if ((value === null) && ("default_value" in def)) value = def.default_value;
 			if (value !== null) fields.push(def);
 		} );
@@ -183,7 +183,7 @@ module.exports = Class.create({
 							return;
 						}
 						
-						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.substitute(def.source, record, true);
+						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.sub(def.source, record, true);
 						if ((value === null) && ("default_value" in def)) value = def.default_value;
 						
 						var words = self.getWordList( ''+value, def, config );
@@ -967,6 +967,10 @@ module.exports = Class.create({
 				if (def.use_stemmer) word = stemmer(word);
 				words.push( word );
 			}
+		}
+		
+		if (def.max_words && (words.length > def.max_words)) {
+			words.splice( def.max_words );
 		}
 		
 		return words;
