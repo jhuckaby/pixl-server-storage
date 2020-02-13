@@ -269,6 +269,23 @@ var fixtures = {
 		'(title =~ "preproduction" && status = "open)': false, // missing close quote
 		'(title =~ "preproduction" && status = "open"))': false, // double close paren
 		'(title =~ "preproduction" && (status = "open")': false // missing close paren
+	},
+	searchRecordsMultiDate: {
+		'modified:2016-03-03': { "2665": 1 },
+		'modified:2016-03-04': { "2665": 1 },
+		'modified:2016-03-05': { "2665": 1 },
+		
+		'modified:>=2016-03-03': { "2661": 1, "2665": 1 },
+		'modified:>=2016-03-04': { "2661": 1, "2665": 1 },
+		'modified:>=2016-03-05': { "2661": 1, "2665": 1 },
+		'modified:>=2016-03-06': { "2661": 1 },
+		
+		'modified:2016-03-03..2016-03-05': { "2665": 1 },
+		'modified:2016-03-02..2016-03-03': { "2665": 1 },
+		'modified:2016-03-05..2016-03-06': { "2665": 1 },
+		'modified:2016-03-02..2016-03-06': { "2665": 1 },
+		'modified:2016-03-01..2016-03-02': {},
+		'modified:2016-03-06..2016-03-07': {}
 	}
 };
 
@@ -706,7 +723,7 @@ module.exports = {
 			
 			var map = {};
 			for (var cat in fixtures) {
-				Tools.mergeHashInto( map, fixtures[cat] );
+				if (cat != 'searchRecordsMultiDate') Tools.mergeHashInto( map, fixtures[cat] );
 			}
 			
 			for (var query in map) {
@@ -785,6 +802,26 @@ module.exports = {
 					test.done();
 				}); // sortRecords
 			}); // searchRecords
+		},
+		
+		function testMultiDate(test) {
+			var self = this;
+			var map = fixtures.searchRecordsMultiDate;
+			
+			// Note: this is a sparse update, missing some fields and sorters
+			var update = {
+				ID: "2665",
+				// "Modifydate": "1457051382 1457137782 1457224182",
+				"Modifydate": "2016/03/03, 2016/03/04, 2016/03/05",
+			};
+			
+			this.storage.indexRecord( update.ID, update, index_config, function(err) {
+				test.ok( !err, "No error updating record: " + err );
+				
+				self.multiIndexSearch(map, index_config, test, function() {
+					test.done();
+				});
+			} );
 		},
 		
 		function unindexAllRecords(test) {
