@@ -516,123 +516,42 @@ module.exports = Class.create({
 		} ); // unlink
 	},
 	
-	commitTempFile: function(key, temp_file, callback) {
-		// quickly rename temp file over record, given key
-		// this is used by the transaction system for commits
-		// this will ONLY be called for JSON records (binary records skip the transaction system entirely)
+	sync: function(key, callback) {
+		// sync data to disk for given key (i.e. fsync)
 		var self = this;
+		if (this.config.get('no_fsync')) return process.nextTick( callback );
 		
-		this.logDebug(9, "Storing record data from temp file: " + key + ": " + temp_file);
+		var file = this.getFilePath(key);
+		this.logDebug(9, "Synchronizing Object: " + key, file);
 		
-		if (this.config.get('nfs')) {
-			// in NFS mode, we cannot do the rename trick, so we have to use putStream()
-			var inp = fs.createReadStream( temp_file );
-			
-			inp.on('error', function(err) {
-				var msg = "Failed to read temp file: " + key + ": " + temp_file + ": " + err.message;
+		// fsync new file to make sure it is really written to disk
+		fs.open( file, "r", function(err, fh) {
+			if (err) {
+				var msg = "Failed to open file: " + key + ": " + file + ": " + err.message;
 				self.logError('file', msg);
 				return callback( new Error(msg) );
-			});
+			}
 			
-			this.putStream( key, inp, function(err) {
+			fs.fsync(fh, function(err) {
 				if (err) {
-					var msg = "Failed to write stream: " + key + ": " + temp_file + ": " + err.message;
+					var msg = "Failed to fsync file: " + key + ": " + file + ": " + err.message;
 					self.logError('file', msg);
 					return callback( new Error(msg) );
 				}
 				
-				fs.unlink( temp_file, function(err) {
+				fs.close(fh, function(err) {
 					if (err) {
-						var msg = "Failed to unlink file: " + key + ": " + temp_file + ": " + err.message;
+						var msg = "Failed to close file: " + key + ": " + file + ": " + err.message;
 						self.logError('file', msg);
 						return callback( new Error(msg) );
 					}
 					
 					// all done
-					self.logDebug(9, "Store operation complete: " + key);
+					self.logDebug(9, "Sync operation complete: " + key);
 					callback();
-				} ); // unlink
-			} ); // putStream
-			
-			return;
-		} // NFS mode
-		
-		var file = this.getFilePath(key);
-		var dir = path.dirname( file );
-		
-		// make sure parent dirs exist, async
-		this._makeDirs( dir, 0o0775, function(err) {
-			if (err) {
-				// failed to create directory
-				var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
-				self.logError('file', msg);
-				return callback( new Error(msg) );
-			}
-			
-			// rename temp file to final
-			self._renameFile( temp_file, file, function (err) {
-				if (err) {
-					// failed to rename file
-					if ((err.code == 'EXDEV') && !self.cache) {
-						// cross-device rename attempted, switch to NFS mode and recurse
-						self.logDebug(2, "Cross-device rename detected in commitTempFile, switching to NFS mode");
-						self.config.set('nfs', true);
-						return self.commitTempFile(key, temp_file, callback);
-					}
-					else {
-						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
-						self.logError('file', msg);
-						return callback( new Error(msg) );
-					}
-				}
-				
-				// fsync new file to make sure it is really written to disk
-				fs.open( file, "r", function(err, fh) {
-					if (err) {
-						var msg = "Failed to open file: " + key + ": " + file + ": " + err.message;
-						self.logError('file', msg);
-						return callback( new Error(msg) );
-					}
-					
-					fs.fsync(fh, function(err) {
-						if (err) {
-							var msg = "Failed to fsync file: " + key + ": " + file + ": " + err.message;
-							self.logError('file', msg);
-							return callback( new Error(msg) );
-						}
-						
-						var finish = function() {
-							fs.close(fh, function(err) {
-								if (err) {
-									var msg = "Failed to close file: " + key + ": " + file + ": " + err.message;
-									self.logError('file', msg);
-									return callback( new Error(msg) );
-								}
-								
-								// all done
-								self.logDebug(9, "Store operation complete: " + key);
-								callback();
-							}); // fs.close
-						}; // finish
-						
-						if (self.cache) {
-							// LRU cache is enabled, so load file contents to store in cache
-							fs.readFile( fh, { encoding: 'utf8' }, function (err, data) {
-								if (err) {
-									var msg = "Failed to read file: " + key + ": " + file + ": " + err.message;
-									self.logError('file', msg);
-									return callback( new Error(msg) );
-								}
-								
-								self.cache.set( key, data, { date: Tools.timeNow(true) } );
-								finish();
-							}); // fs.readFile
-						}
-						else finish();
-					}); // fs.fsync
-				} ); // fs.open
-			} ); // rename
-		} ); // mkdirp
+				}); // fs.close
+			}); // fs.fsync
+		}); // fs.open
 	},
 	
 	runMaintenance: function(callback) {
