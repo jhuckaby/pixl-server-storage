@@ -244,30 +244,6 @@ module.exports = Class.create({
 		);
 	},
 	
-	commitTempFile: function(key, temp_file, callback) {
-		// Internal API: quickly rename temp file over record, given key
-		// this is used by the transaction system for commits
-		var self = this;
-		
-		if (!("commitTempFile" in self.engine)) {
-			return callback(new Error("Engine does not support commitTempFile."));
-		}
-		
-		// invoke engine and track perf
-		var pf = this.perf.begin('put');
-		
-		this.engine.commitTempFile(key, temp_file, function(err) {
-			// put complete
-			var elapsed = pf.end();
-			
-			if (!err) self.logTransaction('put', key, {
-				elapsed_ms: elapsed
-			});
-			
-			callback(err);
-		} );
-	},
-	
 	head: function(key, callback) {
 		// fetch metadata given key: { mod, len }
 		var self = this;
