@@ -36,24 +36,27 @@ module.exports = Class.create({
 	
 	prepIndex_date: function(words, def, state) {
 		// prep index write for date type
-		var date = words[0] || '';
-		words = [];
-		
 		// dates always require a master_list (summary)
 		def.master_list = 1;
 		
-		if (date.match(/^(\d{4})_(\d{2})_(\d{2})$/)) {
-			var yyyy = RegExp.$1;
-			var mm = RegExp.$2;
-			var dd = RegExp.$3;
-			
-			words.push( yyyy + '_' + mm + '_' + dd );
-			words.push( yyyy + '_' + mm );
-			words.push( yyyy );
-			
-			return words;
-		}
-		else return false;
+		// if (!words || !words.length) return false;
+		var unique_words = {};
+		var good = false;
+		
+		words.forEach( function(date) {
+			if (date.match(/^(\d{4})_(\d{2})_(\d{2})$/)) {
+				var yyyy = RegExp.$1;
+				var mm = RegExp.$2;
+				var dd = RegExp.$3;
+				
+				unique_words[ yyyy + '_' + mm + '_' + dd ] = 1;
+				unique_words[ yyyy + '_' + mm ] = 1;
+				unique_words[ yyyy ] = 1;
+				good = true;
+			}
+		});
+		
+		return Tools.hashKeysToArray(unique_words);
 	},
 	
 	prepDeleteIndex_date: function(words, def, state) {
@@ -63,51 +66,56 @@ module.exports = Class.create({
 		def.master_list = 1;
 	},
 	
-	filterWords_date: function(value) {
+	filterWords_date: function(orig_value) {
 		// filter date queries
-		value = value.trim();
-		
-		// MM/DD/YYYY --> YYYY_MM_DD
-		if (value.match(/^(\d{2})\D+(\d{2})\D+(\d{4})$/)) {
-			value = RegExp.$3 + '_' + RegExp.$1 + '_' + RegExp.$2;
-		}
-		
-		// special search month/year formats
-		else if (value.match(/^(\d{4})\D+(\d{2})$/)) { value = RegExp.$1 + '_' + RegExp.$2; }
-		else if (value.match(/^(\d{4})$/)) { value = RegExp.$1; }
-		
-		// special search keywords
-		else if (value.match(/^(today|now)$/i)) {
-			var dargs = Tools.getDateArgs( Tools.timeNow(true) );
-			value = dargs.yyyy_mm_dd;
-		}
-		else if (value.match(/^(yesterday)$/i)) {
-			var midnight = Tools.normalizeTime( Tools.timeNow(true), { hour:0, min:0, sec:0 } );
-			var yesterday_noonish = midnight - 43200;
-			var dargs = Tools.getDateArgs( yesterday_noonish );
-			value = dargs.yyyy_mm_dd;
-		}
-		else if (value.match(/^(this\s+month)$/i)) {
-			var dargs = Tools.getDateArgs( Tools.timeNow(true) );
-			value = dargs.yyyy + '_' + dargs.mm;
-		}
-		else if (value.match(/^(this\s+year)$/i)) {
-			var dargs = Tools.getDateArgs( Tools.timeNow(true) );
-			value = dargs.yyyy;
-		}
-		else if (value.match(/^\d+(\.\d+)?$/)) {
-			// convert epoch date (local server timezone)
-			var dargs = Tools.getDateArgs( parseInt(value) );
-			value = dargs.yyyy_mm_dd;
-		}
-		else if (!value.match(/^(\d{4})\D+(\d{2})\D+(\d{2})$/)) {
-			// try to convert using node date (local timezone)
-			var dargs = Tools.getDateArgs( value + " 00:00:00" );
-			value = dargs.epoch ? dargs.yyyy_mm_dd : '';
-		}
-		
-		value = value.replace(/\D+/g, '_');
-		return value;
+		return orig_value.trim().replace(/\,/g, ' ').split(/\s+/).map( function(value) {
+			if (!value.match(/\S/)) return '';
+			
+			// MM/DD/YYYY --> YYYY_MM_DD
+			// FUTURE: This is a very US-centric format assumption here
+			if (value.match(/^(\d{2})\D+(\d{2})\D+(\d{4})$/)) {
+				value = RegExp.$3 + '_' + RegExp.$1 + '_' + RegExp.$2;
+			}
+			
+			// special search month/year formats
+			else if (value.match(/^(\d{4})\D+(\d{2})$/)) { value = RegExp.$1 + '_' + RegExp.$2; }
+			else if (value.match(/^(\d{4})$/)) { value = RegExp.$1; }
+			
+			// special search keywords
+			else if (value.match(/^(today|now)$/i)) {
+				var dargs = Tools.getDateArgs( Tools.timeNow(true) );
+				value = dargs.yyyy_mm_dd;
+			}
+			else if (value.match(/^(yesterday)$/i)) {
+				var midnight = Tools.normalizeTime( Tools.timeNow(true), { hour:0, min:0, sec:0 } );
+				var yesterday_noonish = midnight - 43200;
+				var dargs = Tools.getDateArgs( yesterday_noonish );
+				value = dargs.yyyy_mm_dd;
+			}
+			else if (value.match(/^(this\s+month)$/i)) {
+				var dargs = Tools.getDateArgs( Tools.timeNow(true) );
+				value = dargs.yyyy + '_' + dargs.mm;
+			}
+			else if (value.match(/^(this\s+year)$/i)) {
+				var dargs = Tools.getDateArgs( Tools.timeNow(true) );
+				value = dargs.yyyy;
+			}
+			else if (value.match(/^\d+(\.\d+)?$/)) {
+				// convert epoch date (local server timezone)
+				var epoch = parseInt(value);
+				if (!epoch) return '';
+				var dargs = Tools.getDateArgs( epoch );
+				value = dargs.yyyy_mm_dd;
+			}
+			else if (!value.match(/^(\d{4})\D+(\d{2})\D+(\d{2})$/)) {
+				// try to convert using node date (local timezone)
+				var dargs = Tools.getDateArgs( value + " 00:00:00" );
+				value = dargs.epoch ? dargs.yyyy_mm_dd : '';
+			}
+			
+			value = value.replace(/\D+/g, '_');
+			return value;
+		} ).join(' ').replace(/\s+/g, ' ').trim();
 	},
 	
 	searchIndex_date: function(query, state, callback) {
