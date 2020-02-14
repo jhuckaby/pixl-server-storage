@@ -130,6 +130,7 @@ Here is the full list of available properties for each index definition:
 | `source` | String | A virtual path specifying the location of the text value inside your record data (see [Source Paths](#source-paths)). |
 | `min_word_length` | Number | Optionally set a minimum word length (shorter words are skipped).  Highly recommended for [Full Text Indexes](#full-text-indexes).  Defaults to `1`. |
 | `max_word_length` | Number | Optionally set a maximum word length (longer words are skipped).  Highly recommended for [Full Text Indexes](#full-text-indexes).  Defaults to `255`. |
+| `max_words` | Number | Optionally set a maximum number of words to index per record.  If the source has additional words beyond the max they will be ignored. |
 | `use_remove_words` | Boolean | Optionally use a remove word list for common words.  Highly recommended for [Full Text Indexes](#full-text-indexes).  See [Remove Words](#remove-words).  Defaults to `false` (disabled). |
 | `use_stemmer` | Boolean | Optionally use a stemmer to normalize words.  Highly recommended for [Full Text Indexes](#full-text-indexes).  See [Stemming](#stemming).  Defaults to `false` (disabled). |
 | `filter` | String | Optionally filter text with specified method before indexing.  See [Text Filters](#text-filters).  Defaults to disabled. |
@@ -204,6 +205,7 @@ A "full text" index is one that is designed to process multi-line or paragraph t
 		"source": "/BodyText",
 		"min_word_length": 3,
 		"max_word_length": 64,
+		"max_words": 512,
 		"use_remove_words": true,
 		"use_stemmer": true,
 		"filter": "html"
@@ -214,6 +216,8 @@ A "full text" index is one that is designed to process multi-line or paragraph t
 All of these additional properties are designed to help the indexer be more efficient, skip over or otherwise reduce insignificant words.  They are all recommended settings, but you can customize them to your app's specific needs.
 
 Setting a `min_word_length` will skip words that are under the specified number of characters, in this case all single and double character words (which are usually insignificant for searches).  Similarly, the `max_word_length` causes the indexer to skip any words over the specified length, in this case 64 characters (longer words probably won't be searched for).  Note that the same rules apply to search queries as well, so searches that contain skipped words along with real words will still work correctly.
+
+The `max_words` property sets a maximum upper limit of words to be indexed per record for this field.  If the source input text exceeds this limit, the extra words are simply ignored by the indexer.
 
 Setting `use_remove_words` allows the indexer to skip over common words that are typically insignificant for searches, like `the`, `of`, `and`, `that`, and so on.  The same words are removed from search queries, allowing them to work seamlessly.  See [Remove Words](#remove-words) below for more on this.
 
@@ -228,7 +232,7 @@ Text filters provide a way to cleanup specific markup languages, leaving only se
 | `html` | This filter strips all HTML tags, and decodes all HTML entities prior to indexing.  This also works for XML source. |
 | `markdown` | This filter is designed for [Markdown](https://en.wikipedia.org/wiki/Markdown) source text.  It filters out [fenced code blocks](https://help.github.com/articles/creating-and-highlighting-code-blocks/) and also applies the `html` filter as well (you can embed HTML in markdown). |
 
-Note that URLs are always filtered out, as they are notoriously difficult (and rather useless) to index for searching.  See [Text Cleanup](#text-cleanup) below for details.
+Note that URLs are always shortened so that only the hostname is indexed.  Full URLs are notoriously difficult (and rather useless) to index for searching.  See [Text Cleanup](#text-cleanup) below for details.
 
 #### Remove Words
 
@@ -328,6 +332,7 @@ var config = {
 			"source": "/BodyText",
 			"min_word_length": 3,
 			"max_word_length": 64,
+			"max_words": 512,
 			"use_remove_words": true,
 			"use_stemmer": true,
 			"filter": "html"
@@ -405,6 +410,7 @@ You can also provide multiple sources of data to be indexed into a single source
 		"source": "[/Title] [/BodyText]",
 		"min_word_length": 3,
 		"max_word_length": 64,
+		"max_words": 512,
 		"use_remove_words": true,
 		"use_stemmer": true,
 		"filter": "html"
@@ -420,7 +426,7 @@ By default, all text goes through some basic cleanup prior to indexing.  This is
 
 - Unicode characters are down-converted to ASCII equivalents, or stripped off.
 	- See [Unicode Characters](#unicode-characters) below for details.
-- URLs are stripped down to their domains only.
+- URLs are stripped down to their hostnames only.
 	- Word indexers do a very poor job of indexing URLs, and few people actually search for them.
 	- URLs cause quite a bit of indexer churn, because they create a bunch of small "words" that are of low search quality.
 - Single quotes are stripped off.
