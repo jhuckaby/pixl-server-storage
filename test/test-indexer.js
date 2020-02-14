@@ -286,6 +286,32 @@ var fixtures = {
 		'modified:2016-03-02..2016-03-06': { "2665": 1 },
 		'modified:2016-03-01..2016-03-02': {},
 		'modified:2016-03-06..2016-03-07': {}
+	},
+	searchRecordsBadKeys: {
+		'title:control1': { "2665": 1 },
+		'title:control2': { "2665": 1 },
+		'title:control1 control2': { "2665": 1 },
+		'title:"control1 control2"': {},
+		
+		'title:constructor': { "2665": 1 },
+		'title:__defineGetter__': { "2665": 1 }, 
+		'title:__defineSetter__': { "2665": 1 }, 
+		'title:hasOwnProperty': { "2665": 1 }, 
+		'title:__lookupGetter__': { "2665": 1 }, 
+		'title:__lookupSetter__': { "2665": 1 }, 
+		'title:isPrototypeOf': { "2665": 1 }, 
+		'title:propertyIsEnumerable': { "2665": 1 }, 
+		'title:toString': { "2665": 1 }, 
+		'title:valueOf': { "2665": 1 }, 
+		'title:__proto__': { "2665": 1 }, 
+		'title:toLocaleString': { "2665": 1 },
+		
+		'title:"control1 constructor"': { "2665": 1 },
+		'title:"toLocaleString control2"': { "2665": 1 },
+		'title:"toLocaleString constructor"': {},
+		
+		'title:control1 -__proto__': {},
+		'title:toLocaleString -__proto__': {}
 	}
 };
 
@@ -722,9 +748,9 @@ module.exports = {
 			var searches = [];
 			
 			var map = {};
-			for (var cat in fixtures) {
-				if (cat != 'searchRecordsMultiDate') Tools.mergeHashInto( map, fixtures[cat] );
-			}
+			['searchRecordsExact2', 'searchRecordsDateExact', 'searchRecordsDateRangeOpen', 'searchRecordsDateRangeClosed', 'searchRecordsNumberExact', 'searchRecordsNumberRangeOpen', 'searchRecordsNumberRangeClosed', 'searchRecordsAll', 'searchRecordsPxQL'].forEach( function(cat) {
+				Tools.mergeHashInto( map, fixtures[cat] );
+			});
 			
 			for (var query in map) {
 				var expected = map[query];
@@ -822,6 +848,50 @@ module.exports = {
 					test.done();
 				});
 			} );
+		},
+		
+		function testBadPropertyNames(test) {
+			var self = this;
+			var map = fixtures.searchRecordsBadKeys;
+			
+			// Note: this is a sparse update, missing some fields and sorters
+			var update = {
+				ID: "2665",
+				"Summary": "control1, constructor, __defineGetter__, __defineSetter__, hasOwnProperty, __lookupGetter__, __lookupSetter__, isPrototypeOf, propertyIsEnumerable, toString, valueOf, __proto__, toLocaleString, control2"
+			};
+			
+			this.storage.indexRecord( update.ID, update, index_config, function(err) {
+				test.ok( !err, "No error updating record: " + err );
+				
+				self.multiIndexSearch(map, index_config, test, function() {
+					test.done();
+				});
+			} );
+		},
+		
+		function testBadRecordID(test) {
+			// add a record with a toxic ID, make sure it can be indexed and searched
+			var self = this;
+			var bad_ticket = {
+				ID: "constructor",
+				Summary: "hello frogtoad there"
+			};
+			var map = {
+				'title:frogtoad': { "constructor": 1 },
+				'title:"hello frogtoad"': { "constructor": 1 },
+				'title:frogtoad -constructor': { "constructor": 1 }
+			};
+			
+			// push onto sample_tickets so it gets cleaned up in unindexAllRecords
+			sample_tickets.push(bad_ticket);
+			
+			this.storage.indexRecord( bad_ticket.ID, bad_ticket, index_config, function(err) {
+				test.ok( !err, "No error inserting record: " + err );
+				
+				self.multiIndexSearch(map, index_config, test, function() {
+					test.done();
+				});
+			}); // indexRecord
 		},
 		
 		function unindexAllRecords(test) {
