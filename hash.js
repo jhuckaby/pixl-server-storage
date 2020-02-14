@@ -146,6 +146,8 @@ module.exports = Class.create({
 			else {
 				// got page, store at this level
 				var new_key = false;
+				data.items = Tools.copyHashRemoveProto( data.items );
+				
 				if (!(state.hkey in data.items)) {
 					data.length++;
 					state.hash.length++;
@@ -206,6 +208,7 @@ module.exports = Class.create({
 			
 			// rehash keys at new index depth
 			var pages = {};
+			data.items = Tools.copyHashRemoveProto( data.items );
 			
 			for (var hkey in data.items) {
 				var key_digest = Tools.digestHex(hkey, 'md5');
@@ -304,6 +307,8 @@ module.exports = Class.create({
 			}
 			else {
 				// got page, fetch at this level
+				data.items = Tools.copyHashRemoveProto( data.items );
+				
 				if (!(state.hkey in data.items)) {
 					// key not found
 					var err = new Error("Failed to fetch key: " + state.hkey + ": Not found");
@@ -355,6 +360,7 @@ module.exports = Class.create({
 			self._hashEachPage(path + '/data', 
 				function(data, callback) {
 					if ((data.type == 'hash_page') && (data.length > 0)) {
+						data.items = Tools.copyHashRemoveProto( data.items );
 						iterator(data.items, callback);
 					}
 					else callback();
@@ -396,7 +402,7 @@ module.exports = Class.create({
 	hashGetAll: function(path, callback) {
 		// return ALL keys/values as a single, in-memory hash
 		var self = this;
-		var everything = {};
+		var everything = Object.create(null);
 		
 		this._hashShareLock(path, true, function() {
 			// share locked
@@ -404,6 +410,7 @@ module.exports = Class.create({
 				function(page, callback) {
 					// called for each hash page (index or data)
 					if (page.type == 'hash_page') {
+						page.items = Tools.copyHashRemoveProto( page.items );
 						Tools.mergeHashInto( everything, page.items );
 					}
 					callback();
@@ -427,6 +434,7 @@ module.exports = Class.create({
 				function(page, callback) {
 					// called for each hash page (index or data)
 					if (page.type == 'hash_page') {
+						page.items = Tools.copyHashRemoveProto( page.items );
 						async.forEachOfSeries( page.items,
 							function(hvalue, hkey, callback) {
 								// swap places of hkey,hvalue in iterator args because I HATE how async does it
@@ -456,6 +464,7 @@ module.exports = Class.create({
 				function(page, callback) {
 					// called for each hash page (index or data)
 					if (page.type == 'hash_page') {
+						page.items = Tools.copyHashRemoveProto( page.items );
 						for (var hkey in page.items) {
 							if (iterator( hkey, page.items[hkey] ) === false) {
 								// user abort
@@ -629,6 +638,8 @@ module.exports = Class.create({
 			}
 			else {
 				// got page, delete from this level
+				data.items = Tools.copyHashRemoveProto( data.items );
+				
 				if (!(state.hkey in data.items)) {
 					var err = new Error("Failed to delete hash key: " + state.path + ": " + state.hkey + ": Not found");
 					err.code = 'NoSuchKey';
