@@ -67,7 +67,7 @@ module.exports = Class.create({
 		
 		var state = query;
 		state.config = config;
-		state.record_ids = {};
+		state.record_ids = Object.create(null);
 		state.first = true;
 		
 		// first, split criteria into subs (sub-queries), 
@@ -131,10 +131,10 @@ module.exports = Class.create({
 		state.first = false;
 		
 		var cur_items = state.record_ids;
-		var new_items = {};
+		var new_items = Object.create(null);
 		
 		// create "fake" hash index for word, containing only our one record
-		var items = {};
+		var items = Object.create(null);
 		if (idx_data[def.id] && idx_data[def.id].word_hash && idx_data[def.id].word_hash[query.word]) {
 			items[ record_id ] = idx_data[def.id].word_hash[query.word];
 		}
@@ -172,15 +172,15 @@ module.exports = Class.create({
 		state.first = false;
 		
 		var record_ids = state.record_ids;
-		var temp_results = {};
+		var temp_results = Object.create(null);
 		var temp_idx = 0;
 		
 		query.words.forEach( function(word) {
 			// for each word, iterate over record ids
-			var keepers = {};
+			var keepers = Object.create(null);
 			
 			// create "fake" hash index for word, containing only our one record
-			var items = {};
+			var items = Object.create(null);
 			if (idx_data[def.id] && idx_data[def.id].word_hash && idx_data[def.id].word_hash[word]) {
 				items[ record_id ] = idx_data[def.id].word_hash[word];
 			}
