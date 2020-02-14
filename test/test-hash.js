@@ -1,5 +1,5 @@
 // Unit tests for Storage System - Hash
-// Copyright (c) 2015 - 2016 Joseph Huckaby
+// Copyright (c) 2015 - 2020 Joseph Huckaby
 // Released under the MIT License
 
 var os = require('os');
@@ -7,6 +7,10 @@ var fs = require('fs');
 var path = require('path');
 var cp = require('child_process');
 var async = require('async');
+var Tools = require('pixl-tools');
+
+// const BAD_KEYS = Object.getOwnPropertyNames( Object.prototype );
+const BAD_KEYS = ['constructor', '__defineGetter__', '__defineSetter__', 'hasOwnProperty', '__lookupGetter__', '__lookupSetter__', 'isPrototypeOf', 'propertyIsEnumerable', 'toString', 'valueOf', '__proto__', 'toLocaleString'];
 
 module.exports = {
 	tests: [
@@ -723,6 +727,188 @@ module.exports = {
 					} // whilst done
 				); // async.whilst
 			}); // hashDeleteMulti
+		},
+		
+		function hashBadCreate(test) {
+			// create hash we can use to test bad keys
+			// this is designed to overflow (reindex) when all 12+ keys are added
+			var self = this;
+			
+			this.storage.hashCreate( 'hashbad', { page_size: 10 }, function(err) {
+				test.ok( !err, "Error creating hashbad: " + err );
+				
+				// put one normal (control) key in hash
+				self.storage.hashPut( 'hashbad', 'control', 1, function(err) {
+					test.ok( !err, "Got error putting control key: " + err );
+					test.done();
+				});
+			} );
+		},
+		
+		function hashGetBadKeysBefore(test) {
+			// pre-fetch bad keys, make sure they do not exist in our empty hash
+			var self = this;
+			
+			async.eachSeries( BAD_KEYS,
+				function(key, callback) {
+					self.storage.hashGet( 'hashbad', key, function(err, value) {
+						test.ok( !!err, "No error fetching non-existent bad key: " + key );
+						test.ok( !value, "Unexpected value fetching non-existent bad key: " + key + ": " + value );
+						callback();
+					} );
+				},
+				function(err) {
+					test.done();
+				}
+			); // async.eachSeries
+		},
+		
+		function hashPutBadKeys(test) {
+			// put bad (toxic) keys in hash (Object.prototype stuff)
+			// this should also trigger a reindex
+			var self = this;
+			
+			async.eachSeries( BAD_KEYS,
+				function(key, callback) {
+					self.storage.hashPut( 'hashbad', key, 42, callback );
+				},
+				function(err) {
+					test.ok( !err, "Got error putting bad keys: " + err );
+					test.done();
+				}
+			); // async.eachSeries
+		},
+		
+		function hashGetBadKeys(test) {
+			// get bad keys in hash (Object.prototype stuff)
+			// these should all succeed
+			var self = this;
+			
+			async.eachSeries( BAD_KEYS,
+				function(key, callback) {
+					self.storage.hashGet( 'hashbad', key, function(err, value) {
+						test.ok( !err, "Got error fetching bad key: " + key + ": " + err );
+						test.ok( value == 42, "Unexpected value fetching bad key: " + key + ": " + value );
+						callback();
+					} );
+				},
+				function(err) {
+					// make sure our control key is still there as well
+					self.storage.hashGet( 'hashbad', 'control', function(err, value) {
+						test.ok( !err, "Got error fetching control key: " + err );
+						test.ok( value == 1, "Unexpected value fetching control key: " + value );
+						test.done();
+					});
+				}
+			); // async.eachSeries
+		},
+		
+		function hashBadGetAll(test) {
+			// fetch bad hash with hashGetAll() API
+			this.storage.hashGetAll( 'hashbad', function(err, hash) {
+				test.ok( !err, "Unexpected error fetching all bad: " + err );
+				
+				BAD_KEYS.forEach( function(key) {
+					test.ok( hash[key] === 42, "(hashGetAll) Unexpected key value: " + key + ": " + hash[key] );
+				});
+				
+				test.ok( hash.control == 1, "Expected control key to equal 1, got: " + hash.control );
+				test.done();
+			});
+		},
+		
+		function hashBadEach(test) {
+			// iterate over hash with bad keys
+			var self = this;
+			var found = [];
+			
+			this.storage.hashEach( 'hashbad', function(key, value, callback) {
+				// do something with key/value
+				found.push( key );
+				process.nextTick( callback );
+			}, 
+			function(err) {
+				// all keys iterated over
+				test.ok( !err, "Got error async-iterating over bad hash: " + err );
+				
+				// we should have exactly BAD_KEYS + 1 keys
+				test.ok( found.length == (BAD_KEYS.length + 1), "Unexpected found length: " + found.length );
+				
+				// make sure we have all the expected keys
+				BAD_KEYS.forEach( function(key) {
+					test.ok( !!found.includes(key), "Expected key not in found array: " + key );
+				});
+				
+				// we should have the control key too
+				test.ok( found.includes('control'), "Expected control key not in found array" );
+				
+				test.done();
+			} );
+		},
+		
+		function hashBadEachSync(test) {
+			// iterate over hash with bad keys (sync)
+			var self = this;
+			var found = [];
+			
+			this.storage.hashEachSync( 'hashbad', function(key, value) {
+				// do something with key/value
+				found.push( key );
+			}, 
+			function(err) {
+				// all keys iterated over
+				test.ok( !err, "Got error sync-iterating over bad hash: " + err );
+				
+				// we should have exactly BAD_KEYS + 1 keys
+				test.ok( found.length == (BAD_KEYS.length + 1), "Unexpected found length: " + found.length );
+				
+				// make sure we have all the expected keys
+				BAD_KEYS.forEach( function(key) {
+					test.ok( !!found.includes(key), "Expected key not in found array: " + key );
+				});
+				
+				// we should have the control key too
+				test.ok( found.includes('control'), "Expected control key not in found array" );
+				
+				test.done();
+			} );
+		},
+		
+		function hashBadDelete(test) {
+			// delete individual keys so we trigger an unsplit
+			var self = this;
+			
+			this.storage.hashDeleteMulti( 'hashbad', BAD_KEYS, function(err) {
+				test.ok( !err, "Got error multi-deleting bad hash: " + err );
+				
+				// at this point only the control key should remain
+				self.storage.hashGetAll( 'hashbad', function(err, hash) {
+					test.ok( !err, "Unexpected error fetching all bad: " + err );
+					test.ok( Tools.numKeys(hash) == 1, "Expected only 1 key in hash, got: " + JSON.stringify(hash) );
+					test.ok( hash.control == 1, "Expected control key to equal 1, got: " + hash.control );
+					test.done();
+				});
+			});
+		},
+		
+		function hashBadDeleteAll(test) {
+			// cleanup
+			var self = this;
+			
+			this.storage.hashDeleteAll( 'hashbad', true, function(err) {
+				test.ok( !err, "No error deleting hashbad: " + err );
+				test.ok( Object.keys(self.storage.locks).length == 0, "No more locks leftover in storage" );
+				
+				// make sure it is really deleted
+				self.storage.get( 'hashbad', function(err) {
+					test.ok( !!err, "Error expected fetching head after deleting" );
+					
+					self.storage.get( 'hashbad/data', function(err) {
+						test.ok( !!err, "Error expected fetching data after deleting" );
+						test.done();
+					});
+				});
+			});
 		}
 		
 	] // tests array
