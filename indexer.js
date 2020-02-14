@@ -1,5 +1,5 @@
 // PixlServer Storage System - Indexer Mixin
-// Copyright (c) 2016 - 2018 Joseph Huckaby
+// Copyright (c) 2016 - 2020 Joseph Huckaby
 // Released under the MIT License
 
 var async = require('async');
@@ -71,6 +71,56 @@ module.exports = Class.create({
 		}); // beginTransaction
 	},
 	
+	validateIndexConfig: function(config) {
+		// make sure index config is kosher
+		// return false for success, or error on failure
+		if (!config || !config.fields || !config.fields.length) {
+			return( new Error("Invalid index configuration object.") );
+		}
+		if (Tools.findObject(config.fields, { _primary: 1 })) {
+			return( new Error("Invalid index configuration key: _primary") );
+		}
+		
+		// validate each field def
+		for (var idx = 0, len = config.fields.length; idx < len; idx++) {
+			var def = config.fields[idx];
+			
+			if (!def.id || !def.id.match(/^\w+$/)) {
+				return( new Error("Invalid index field ID: " + def.id) );
+			}
+			if (def.id.match(/^(_id|_data|_sorters|constructor|__defineGetter__|__defineSetter__|hasOwnProperty|__lookupGetter__|__lookupSetter__|isPrototypeOf|propertyIsEnumerable|toString|valueOf|__proto__|toLocaleString)$/)) {
+				return( new Error("Invalid index field ID: " + def.id) );
+			}
+			
+			if (def.type && !this['prepIndex_' + def.type]) {
+				return( new Error("Invalid index type: " + def.type) );
+			}
+			
+			if (def.filter && !this['filterWords_' + def.filter]) {
+				return( new Error("Invalid index filter: " + def.filter) );
+			}
+		} // foreach def
+		
+		// validate each sorter def
+		if (config.sorters) {
+			for (var idx = 0, len = config.sorters.length; idx < len; idx++) {
+				var sorter = config.sorters[idx];
+				
+				if (!sorter.id || !sorter.id.match(/^\w+$/)) {
+					return( new Error("Invalid index sorter ID: " + sorter.id) );
+				}
+				if (sorter.id.match(/^(_id|_data|_sorters|constructor|__defineGetter__|__defineSetter__|hasOwnProperty|__lookupGetter__|__lookupSetter__|isPrototypeOf|propertyIsEnumerable|toString|valueOf|__proto__|toLocaleString)$/)) {
+					return( new Error("Invalid index sorter ID: " + sorter.id) );
+				}
+				if (sorter.type && !sorter.type.match(/^(string|number)$/)) {
+					return( new Error("Invalid index sorter type: " + sorter.type) );
+				}
+			} // foreach sorter
+		} // config.sorters
+		
+		return false; // no error
+	},
+	
 	_indexRecord: function(id, record, config, callback) {
 		// index record (internal)
 		var self = this;
@@ -95,40 +145,17 @@ module.exports = Class.create({
 			return;
 		}
 		
-		if (!record || !Tools.isaHash(record) || !Tools.numKeys(record)) {
+		if (!record || !Tools.isaHash(record)) {
 			if (callback) callback( new Error("Invalid record object for index.") );
 			return;
 		}
-		if (!config || !config.fields || !config.fields.length) {
-			if (callback) callback( new Error("Invalid index configuration object.") );
+		
+		// make sure we have a good config
+		var err = this.validateIndexConfig(config);
+		if (err) {
+			if (callback) callback(err);
 			return;
 		}
-		if (Tools.findObject(config.fields, { _primary: 1 })) {
-			if (callback) callback( new Error("Invalid index configuration key: _primary") );
-			return;
-		}
-		for (var idx = 0, len = config.fields.length; idx < len; idx++) {
-			var def = config.fields[idx];
-			
-			if (!def.id || !def.id.match(/^\w+$/)) {
-				if (callback) callback( new Error("Invalid index field ID: " + def.id) );
-				return;
-			}
-			if (def.id.match(/^(_id|_data|_sorters)$/)) {
-				if (callback) callback( new Error("Invalid index field ID: " + def.id) );
-				return;
-			}
-			
-			if (def.type && !this['prepIndex_' + def.type]) {
-				if (callback) callback( new Error("Invalid index type: " + def.type) );
-				return;
-			}
-			
-			if (def.filter && !this['filterWords_' + def.filter]) {
-				if (callback) callback( new Error("Invalid index filter: " + def.filter) );
-				return;
-			}
-		} // foreach def
 		
 		// generate list of fields based on available values in record
 		// i.e. support partial updates by only passing in those fields
@@ -328,20 +355,11 @@ module.exports = Class.create({
 			if (callback) callback( new Error("Invalid ID for record index.") );
 			return;
 		}
-		if (!config || !config.fields || !config.fields.length) {
-			if (callback) callback( new Error("Invalid index configuration object.") );
-			return;
-		}
-		if (Tools.findObject(config.fields, { _primary: 1 })) {
-			if (callback) callback( new Error("Invalid index configuration key: _primary") );
-			return;
-		}
-		if (Tools.findObject(config.fields, { id: "_id" })) {
-			if (callback) callback( new Error("Invalid index configuration ID: _id") );
-			return;
-		}
-		if (Tools.findObject(config.fields, { id: "_data" })) {
-			if (callback) callback( new Error("Invalid index configuration ID: _data") );
+		
+		// make sure we have a good config
+		var err = this.validateIndexConfig(config);
+		if (err) {
+			if (callback) callback(err);
 			return;
 		}
 		
@@ -559,6 +577,7 @@ module.exports = Class.create({
 				if (err || !summary) {
 					summary = { id: task.def.id, values: {} };
 				}
+				summary.values = Tools.copyHashRemoveProto( summary.values );
 				summary.modified = Tools.timeNow(true);
 				
 				for (var word in word_hash) {
@@ -711,6 +730,7 @@ module.exports = Class.create({
 					self.logDebug(5, "Index summary doesn't exist: " + path);
 					summary = { id: task.def.id, values: {} };
 				}
+				summary.values = Tools.copyHashRemoveProto( summary.values );
 				summary.modified = Tools.timeNow(true);
 				
 				for (var word in word_hash) {
@@ -772,9 +792,9 @@ module.exports = Class.create({
 		var new_word_hash = this.getWordHashFromList( new_words );
 		
 		// calculate added, changed and removed words
-		var added_words = {};
-		var changed_words = {};
-		var removed_words = {};
+		var added_words = Object.create(null);
+		var changed_words = Object.create(null);
+		var removed_words = Object.create(null);
 		
 		for (var new_word in new_word_hash) {
 			var new_value = new_word_hash[new_word];
@@ -956,7 +976,7 @@ module.exports = Class.create({
 		var items = value.split(/\b/);
 		var words = [];
 		
-		var remove_words = {};
+		var remove_words = Object.create(null);
 		if (def.use_remove_words && config.remove_words) {
 			remove_words = this.cacheRemoveWords(config);
 		}
@@ -978,7 +998,7 @@ module.exports = Class.create({
 	
 	getWordHashFromList: function(words) {
 		// convert word list to hash of unique words and offset CSV
-		var hash = {};
+		var hash = Object.create(null);
 		var word = '';
 		
 		for (var idx = 0, len = words.length; idx < len; idx++) {
@@ -1252,7 +1272,7 @@ module.exports = Class.create({
 		
 		var state = query;
 		state.config = config;
-		state.record_ids = {};
+		state.record_ids = Object.create(null);
 		state.first = true;
 		
 		// first, split criteria into subs (sub-queries), 
@@ -1342,7 +1362,7 @@ module.exports = Class.create({
 		
 		var path = config.base_path + '/' + def.id + '/word/' + query.word;
 		var cur_items = state.record_ids;
-		var new_items = {};
+		var new_items = Object.create(null);
 		
 		// query optimizations
 		var num_cur_items = Tools.numKeys(cur_items);
@@ -1426,13 +1446,13 @@ module.exports = Class.create({
 		var path_prefix = state.config.base_path + '/' + def.id + '/word/';
 		var record_ids = state.record_ids;
 		
-		var temp_results = {};
+		var temp_results = Object.create(null);
 		var temp_idx = 0;
 		
 		async.eachSeries( query.words,
 			function(word, callback) {
 				// for each word, iterate over record ids
-				var keepers = {};
+				var keepers = Object.create(null);
 				
 				self.hashEachSync( path_prefix + word,
 					function(record_id, raw_value) {
@@ -1447,14 +1467,14 @@ module.exports = Class.create({
 							
 							if (temp_idx) {
 								// Subsequent pass -- make sure offsets are +1
-									var arr = temp_results[record_id];
-									for (var idy = 0, ley = arr.length; idy < ley; idy++) {
-										var elem = arr[idy];
-										if (word_idx == elem + 1) {
-											arr[idy]++;
-											still_good = 1;
-										}
+								var arr = temp_results[record_id];
+								for (var idy = 0, ley = arr.length; idy < ley; idy++) {
+									var elem = arr[idy];
+									if (word_idx == elem + 1) {
+										arr[idy]++;
+										still_good = 1;
 									}
+								}
 							} // temp_idx
 							else {
 								// First pass -- get word idx into temp_results
@@ -1575,7 +1595,9 @@ module.exports = Class.create({
 		this.get( config.base_path + '/' + id + '/summary', function(err, data) {
 			if (err) return callback(err);
 			if (!data) return callback( new Error("Index field not found: " + config.base_path + '/' + id) );
-			callback( null, data.values || {} );
+			if (!data.values) data.values = {};
+			data.values = Tools.copyHashRemoveProto( data.values );
+			callback( null, data.values );
 		} );
 	},
 	
@@ -1588,7 +1610,7 @@ module.exports = Class.create({
 		}
 		
 		// build cache
-		var cache = {};
+		var cache = Object.create(null);
 		this.removeWordCache[config.base_path] = cache;
 		
 		for (var idx = 0, len = config.remove_words.length; idx < len; idx++) {
