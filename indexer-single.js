@@ -194,19 +194,19 @@ module.exports = Class.create({
 				var offset_list = raw_value.split(/\,/);
 				var still_good = 0;
 				
-				for (var idx = 0, len = offset_list.length; idx < len; idx++) {
+				for (var idx = offset_list.length - 1; idx >= 0; idx--) {
 					var word_idx = parseInt( offset_list[idx] );
 					
 					if (temp_idx) {
 						// Subsequent pass -- make sure offsets are +1
-							var arr = temp_results[record_id];
-							for (var idy = 0, ley = arr.length; idy < ley; idy++) {
-								var elem = arr[idy];
-								if (word_idx == elem + 1) {
-									arr[idy]++;
-									still_good = 1;
-								}
+						var arr = temp_results[record_id];
+						for (var idy = 0, ley = arr.length; idy < ley; idy++) {
+							var elem = arr[idy];
+							if (word_idx == elem + 1) {
+								arr[idy]++;
+								still_good = 1;
 							}
+						}
 					} // temp_idx
 					else {
 						// First pass -- get word idx into temp_results

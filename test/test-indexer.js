@@ -894,6 +894,71 @@ module.exports = {
 			}); // indexRecord
 		},
 		
+		function testDoubleWordExactMatch(test) {
+			// add a record with a repeating word, and search for exact phrases
+			var self = this;
+			var ticket = {
+				ID: "double1",
+				Summary: "lost dog dog park"
+			};
+			var map = {
+				'title:"lost dog"': { "double1": 1 },
+				'title:"lost dog dog"': { "double1": 1 },
+				'title:"lost dog dog park"': { "double1": 1 },
+				'title:"dog dog park"': { "double1": 1 },
+				'title:"dog park"': { "double1": 1 },
+				'title:"park dog"': {},
+				'title:"lost park"': {},
+				'title:"dog lost"': {},
+				'title:"dog dog park park"': {},
+				'title:"dog dog dog"': {}
+			};
+			
+			// push onto sample_tickets so it gets cleaned up in unindexAllRecords
+			sample_tickets.push(ticket);
+			
+			this.storage.indexRecord( ticket.ID, ticket, index_config, function(err) {
+				test.ok( !err, "No error inserting record: " + err );
+				
+				self.multiIndexSearch(map, index_config, test, function() {
+					test.done();
+				});
+			}); // indexRecord
+		},
+		
+		function testDoubleWordRemoveWordExactMatch(test) {
+			// add a record with a repeating word, and search for exact phrases
+			// this time with remove words inserted
+			var self = this;
+			var ticket = {
+				ID: "double2",
+				Summary: "lost dog in the dog park"
+			};
+			var map = {
+				'title:"lost dog"': { "double1": 1, "double2": 1 },
+				'title:"lost dog dog"': { "double1": 1, "double2": 1 },
+				'title:"lost dog dog park"': { "double1": 1, "double2": 1 },
+				'title:"dog dog park"': { "double1": 1, "double2": 1 },
+				'title:"dog park"': { "double1": 1, "double2": 1 },
+				'title:"park dog"': {},
+				'title:"lost park"': {},
+				'title:"dog lost"': {},
+				'title:"dog dog park park"': {},
+				'title:"dog dog dog"': {}
+			};
+			
+			// push onto sample_tickets so it gets cleaned up in unindexAllRecords
+			sample_tickets.push(ticket);
+			
+			this.storage.indexRecord( ticket.ID, ticket, index_config, function(err) {
+				test.ok( !err, "No error inserting record: " + err );
+				
+				self.multiIndexSearch(map, index_config, test, function() {
+					test.done();
+				});
+			}); // indexRecord
+		},
+		
 		function unindexAllRecords(test) {
 			// unindex all records to remove temp disk space
 			var self = this;
