@@ -77,6 +77,9 @@ module.exports = Class.create({
 		// prepare key for S3 based on config
 		var md5 = Tools.digestHex(key, 'md5');
 		
+		var ns = '';
+		if (key.match(/^([\w\-\.]+)\//)) ns = RegExp.$1;
+		
 		if (this.keyPrefix) {
 			key = this.keyPrefix + key;
 		}
@@ -86,7 +89,7 @@ module.exports = Class.create({
 			var temp = this.keyTemplate.replace( /\#/g, function() {
 				return md5.substr(idx++, 1);
 			} );
-			key = Tools.substitute( temp, { key: key, md5: md5 } );
+			key = Tools.sub( temp, { key: key, md5: md5, ns: ns } );
 		}
 		
 		return key;
