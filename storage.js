@@ -343,6 +343,10 @@ module.exports = Class.create({
 		
 		key = this.normalizeKey( key );
 		
+		if (!this.isBinaryKey(key)) {
+			return callback( new Error("Stream values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
+		}
+		
 		this.engine.getStream( key, callback );
 	},
 	
