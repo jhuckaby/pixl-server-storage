@@ -136,6 +136,7 @@ module.exports = Class.create({
 	head: function(key, callback) {
 		// head redis value given key
 		var self = this;
+		key = this.prepKey(key);
 		
 		// The Redis API has no way to head / ping an object.
 		// So, we have to do this the RAM-hard way...
