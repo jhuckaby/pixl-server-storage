@@ -95,10 +95,10 @@ module.exports = Class.create({
 		return key;
 	},
 	
-	extKey: function(key) {
+	extKey: function(key, orig_key) {
 		// possibly add suffix to key, if fileExtensions mode is enabled
 		// and key is not binary
-		if (this.fileExtensions && !this.storage.isBinaryKey(key)) {
+		if (this.fileExtensions && !this.storage.isBinaryKey(orig_key)) {
 			key += '.json';
 		}
 		return key;
@@ -112,7 +112,7 @@ module.exports = Class.create({
 		key = this.prepKey(key);
 		
 		var params = {};
-		params.Key = this.extKey(key);
+		params.Key = this.extKey(key, orig_key);
 		params.Body = value;
 		
 		// serialize json if needed
@@ -143,10 +143,11 @@ module.exports = Class.create({
 	putStream: function(key, inp, callback) {
 		// store key+stream of data to S3
 		var self = this;
+		var orig_key = key;
 		key = this.prepKey(key);
 		
 		var params = {};
-		params.Key = this.extKey(key);
+		params.Key = this.extKey(key, orig_key);
 		params.Body = inp;
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
@@ -182,7 +183,7 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
-		this.s3.headObject( { Key: this.extKey(key) }, function(err, data) {
+		this.s3.headObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
@@ -226,7 +227,7 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
-		this.s3.getObject( { Key: this.extKey(key) }, function(err, data) {
+		this.s3.getObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
 			if (err) {
 				if (err.code == 'NoSuchKey') {
 					// key not found, special case, don't log an error
@@ -271,43 +272,36 @@ module.exports = Class.create({
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
+		var orig_key = key;
 		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
-		var params = { Key: this.extKey(key) };
-		var download = this.s3.getObject(params);
+		var params = { Key: this.extKey(key, orig_key) };
 		
-		download.on('httpHeaders', function(statusCode, headers) {
-			if (statusCode < 300) {
-				var stream = this.response.httpResponse.createUnbufferedStream();
-				callback( null, stream );
+		this.s3.headObject( params, function(err) {
+			if (err) {
+				if (err.code != 'NoSuchKey') {
+					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
+				}
+				callback( err, null );
+				return;
 			}
-			else {
-				this.abort();
-			}
-		} );
-		
-		download.on('error', function(err) {
-			if (err.code == 'NoSuchKey') {
-				// key not found, special case, don't log an error
-				// always include "Not found" in error message
-				err = new Error("Failed to fetch key: " + key + ": Not found");
-				err.code = "NoSuchKey";
-			}
-			else {
-				// some other error
-				self.logError('s3', "Failed to fetch key: " + key + ": " + err.message);
-			}
-			callback( err );
-			return;
-		} );
-		
-		download.on('complete', function() {
-			self.logDebug(9, "S3 stream download complete: " + key);
-		} );
-		
-		download.send();
+			
+			var download = self.s3.getObject(params).createReadStream();
+			
+			download.on('error', function(err) {
+				self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+			});
+			download.on('end', function() {
+				self.logDebug(9, "S3 stream download complete: " + key);
+			} );
+			download.on('close', function() {
+				self.logDebug(9, "S3 stream download closed: " + key);
+			} );
+			
+			callback( null, download );
+		}); // headObject
 	},
 	
 	delete: function(key, callback) {
@@ -318,7 +312,7 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
-		this.s3.deleteObject( { Key: this.extKey(key) }, function(err, data) {
+		this.s3.deleteObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
 			if (err) {
 				self.logError('s3', "Failed to delete object: " + key + ": " + err.message);
 			}
