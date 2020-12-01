@@ -188,6 +188,7 @@ module.exports = Class.create({
 			});
 			
 			callback(err);
+			if (!err) self.emit('put', key, value);
 		} );
 	},
 	
@@ -217,6 +218,7 @@ module.exports = Class.create({
 			});
 			
 			callback(err);
+			if (!err) self.emit('putStream', key);
 		} );
 	},
 	
@@ -263,6 +265,7 @@ module.exports = Class.create({
 			});
 			
 			callback(err, data);
+			if (!err) self.emit('head', key, data);
 		} );
 	},
 	
@@ -333,6 +336,7 @@ module.exports = Class.create({
 			});
 			
 			callback(null, value);
+			if (!err) self.emit('get', key, value);
 		} );
 	},
 	
@@ -409,6 +413,7 @@ module.exports = Class.create({
 			});
 			
 			callback(err);
+			if (!err) self.emit('delete', key);
 		} );
 	},
 	
@@ -484,6 +489,8 @@ module.exports = Class.create({
 			key: key,
 			expiration: dargs.epoch
 		});
+		
+		this.emit('expire', key, dargs.epoch);
 	},
 	
 	enqueue: function(task) {
