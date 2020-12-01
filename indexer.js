@@ -212,6 +212,7 @@ module.exports = Class.create({
 						
 						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.sub(def.source, record, true);
 						if ((value === null) && ("default_value" in def)) value = def.default_value;
+						if (typeof(value) == 'object') value = JSON.stringify(value);
 						
 						var words = self.getWordList( ''+value, def, config );
 						var checksum = Tools.digestHex( words.join(' '), 'md5' );
