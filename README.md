@@ -55,6 +55,8 @@ Here is the table of contents for this current document:
 		+ [S3 Cache](#s3-cache)
 	* [Couchbase](#couchbase)
 	* [Redis](#redis)
+		+ [RedisCluster](#rediscluster)
+	* [Hybrid](#hybrid)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)
 	* [Storing Records](#storing-records)
