@@ -365,7 +365,7 @@ For complete, low-level control over the key hashing and directory layout, you c
 }
 ```
 
-If your `key_template` property contains any hash marks (`#`), they will be dynamically replaced with characters from an [MD5 hash](https://en.wikipedia.org/wiki/MD5) of the key.  Also, `[md5]` will be substituted for the full MD5 hash, and `[key]` will be subsituted with the full key itself.  So for another example:
+If your `key_template` property contains any hash marks (`#`), they will be dynamically replaced with characters from an [MD5 hash](https://en.wikipedia.org/wiki/MD5) of the key.  Also, `[md5]` will be substituted for the full MD5 hash, and `[key]` will be substituted with the full key itself.  So for another example:
 
 ```js
 "key_template": "##/##/[key]"
@@ -410,7 +410,7 @@ Note that binary records are **not** cached.  This system is for JSON records on
 If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, here is how to do so.  First, you need to manually install the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module into your app:
 
 ```
-npm install aws-sdk
+npm install --save aws-sdk
 ```
 
 Then configure your storage thusly:
@@ -485,7 +485,7 @@ Note that Amazon [recommends adding a hash prefix](https://docs.aws.amazon.com/A
 "keyTemplate": "##/##/[key]"
 ```
 
-This would replace the 4 hash marks with the first 4 characters from the key's MD5, followed by the full key itself, e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
+This would replace the 4 hash marks with the first 4 characters from the key's MD5 digest, followed by the full key itself, e.g. `a5/47/users/jhuckaby`.  Note that this all happens behind the scenes and transparently, so you never have to specify the prefix or hash characters when fetching keys.
 
 Besides hash marks, the special macro `[key]` will be substituted with the full key, and `[md5]` will be substituted with a full MD5 hash of the key.  These can be used anywhere in the template string.
 
@@ -524,7 +524,7 @@ Note that binary records are **not** cached, as they are generally large.  Only 
 If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app:
 
 ```
-npm install couchbase
+npm install --save couchbase
 ```
 
 Then configure your storage thusly:
@@ -551,7 +551,7 @@ The `serialize` property, when set to `true`, will cause all object values to be
 
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
 
-The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
 
 Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to supply both a `username` and `password` for a valid user created in the Couchbase UI.  Prior to v5+ you could omit the `username` and only specify a `password`, or no password at all if your bucket has no authentication.
 
@@ -560,7 +560,7 @@ Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to
 If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [redis](https://www.npmjs.com/package/redis) module into your app:
 
 ```
-npm install redis
+npm install --save redis
 ```
 
 Then configure your storage thusly:
@@ -578,9 +578,85 @@ Then configure your storage thusly:
 
 Set the `host` and `port` for your own Redis server setup.  Please see [Redis Options Properties](https://github.com/NodeRedis/node_redis#options-object-properties) for other things you can include here, such as authentication and database selection.
 
-The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared bucket situation.
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
-The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key, or and MD5 of the key.
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+### RedisCluster
+
+If you want to use a Redis cluster (e.g. [AWS ElastiCache](https://aws.amazon.com/elasticache/)), then here is how to do that.  First, you will need to manually install the following two modules into your app:
+
+```
+npm install --save ioredis ioredis-timeout
+```
+
+Then configure your storage thusly:
+
+```javascript
+{
+	"engine": "RedisCluster",
+	"RedisCluster": {
+		"host": "127.0.0.1",
+		"port": 6379,
+		"timeout": 1000,
+		"connectRetries": 5,
+		"clusterOpts": {
+			"scaleReads": "master"
+		},
+		"keyPrefix": ""
+	}
+}
+```
+
+Set the `host` and `port` for your own Redis cluster setup.  The `host` should point to the cluster endpoint, **not** an individual Redis server.  Set the `timeout` to the desired operation timeout in milliseconds (it defaults to `1000`).  The `connectRetries` sets the number of retries on the initial socket connect operation (it defaults to `5`).
+
+The `clusterOpts` property can hold several different cluster configuration options.  Please see the [ioredis API docs](https://github.com/luin/ioredis/blob/master/API.md#new-redisport-host-options) for other things you can include here, such as authentication and database selection.  It is **highly recommended** that you keep the `scaleReads` property set to `"master"`, for immediate consistency (required for [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md)).
+
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
+
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+## Hybrid
+
+Your application may need the features of multiple engines.  Specifically, you may want JSON (document) records to use one engine, and binary records to use another.  Binary records are specified with keys that end in a file extension, e.g. `.jpg`.  To facilitate this, there is a `Hybrid` engine available, which can load multiple sub-engines, one for JSON keys and one for binary keys.  Example use:
+
+```json
+{
+	"engine": "Hybrid",
+	"Hybrid": {
+		"docEngine": "Filesystem",
+		"binaryEngine": "S3"
+	}
+}
+```
+
+The `Hybrid` engine only has two properties, `docEngine` and `binaryEngine`.  These should be set to the names of sub-engines to load and use for JSON (document) records and binary records respectively.  In this example we're using the `Filesystem` engine for JSON (document) records, and the `S3` engine for binary records.  The idea is that you also include configuration objects for each of the sub-engines:
+
+```json
+{
+	"engine": "Hybrid",
+	"Hybrid": {
+		"docEngine": "Filesystem",
+		"binaryEngine": "S3"
+	},
+	"Filesystem": {
+		"base_dir": "/var/data/myserver"
+	},
+	"AWS": {
+		"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
+		"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
+		"region": "us-west-1"
+	},
+	"S3": {
+		"fileExtensions": true,
+		"params": {
+			"Bucket": "MY_S3_BUCKET_ID"
+		}
+	}
+}
+```
+
+Note that all of the engine configuration objects are on the same level as the `Hybrid` object.
 
 # Key Normalization
 
@@ -768,7 +844,7 @@ storage.getStream( 'test1.gif', function(err, readStream) {
 } );
 ```
 
-Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase API does not support streams, so they are currently simulated for that engine.  Streams *are* supported natively for both the Filesystem and Amazon S3 engines.
+Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase and Redis APIs does not support streams, so they are currently simulated in those engines.  Streams *are* supported natively in both the Filesystem and Amazon S3 engines.
 
 # Expiring Data
 
