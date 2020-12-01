@@ -30,7 +30,7 @@ var TransStorageFunctions = {
 	getFilePath: function(key) {
 		// get local path to file given storage key
 		var trans = this.transactions[ this.currentTransactionPath ];
-		var key_id = Tools.digestHex( key, 'md5' );
+		var key_id = Tools.digestHex( key );
 		var file = Path.join( this.transDir, "data", trans.id + '-' + key_id + '.json' );
 		return file;
 	},
@@ -651,7 +651,7 @@ module.exports = Class.create({
 					async.forEachOfLimit( trans.keys, self.concurrency, 
 						function(value, key, callback) {
 							// delete temp key file
-							var key_id = Tools.digestHex( key, 'md5' );
+							var key_id = Tools.digestHex( key );
 							var file = Path.join( self.transDir, "data", trans.id + '-' + key_id + '.json' );
 							
 							fs.unlink( file, function(err) {
