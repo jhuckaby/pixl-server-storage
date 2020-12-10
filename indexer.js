@@ -970,6 +970,12 @@ module.exports = Class.create({
 			value = value.replace(/\'/g, ''); // index nancy's as nancys
 			value = value.replace(/\d+\.\d[\d\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_+$/, ''); }); // 2.5 --> 2_5
 		}
+		
+		// special filter for firstname.lastname usernames
+		if (def.username_join) {
+			value = value.replace(/\w+\.\w[\w\.]*/g, function(m) { return m.replace(/\./g, '_').replace(/_+$/, ''); });
+		}
+		
 		value = value.toLowerCase();
 		
 		var min_len = def.min_word_length || 1;
