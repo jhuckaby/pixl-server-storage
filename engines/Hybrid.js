@@ -21,11 +21,13 @@ module.exports = Class.create({
 		// setup multiple sub-engines
 		this.logDebug(2, "Setting up hybrid engine", this.config.get() );
 		
-		this.binaryEngine = new require( './' + this.config.get('binaryEngine') + '.js' )();
+		var binaryClass = require( './' + this.config.get('binaryEngine') + '.js' );
+		this.binaryEngine = new binaryClass();
 		this.binaryEngine.storage = this.storage;
 		this.binaryEngine.init( this.server, this.storage.config.getSub( this.config.get('binaryEngine') ) );
 		
-		this.docEngine = new require( './' + this.config.get('docEngine') + '.js' )();
+		var docClass = require( './' + this.config.get('docEngine') + '.js' );
+		this.docEngine = new docClass();
 		this.docEngine.storage = this.storage;
 		this.docEngine.init( this.server, this.storage.config.getSub( this.config.get('docEngine') ) );
 		
