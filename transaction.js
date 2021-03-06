@@ -27,14 +27,6 @@ var TransStorageFunctions = {
 		this.tempFileCounter = 1;
 	},
 	
-	getFilePath: function(key) {
-		// get local path to file given storage key
-		var trans = this.transactions[ this.currentTransactionPath ];
-		var key_id = Tools.digestHex( key );
-		var file = Path.join( this.transDir, "data", trans.id + '-' + key_id + '.json' );
-		return file;
-	},
-	
 	put: function(key, value, callback) {
 		// store key+value pair in transaction
 		var self = this;
@@ -645,35 +637,16 @@ module.exports = Class.create({
 						self.logError('rollback', "Unable to delete rollback log: " + trans.log + ": " + err);
 					}
 					
-					// also delete any files written to temp area
-					if (!trans.keys) trans.keys = {};
+					// complete, unlock and remove transaction from memory
+					self.unlock( 'C|'+path );
+					self._transUnlock(path);
+					self.transactions[path].keys = {}; // release memory
+					self.transactions[path].values = {}; // release memory
+					self.transactions[path].queue = []; // release memory
+					delete self.transactions[path];
 					
-					async.forEachOfLimit( trans.keys, self.concurrency, 
-						function(value, key, callback) {
-							// delete temp key file
-							var key_id = Tools.digestHex( key );
-							var file = Path.join( self.transDir, "data", trans.id + '-' + key_id + '.json' );
-							
-							fs.unlink( file, function(err) {
-								if (err && !err.message.match(/ENOENT/)) {
-									self.logError('rollback', "Unable to delete transaction file: " + file + ": " + err);
-								}
-								callback();
-							});
-						},
-						function(err) {
-							// complete, unlock and remove transaction from memory
-							self.unlock( 'C|'+path );
-							self._transUnlock(path);
-							self.transactions[path].keys = {}; // release memory
-							self.transactions[path].values = {}; // release memory
-							self.transactions[path].queue = []; // release memory
-							delete self.transactions[path];
-							
-							self.logDebug(3, "Transaction rollback complete: " + trans.id, { path: path });
-							callback();
-						}
-					); // forEachOfLimit
+					self.logDebug(3, "Transaction rollback complete: " + trans.id, { path: path });
+					callback();
 				}); // fs.unlink
 			} // done with log
 		); // fileEachLine
