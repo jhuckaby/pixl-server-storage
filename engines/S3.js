@@ -125,7 +125,11 @@ module.exports = Class.create({
 			params.ContentType = 'application/json';
 		}
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.putObject( params, function(err, data) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				self.logError('s3', "Failed to store object: " + key + ": " + err.message);
 			}
@@ -152,7 +156,11 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.upload(params, function(err, data) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				self.logError('s3', "Failed to store stream: " + key + ": " + err.message);
 			}
@@ -183,7 +191,11 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.headObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
@@ -227,7 +239,11 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.getObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				if (err.code == 'NoSuchKey') {
 					// key not found, special case, don't log an error
@@ -279,7 +295,11 @@ module.exports = Class.create({
 		
 		var params = { Key: this.extKey(key, orig_key) };
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.headObject( params, function(err) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
@@ -290,13 +310,13 @@ module.exports = Class.create({
 			
 			var download = self.s3.getObject(params).createReadStream();
 			
-			download.on('error', function(err) {
+			download.once('error', function(err) {
 				self.logError('s3', "Failed to download key: " + key + ": " + err.message);
 			});
-			download.on('end', function() {
+			download.once('end', function() {
 				self.logDebug(9, "S3 stream download complete: " + key);
 			} );
-			download.on('close', function() {
+			download.once('close', function() {
 				self.logDebug(9, "S3 stream download closed: " + key);
 			} );
 			
@@ -312,7 +332,11 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
 		this.s3.deleteObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
+			if (done) return; else done = true;
+			
 			if (err) {
 				self.logError('s3', "Failed to delete object: " + key + ": " + err.message);
 			}
