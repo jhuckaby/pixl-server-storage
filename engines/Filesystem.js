@@ -453,6 +453,36 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// get readable stream to record value given key and byte range
+		var self = this;
+		var file = this.getFilePath(key);
+		
+		this.logDebug(9, "Fetching ranged binary stream: " + key, { file, start, end } );
+		
+		// make sure record exists
+		fs.stat(file, function(err, stats) {
+			if (err) {
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
+				else {
+					// log fs errors that aren't simple missing files (i.e. I/O errors)
+					self.logError('file', "Failed to stat file: " + key + ": " + file + ": " + err.message);
+				}
+				
+				err.message = "Failed to head key: " + key + ": " + err.message;
+				return callback( err, null );
+			}
+			
+			// create read stream
+			var inp = fs.createReadStream( file, { start, end } );
+			
+			callback( null, inp );
+		} );
+	},
+	
 	delete: function(key, callback) {
 		// delete key given key
 		var self = this;

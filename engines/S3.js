@@ -324,6 +324,46 @@ module.exports = Class.create({
 		}); // headObject
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// get readable stream to record value given key and range
+		var self = this;
+		var orig_key = key;
+		key = this.prepKey(key);
+		
+		this.logDebug(9, "Fetching ranged S3 stream: " + key, { start, end });
+		
+		var params = { Key: this.extKey(key, orig_key) };
+		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
+		this.s3.headObject( params, function(err) {
+			if (done) return; else done = true;
+			
+			if (err) {
+				if (err.code != 'NoSuchKey') {
+					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
+				}
+				callback( err, null );
+				return;
+			}
+			
+			params.Range = "bytes=" + start + "-" + end;
+			var download = self.s3.getObject(params).createReadStream();
+			
+			download.once('error', function(err) {
+				self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+			});
+			download.once('end', function() {
+				self.logDebug(9, "S3 stream download complete: " + key);
+			} );
+			download.once('close', function() {
+				self.logDebug(9, "S3 stream download closed: " + key);
+			} );
+			
+			callback( null, download );
+		}); // headObject
+	},
+	
 	delete: function(key, callback) {
 		// delete s3 key given key
 		var self = this;

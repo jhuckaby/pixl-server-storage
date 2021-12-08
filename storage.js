@@ -354,6 +354,21 @@ module.exports = Class.create({
 		this.engine.getStream( key, callback );
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// fetch value via stream pipe and range
+		// start and end are both inclusive
+		var self = this;
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		key = this.normalizeKey( key );
+		
+		if (!this.isBinaryKey(key)) {
+			return callback( new Error("Stream values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
+		}
+		
+		this.engine.getStreamRange( key, start, end, callback );
+	},
+	
 	getMulti: function(keys, callback) {
 		// fetch multiple records at once, given array of keys
 		// callback is provided an array of values in matching order to keys

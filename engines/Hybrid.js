@@ -79,6 +79,12 @@ module.exports = Class.create({
 		this.binaryEngine.getStream( key, callback );
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// get readable stream to record value given key and range
+		// streams are binary only!
+		this.binaryEngine.getStreamRange( key, start, end, callback );
+	},
+	
 	delete: function(key, callback) {
 		// delete hybrid key given key
 		if (this.storage.isBinaryKey(key)) {

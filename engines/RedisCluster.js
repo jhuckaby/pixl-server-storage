@@ -248,6 +248,33 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// get readable stream to record value given key and range
+		var self = this;
+		
+		// The Redis API has no stream support.
+		// So, we have to do this the RAM-hard way...
+		
+		this.get( key, function(err, buf) {
+			if (err) {
+				// an actual error
+				err.message = "Failed to fetch key: " + key + ": " + err;
+				self.logError('redis', ''+err);
+				return callback(err);
+			}
+			else if (!buf) {
+				// record not found
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback( err, null );
+			}
+			
+			var range = buf.slice(start, end + 1);
+			var stream = new BufferStream(range);
+			callback(null, stream);
+		} );
+	},
+	
 	delete: function(key, callback) {
 		// delete Redis key given key
 		var self = this;

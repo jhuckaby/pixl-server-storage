@@ -228,6 +228,32 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getStreamRange: function(key, start, end, callback) {
+		// get readable stream to record value given key and range
+		var self = this;
+		
+		// The Couchbase Node.JS 2.0 API has no stream support.
+		// So, we have to do this the RAM-hard way...
+		this.get( key, function(err, buf) {
+			if (err && (err.code != CouchbaseAPI.errors.keyNotFound)) {
+				// some other error
+				err.message = "Failed to fetch key: " + key + ": " + err.message;
+				self.logError('couchbase', err.message);
+				return callback(err);
+			}
+			else if (!buf) {
+				// record not found
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback( err, null );
+			}
+			
+			var range = buf.slice(start, end + 1);
+			var stream = new BufferStream(range);
+			callback(null, stream);
+		} );
+	},
+	
 	delete: function(key, callback) {
 		// delete Couchbase key given key
 		// Example CB error message: The key does not exist on the server
