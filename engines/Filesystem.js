@@ -479,6 +479,13 @@ module.exports = Class.create({
 				return callback( err, null );
 			}
 			
+			// validate byte range, now that we have the head info
+			if ((start < 0) || (start >= stats.size) || (end < start) || (end >= stats.size)) {
+				download.destroy();
+				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + stats.size + ")"), null );
+				return;
+			}
+			
 			// create read stream
 			var inp = fs.createReadStream( file, { start, end } );
 			

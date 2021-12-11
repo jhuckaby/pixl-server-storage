@@ -269,6 +269,13 @@ module.exports = Class.create({
 				return callback( err, null );
 			}
 			
+			// validate byte range, now that we have the head info
+			if ((start < 0) || (start >= buf.length) || (end < start) || (end >= buf.length)) {
+				download.destroy();
+				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + buf.length + ")"), null );
+				return;
+			}
+			
 			var range = buf.slice(start, end + 1);
 			var stream = new BufferStream(range);
 			callback(null, stream, { mod: 1, len: buf.length });

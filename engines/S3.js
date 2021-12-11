@@ -365,6 +365,13 @@ module.exports = Class.create({
 				return;
 			}
 			
+			// validate byte range, now that we have the head info
+			if ((start < 0) || (start >= data.ContentLength) || (end < start) || (end >= data.ContentLength)) {
+				download.destroy();
+				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + data.ContentLength + ")"), null );
+				return;
+			}
+			
 			proceed = true;
 			callback( null, download, {
 				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
