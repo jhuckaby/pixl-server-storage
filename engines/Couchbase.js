@@ -224,7 +224,7 @@ module.exports = Class.create({
 			}
 			
 			var stream = new BufferStream(buf);
-			callback(null, stream);
+			callback(null, stream, { mod: 1, len: buf.length });
 		} );
 	},
 	
@@ -250,7 +250,7 @@ module.exports = Class.create({
 			
 			var range = buf.slice(start, end + 1);
 			var stream = new BufferStream(range);
-			callback(null, stream);
+			callback(null, stream, { mod: 1, len: buf.length });
 		} );
 	},
 	

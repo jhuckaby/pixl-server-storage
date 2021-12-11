@@ -18,6 +18,7 @@ var storage = server.Storage;
 	* [get](#get)
 	* [getMulti](#getmulti)
 	* [getStream](#getstream)
+	* [getStreamRange](#getstreamrange)
 	* [head](#head)
 	* [headMulti](#headmulti)
 	* [delete](#delete)
@@ -126,6 +127,8 @@ storage.putMulti( records, function(err) {
 } );
 ```
 
+Note that if any of the individual put operations fail, the entire `putMulti()` function is aborted, and the first error is passed to your callback.  At this point the operation may have been partially successful, with some records written, and others not.  Due to this uncertainty, you may want to use this method inside of a [transaction](./Transactions.md), which can be safely rolled back upon error.
+
 ## putStream
 
 ```javascript
@@ -141,6 +144,8 @@ storage.putStream( 'test1.gif', stream, function(err) {
 	if (err) throw err;
 } );
 ```
+
+Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native stream API, so the `putStream()` method has to load the entire record into memory.
 
 ## get
 
@@ -173,19 +178,21 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 } );
 ```
 
+Note that if *any* of the records fail, the entire operation fails, and the first error is passed to your callback.
+
 ## getStream
 
 ```javascript
 storage.getStream( KEY, CALLBACK );
 ```
 
-The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
+The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#class-streamreadable) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
 
 ```javascript
 var fs = require('fs');
 var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
 
-storage.getStream( 'test1.gif', function(err, readStream) {
+storage.getStream( 'test1.gif', function(err, readStream, info) {
 	if (err) throw err;
 	writeStream.on('finish', function() {
 		// data is completely written
@@ -193,6 +200,35 @@ storage.getStream( 'test1.gif', function(err, readStream) {
 	readStream.pipe( writeStream );
 } );
 ```
+
+As you can see above, your callback is also passed a 3rd argument, which is an object containing the record's full byte length and modification date.  These properties match those returned when you call [head()](#head) (i.e. `len` and `mod`).
+
+Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native stream API, so the `getStream()` method has to load the entire record into memory.
+
+## getStreamRange
+
+```javascript
+storage.getStreamRange( KEY, START, END, CALLBACK );
+```
+
+The `getStreamRange()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#class-streamreadable) to a specific slice of a record's data, so it can be read or piped to a writable stream.  The `start` and `end` arguments should be set to the starting and ending byte offset of the slice you want.  Both values are *inclusive*.  Example of spooling bytes `0-99` of a record to a local file:
+
+```javascript
+var fs = require('fs');
+var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+
+storage.getStreamRange( 'test1.gif', 0, 99, function(err, readStream, info) {
+	if (err) throw err;
+	writeStream.on('finish', function() {
+		// data is completely written
+	} );
+	readStream.pipe( writeStream );
+} );
+```
+
+As you can see above, your callback is also passed a 3rd argument, which is an object containing the record's full byte length and modification date.  These properties match those returned when you call [head()](#head) (i.e. `len` and `mod`).  The `len` is not affected by the `start` and `end` range -- it is always the full byte length of the record.
+
+Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native stream API, so the `getStreamRange()` method has to load the entire record into memory.
 
 ## head
 
@@ -217,7 +253,7 @@ storage.head( 'test1', function(err, data) {
 } );
 ```
 
-Please note that as of this writing, the `Couchbase` engine has no native API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but there is no way to retrieve the last modified date.
+Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native head API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but there is no way to retrieve the last modified date.
 
 ## headMulti
 

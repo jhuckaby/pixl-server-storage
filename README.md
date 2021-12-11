@@ -846,7 +846,7 @@ storage.getStream( 'test1.gif', function(err, readStream) {
 } );
 ```
 
-Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase and Redis APIs does not support streams, so they are currently simulated in those engines.  Streams *are* supported natively in both the Filesystem and Amazon S3 engines.
+Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase and Redis APIs do not support streams, so they are currently simulated in those engines.  Streams *are* supported natively in both the Filesystem and Amazon S3 engines.
 
 # Expiring Data
 

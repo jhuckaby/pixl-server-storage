@@ -294,33 +294,38 @@ module.exports = Class.create({
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
 		var params = { Key: this.extKey(key, orig_key) };
+		var download = self.s3.getObject(params).createReadStream();
+		var proceed = false;
+		
+		download.on('error', function(err) {
+			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+		});
+		download.once('end', function() {
+			self.logDebug(9, "S3 stream download complete: " + key);
+		} );
+		download.once('close', function() {
+			self.logDebug(9, "S3 stream download closed: " + key);
+		} );
 		
 		// double-callback protection (bug in aws-sdk)
 		var done = false;
-		this.s3.headObject( params, function(err) {
+		this.s3.headObject( params, function(err, data) {
 			if (done) return; else done = true;
 			
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
 				}
+				download.destroy();
 				callback( err, null );
 				return;
 			}
 			
-			var download = self.s3.getObject(params).createReadStream();
-			
-			download.once('error', function(err) {
-				self.logError('s3', "Failed to download key: " + key + ": " + err.message);
-			});
-			download.once('end', function() {
-				self.logDebug(9, "S3 stream download complete: " + key);
+			proceed = true;
+			callback( null, download, {
+				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
+				len: data.ContentLength
 			} );
-			download.once('close', function() {
-				self.logDebug(9, "S3 stream download closed: " + key);
-			} );
-			
-			callback( null, download );
 		}); // headObject
 	},
 	
@@ -333,34 +338,38 @@ module.exports = Class.create({
 		this.logDebug(9, "Fetching ranged S3 stream: " + key, { start, end });
 		
 		var params = { Key: this.extKey(key, orig_key) };
+		var download = self.s3.getObject( Tools.mergeHashes(params, { Range: "bytes=" + start + "-" + end }) ).createReadStream();
+		var proceed = false;
+		
+		download.on('error', function(err) {
+			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+		});
+		download.once('end', function() {
+			self.logDebug(9, "S3 stream download complete: " + key);
+		} );
+		download.once('close', function() {
+			self.logDebug(9, "S3 stream download closed: " + key);
+		} );
 		
 		// double-callback protection (bug in aws-sdk)
 		var done = false;
-		this.s3.headObject( params, function(err) {
+		this.s3.headObject( params, function(err, data) {
 			if (done) return; else done = true;
 			
 			if (err) {
 				if (err.code != 'NoSuchKey') {
 					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
 				}
+				download.destroy();
 				callback( err, null );
 				return;
 			}
 			
-			params.Range = "bytes=" + start + "-" + end;
-			var download = self.s3.getObject(params).createReadStream();
-			
-			download.once('error', function(err) {
-				self.logError('s3', "Failed to download key: " + key + ": " + err.message);
-			});
-			download.once('end', function() {
-				self.logDebug(9, "S3 stream download complete: " + key);
+			proceed = true;
+			callback( null, download, {
+				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
+				len: data.ContentLength
 			} );
-			download.once('close', function() {
-				self.logDebug(9, "S3 stream download closed: " + key);
-			} );
-			
-			callback( null, download );
 		}); // headObject
 	},
 	

@@ -449,7 +449,10 @@ module.exports = Class.create({
 			// create read stream
 			var inp = fs.createReadStream( file );
 			
-			callback( null, inp );
+			callback( null, inp, {
+				mod: Math.floor(stats.mtime.getTime() / 1000),
+				len: stats.size
+			} );
 		} );
 	},
 	
@@ -479,7 +482,10 @@ module.exports = Class.create({
 			// create read stream
 			var inp = fs.createReadStream( file, { start, end } );
 			
-			callback( null, inp );
+			callback( null, inp, {
+				mod: Math.floor(stats.mtime.getTime() / 1000),
+				len: stats.size
+			} );
 		} );
 	},
 	

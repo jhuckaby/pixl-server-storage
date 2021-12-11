@@ -375,7 +375,7 @@ module.exports = {
 		},
 		
 		function testStream(test) {
-			test.expect(11);
+			test.expect(14);
 			var self = this;
 			
 			var key = 'spacer-stream.gif';
@@ -395,10 +395,13 @@ module.exports = {
 				var tempFile = __dirname + '/' + filename + '.streamtemp';
 				var outStream = fs.createWriteStream( tempFile );
 				
-				self.storage.getStream( key, function(err, storageStream) {
+				self.storage.getStream( key, function(err, storageStream, streamInfo) {
 					test.ok( !err, "No error fetching stream: " + err );
 					test.ok( !!storageStream, "Got storage stream as 2nd arg");
 					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
+					test.ok( !!streamInfo, "Info was provided as the 3rd arg");
+					test.ok( streamInfo.len == 43, "Info has correct data length");
+					test.ok( streamInfo.mod > 0, "Info has a non-zero mod date");
 					
 					outStream.on('finish', function() {
 						var newSpacerBuf = fs.readFileSync( tempFile );
@@ -406,6 +409,52 @@ module.exports = {
 						
 						var hashTest = digestHex( newSpacerBuf );
 						test.ok( hashTest == spacerHash, "SHA256 hash of data matches original" );
+						
+						self.storage.delete( key, function(err) {
+							test.ok( !err, "No error deleting stream key: " + err );
+							fs.unlinkSync( tempFile );
+							test.done();
+						} ); // delete
+					} ); // stream finish
+					
+					storageStream.pipe( outStream );
+					
+				} ); // getStream
+			} ); // putStream
+		},
+		
+		function testStreamRange(test) {
+			test.expect(14);
+			var self = this;
+			
+			var key = 'spacer-stream.gif';
+			var filename = 'spacer.gif';
+			var spacerBuf = fs.readFileSync( __dirname + '/' + filename );
+			var spacerStream = fs.createReadStream( __dirname + '/' + filename );
+			
+			test.ok( !!spacerBuf, "Got buffer from file" );
+			test.ok( typeof(spacerBuf) == 'object', "Buffer is an object" );
+			test.ok( spacerBuf.length > 0, "Buffer has size" );
+			test.ok( !!spacerStream, "Got read stream" );
+			
+			this.storage.putStream( key, spacerStream, function(err) {
+				test.ok( !err, "No error creating stream: " + err );
+				
+				var tempFile = __dirname + '/' + filename + '.streamtemp';
+				var outStream = fs.createWriteStream( tempFile );
+				
+				self.storage.getStreamRange( key, 0, 5, function(err, storageStream, streamInfo) {
+					test.ok( !err, "No error fetching stream: " + err );
+					test.ok( !!storageStream, "Got storage stream as 2nd arg");
+					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
+					test.ok( !!streamInfo, "Info was provided as the 3rd arg");
+					test.ok( streamInfo.len == 43, "Info has correct data length");
+					test.ok( streamInfo.mod > 0, "Info has a non-zero mod date");
+					
+					outStream.on('finish', function() {
+						var newSpacerBuf = fs.readFileSync( tempFile );
+						test.ok( newSpacerBuf.length == 6, "Stream length is correct" );
+						test.ok( newSpacerBuf.toString() == "GIF89a", "Range buffer content is correct" );
 						
 						self.storage.delete( key, function(err) {
 							test.ok( !err, "No error deleting stream key: " + err );
