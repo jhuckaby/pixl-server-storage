@@ -5,13 +5,14 @@
 var path = require('path');
 var fs = require('fs');
 var async = require('async');
-var mkdirp = require('mkdirp');
 var crypto = require('crypto');
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
 var Cache = require("pixl-cache");
+
+var mkdirp = Tools.mkdirp;
 
 module.exports = Class.create({
 	

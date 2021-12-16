@@ -8,9 +8,9 @@ var Path = require("path");
 var cp = require("child_process");
 var os = require("os");
 var async = require('async');
-var mkdirp = require('mkdirp');
 var Class = require("pixl-class");
 var Tools = require("pixl-tools");
+var mkdirp = Tools.mkdirp;
 
 // Transaction support is implemented as a mixin to Storage
 // Config Keys:
