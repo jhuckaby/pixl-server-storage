@@ -366,6 +366,13 @@ module.exports = Class.create({
 			}
 			
 			// validate byte range, now that we have the head info
+			if (isNaN(start) && !isNaN(end)) {
+				start = data.ContentLength - end;
+				end = data.ContentLength ? data.ContentLength - 1 : 0;
+			} 
+			else if (!isNaN(start) && isNaN(end)) {
+				end = data.ContentLength ? data.ContentLength - 1 : 0;
+			}
 			if ((start < 0) || (start >= data.ContentLength) || (end < start) || (end >= data.ContentLength)) {
 				download.destroy();
 				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + data.ContentLength + ")"), null );

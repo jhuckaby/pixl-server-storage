@@ -226,7 +226,12 @@ storage.getStreamRange( 'test1.gif', 0, 99, function(err, readStream, info) {
 } );
 ```
 
-As you can see above, your callback is also passed a 3rd argument, which is an object containing the record's full byte length and modification date.  These properties match those returned when you call [head()](#head) (i.e. `len` and `mod`).  The `len` is not affected by the `start` and `end` range -- it is always the full byte length of the record.
+As you can see in the example above, your callback is also passed a 3rd argument, which is an object containing the record's full byte length and modification date.  These properties match those returned when you call [head()](#head) (i.e. `len` and `mod`).  The `len` is not affected by the `start` and `end` range -- it is always the full byte length of the record.
+
+The API supports two special range cases:
+
+- If `start` is valid but `end` is `NaN`, it is assumed you want the entire record starting at `start` offset.
+- If `start` is `NaN` but `end` is valid, it is assumed you want `end` bytes from the end of the record.
 
 Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native stream API, so the `getStreamRange()` method has to load the entire record into memory.
 
