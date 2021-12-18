@@ -338,7 +338,14 @@ module.exports = Class.create({
 		this.logDebug(9, "Fetching ranged S3 stream: " + key, { start, end });
 		
 		var params = { Key: this.extKey(key, orig_key) };
-		var download = self.s3.getObject( Tools.mergeHashes(params, { Range: "bytes=" + start + "-" + end }) ).createReadStream();
+		
+		// convert start/end to HTTP range header string
+		var range = "bytes=";
+		if (!isNaN(start)) range += start;
+		range += '-';
+		if (!isNaN(end)) range += end;
+		
+		var download = self.s3.getObject( Tools.mergeHashes(params, { Range: range }) ).createReadStream();
 		var proceed = false;
 		
 		download.on('error', function(err) {
@@ -373,7 +380,7 @@ module.exports = Class.create({
 			else if (!isNaN(start) && isNaN(end)) {
 				end = data.ContentLength ? data.ContentLength - 1 : 0;
 			}
-			if ((start < 0) || (start >= data.ContentLength) || (end < start) || (end >= data.ContentLength)) {
+			if (isNaN(start) || isNaN(end) || (start < 0) || (start >= data.ContentLength) || (end < start) || (end >= data.ContentLength)) {
 				download.destroy();
 				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + data.ContentLength + ")"), null );
 				return;

@@ -488,7 +488,7 @@ module.exports = Class.create({
 			else if (!isNaN(start) && isNaN(end)) {
 				end = stats.size ? stats.size - 1 : 0;
 			}
-			if ((start < 0) || (start >= stats.size) || (end < start) || (end >= stats.size)) {
+			if (isNaN(start) || isNaN(end) || (start < 0) || (start >= stats.size) || (end < start) || (end >= stats.size)) {
 				download.destroy();
 				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + stats.size + ")"), null );
 				return;

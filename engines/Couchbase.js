@@ -256,7 +256,7 @@ module.exports = Class.create({
 			else if (!isNaN(start) && isNaN(end)) {
 				end = buf.length ? buf.length - 1 : 0;
 			}
-			if ((start < 0) || (start >= buf.length) || (end < start) || (end >= buf.length)) {
+			if (isNaN(start) || isNaN(end) || (start < 0) || (start >= buf.length) || (end < start) || (end >= buf.length)) {
 				download.destroy();
 				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + buf.length + ")"), null );
 				return;
