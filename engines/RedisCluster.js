@@ -44,10 +44,8 @@ module.exports = Class.create({
 		
 		this.keyPrefix = (r_config.keyPrefix || '').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
-		delete r_config.keyPrefix;
 		
 		this.keyTemplate = (r_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
-		delete r_config.keyTemplate;
 		
 		r_config.clusterOpts.clusterRetryStrategy = function(attempts) {
 			if (attempts > r_config.connectRetries) return false;

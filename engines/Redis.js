@@ -39,10 +39,8 @@ module.exports = Class.create({
 		
 		this.keyPrefix = (r_config.keyPrefix || '').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
-		delete r_config.keyPrefix;
 		
 		this.keyTemplate = (r_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
-		delete r_config.keyTemplate;
 		
 		r_config.return_buffers = true;
 		r_config.retry_strategy = function(opts) {
@@ -50,7 +48,7 @@ module.exports = Class.create({
 			return Math.min(opts.attempt * 100, 3000);
 		};
 		
-		this.redis = Redis.createClient(r_config);
+		this.redis = Redis.createClient( Tools.copyHashRemoveKeys(r_config, { keyPrefix:1, keyTemplate:1 }) );
 		
 		this.redis.on('error', function(err) {
 			if (!self.storage.started) return callback(err);

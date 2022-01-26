@@ -37,13 +37,9 @@ module.exports = Class.create({
 		
 		this.keyPrefix = (s3_config.keyPrefix || '').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
-		delete s3_config.keyPrefix;
 		
 		this.keyTemplate = (s3_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
-		delete s3_config.keyTemplate;
-		
 		this.fileExtensions = !!s3_config.fileExtensions;
-		delete s3_config.fileExtensions;
 		
 		if (this.debugLevel(10)) {
 			// S3 has a logger API but it's extremely verbose -- restrict to level 10 only
@@ -70,7 +66,7 @@ module.exports = Class.create({
 		delete s3_config.cache;
 		
 		AWS.config.update( aws_config );
-		this.s3 = new AWS.S3( s3_config );
+		this.s3 = new AWS.S3( Tools.copyHashRemoveKeys(s3_config, { keyPrefix:1, keyTemplate:1, fileExtensions:1, cache:1 }) );
 	},
 	
 	prepKey: function(key) {
