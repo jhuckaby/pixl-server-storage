@@ -34,7 +34,8 @@ module.exports = Class.create({
 		},
 		max_recent_events: 0,
 		cache_key_match: '',
-		expiration_updates: false
+		expiration_updates: false,
+		lower_case_keys: true
 	},
 	
 	locks: null,
@@ -130,6 +131,7 @@ module.exports = Class.create({
 		this.logEventTypes = this.config.get('log_event_types');
 		this.maxRecentEvents = this.config.get('max_recent_events');
 		this.expHash = this.config.get('expiration_updates');
+		this.lowerKeys = this.config.get('lower_case_keys');
 		
 		this.cacheKeyRegex = null;
 		if (this.config.get('cache_key_match')) {
@@ -139,7 +141,9 @@ module.exports = Class.create({
 	
 	normalizeKey: function(key) {
 		// downconvert unicode, lower-case, alphanum-dash-dot-slash only, strip leading and trailing slashes
-		return unidecode(key).toLowerCase().replace(/[^\w\-\.\/]+/g, '').replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
+		key = '' + key;
+		if (this.lowerKeys) key = key.toLowerCase();
+		return unidecode(key).replace(/[^\w\-\.\/]+/g, '').replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
 	},
 	
 	isBinaryKey: function(key) {
