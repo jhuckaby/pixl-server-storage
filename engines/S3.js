@@ -127,7 +127,7 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				self.logError('s3', "Failed to store object: " + key + ": " + err.message);
+				self.logError('s3', "Failed to store object: " + key + ": " + (err.message || err), err);
 			}
 			else self.logDebug(9, "Store complete: " + key);
 			
@@ -158,7 +158,7 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				self.logError('s3', "Failed to store stream: " + key + ": " + err.message);
+				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
 			}
 			else self.logDebug(9, "Stream store complete: " + key);
 			
@@ -193,8 +193,8 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if (err.code != 'NoSuchKey') {
-					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
+				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
+					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
 				callback( err, null );
 				return;
@@ -249,7 +249,7 @@ module.exports = Class.create({
 				}
 				else {
 					// some other error
-					self.logError('s3', "Failed to fetch key: " + key + ": " + err.message);
+					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
 				callback( err, null );
 				return;
@@ -294,7 +294,7 @@ module.exports = Class.create({
 		var proceed = false;
 		
 		download.on('error', function(err) {
-			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
 		});
 		download.once('end', function() {
 			self.logDebug(9, "S3 stream download complete: " + key);
@@ -309,8 +309,8 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if (err.code != 'NoSuchKey') {
-					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
+				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
+					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
 				download.destroy();
 				callback( err, null );
@@ -345,7 +345,7 @@ module.exports = Class.create({
 		var proceed = false;
 		
 		download.on('error', function(err) {
-			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + err.message);
+			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
 		});
 		download.once('end', function() {
 			self.logDebug(9, "S3 stream download complete: " + key);
@@ -360,8 +360,8 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if (err.code != 'NoSuchKey') {
-					self.logError('s3', "Failed to head key: " + key + ": " + err.message);
+				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
+					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
 				download.destroy();
 				callback( err, null );
@@ -404,7 +404,7 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				self.logError('s3', "Failed to delete object: " + key + ": " + err.message);
+				self.logError('s3', "Failed to delete object: " + key + ": " + (err.message || err), err);
 			}
 			else self.logDebug(9, "Delete complete: " + key);
 			
