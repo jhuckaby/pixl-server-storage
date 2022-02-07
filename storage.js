@@ -324,7 +324,7 @@ module.exports = Class.create({
 		// invoke engine and track perf
 		var pf = this.perf.begin('get');
 		
-		this.engine.get( key, function(err, value) {
+		this.engine.get( key, function(err, value, info) {
 			// get complete
 			var elapsed = pf.end();
 			
@@ -339,8 +339,8 @@ module.exports = Class.create({
 				elapsed_ms: elapsed
 			});
 			
-			callback(null, value);
-			if (!err) self.emit('get', key, value);
+			callback(null, value, info);
+			if (!err) self.emit('get', key, value, info);
 		} );
 	},
 	
