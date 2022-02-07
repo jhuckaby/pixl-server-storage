@@ -193,7 +193,14 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
+				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+					// key not found, special case, don't log an error
+					// always include "Not found" in error message
+					err = new Error("Failed to head key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+				}
+				else {
+					// some other error
 					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
 				callback( err, null );
@@ -277,7 +284,10 @@ module.exports = Class.create({
 				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? body : null);
 			}
 			
-			callback( null, body );
+			callback( null, body, {
+				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
+				len: data.ContentLength
+			} );
 		} );
 	},
 	
