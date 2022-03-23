@@ -226,6 +226,36 @@ module.exports = Class.create({
 		} );
 	},
 	
+	putStreamCustom: function(key, stream, opts, callback) {
+		// store key+stream with engine-specific opts
+		var self = this;
+		
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		key = this.normalizeKey( key );
+		
+		if (!this.isBinaryKey(key)) {
+			return callback( new Error("Stream values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
+		}
+		
+		// sanity checks
+		if (!stream || !stream.pipe) return callback( new Error("Not a valid stream.") );
+		
+		// invoke engine and track perf
+		var pf = this.perf.begin('put');
+		
+		this.engine.putStreamCustom( key, stream, opts, function(err) {
+			// put complete
+			var elapsed = pf.end();
+			
+			if (!err) self.logTransaction('put', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(err);
+			if (!err) self.emit('putStream', key);
+		} );
+	},
+	
 	putMulti: function(records, callback) {
 		// put multiple records at once, given object of keys and values
 		var self = this;

@@ -166,6 +166,33 @@ module.exports = Class.create({
 		} );
 	},
 	
+	putStreamCustom: function(key, inp, opts, callback) {
+		// store key+stream of data to S3, inc options
+		var self = this;
+		var orig_key = key;
+		key = this.prepKey(key);
+		
+		var params = {};
+		params.Key = this.extKey(key, orig_key);
+		params.Body = inp;
+		if (opts) Tools.mergeHashInto(params, opts);
+		
+		this.logDebug(9, "Storing S3 Binary Stream: " + key);
+		
+		// double-callback protection (bug in aws-sdk)
+		var done = false;
+		this.s3.upload(params, function(err, data) {
+			if (done) return; else done = true;
+			
+			if (err) {
+				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
+			}
+			else self.logDebug(9, "Stream store complete: " + key);
+			
+			if (callback) callback(err, data);
+		} );
+	},
+	
 	head: function(key, callback) {
 		// head s3 value given key
 		var self = this;

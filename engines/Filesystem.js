@@ -315,6 +315,58 @@ module.exports = Class.create({
 		inp.pipe( outp );
 	},
 	
+	putStreamCustom: function(key, inp, opts, callback) {
+		// store key+stream of data to disk
+		var self = this;
+		var file = this.getFilePath(key);
+		
+		this.logDebug(9, "Storing Binary Stream Object: " + key, file);
+		
+		var dir = path.dirname( file );
+		
+		var temp_file = this.tempDir + '/' + path.basename(file) + '.tmp.' + this.tempFileCounter;
+		this.tempFileCounter = (this.tempFileCounter + 1) % 10000000;
+		
+		// create the write stream to temp file
+		var outp = fs.createWriteStream( temp_file, opts || {} );
+		
+		outp.on('error', function(err) {
+			// failed to write file
+			var msg = "Failed to write file: " + key + ": " + temp_file + ": " + err.message;
+			self.logError('file', msg);
+			return callback( new Error(msg), null );
+		} );
+		
+		outp.on('finish', function() {
+			// make sure parent dirs exist, async
+			self._makeDirs( dir, 0o0775, function(err) {
+				if (err) {
+					// failed to create directory
+					var msg = "Failed to create directory: " + key + ": " + dir + ": " + err.message;
+					self.logError('file', msg);
+					return callback( new Error(msg), null );
+				}
+				
+				// rename temp file to final
+				self._renameFile( temp_file, file, function (err) {
+					if (err) {
+						// failed to write file
+						var msg = "Failed to rename file: " + key + ": " + temp_file + ": " + err.message;
+						self.logError('file', msg);
+						return callback( new Error(msg), null );
+					}
+					
+					// all done
+					self.logDebug(9, "Store operation complete: " + key);
+					callback(null, null);
+				} ); // rename
+			} ); // mkdirp
+		} ); // pipe finish
+		
+		// pipe inp to outp
+		inp.pipe( outp );
+	},
+	
 	head: function(key, callback) {
 		// head value given key
 		var self = this;
