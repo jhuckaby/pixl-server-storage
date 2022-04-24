@@ -523,10 +523,12 @@ Note that binary records are **not** cached, as they are generally large.  Only 
 
 ## Couchbase
 
-If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app:
+Please note that as of this writing (April 2022), pixl-server-storage only supports Couchbase Client v2, so you need to force install version `2.6.12` (see instructions below).  Work is underway to support the v3 API, which has many breaking changes.
+
+If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app, and it **must be v2**:
 
 ```
-npm install --save couchbase
+npm install --save couchbase@2.6.12
 ```
 
 Then configure your storage thusly:
