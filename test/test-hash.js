@@ -10,7 +10,7 @@ var async = require('async');
 var Tools = require('pixl-tools');
 
 // const BAD_KEYS = Object.getOwnPropertyNames( Object.prototype );
-const BAD_KEYS = ['constructor', '__defineGetter__', '__defineSetter__', 'hasOwnProperty', '__lookupGetter__', '__lookupSetter__', 'isPrototypeOf', 'propertyIsEnumerable', 'toString', 'valueOf', '__proto__', 'toLocaleString'];
+const BAD_KEYS = ['constructor', '__defineGetter__', '__defineSetter__', 'hasOwnProperty', '__lookupGetter__', '__lookupSetter__', 'isPrototypeOf', 'propertyIsEnumerable', 'toString', 'valueOf', 'toLocaleString'];
 
 module.exports = {
 	tests: [
