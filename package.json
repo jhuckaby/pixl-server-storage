@@ -1,6 +1,6 @@
 {
 	"name": "pixl-server-storage",
-	"version": "3.0.20",
+	"version": "3.0.21",
 	"description": "A key/value/list storage component for the pixl-server framework.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-server-storage",
@@ -26,7 +26,7 @@
 		"pixl-tools": "^1.0.24",
 		"pixl-perf": "^1.0.0",
 		"pixl-cache": "^1.0.1",
-		"async": "2.6.0",
+		"async": "2.6.4",
 		"nearley": "2.20.1",
 		"moo": "0.4.3",
 		"porter-stemmer": "0.9.1",
