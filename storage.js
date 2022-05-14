@@ -893,6 +893,7 @@ module.exports = Class.create({
 				},
 				function() {
 					// all locks released
+					self.logDebug(9, "All locks released.");
 					callback();
 				}
 			); // whilst

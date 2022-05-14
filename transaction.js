@@ -638,14 +638,17 @@ module.exports = Class.create({
 					}
 					
 					// complete, unlock and remove transaction from memory
-					self.unlock( 'C|'+path );
-					self._transUnlock(path);
 					self.transactions[path].keys = {}; // release memory
 					self.transactions[path].values = {}; // release memory
 					self.transactions[path].queue = []; // release memory
 					delete self.transactions[path];
 					
 					self.logDebug(3, "Transaction rollback complete: " + trans.id, { path: path });
+					
+					// unlock at the VERY end, as a new transaction may be waiting on the same path
+					self.unlock( 'C|'+path );
+					self._transUnlock(path);
+					
 					callback();
 				}); // fs.unlink
 			} // done with log
