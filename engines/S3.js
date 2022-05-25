@@ -275,7 +275,7 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if (err.code == 'NoSuchKey') {
+				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
@@ -346,9 +346,17 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
-					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
+				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+					// key not found, special case, don't log an error
+					// always include "Not found" in error message
+					err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
 				}
+				else {
+					// some other error
+					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
+				}
+				
 				download.destroy();
 				callback( err, null );
 				return;
@@ -397,9 +405,17 @@ module.exports = Class.create({
 			if (done) return; else done = true;
 			
 			if (err) {
-				if ((err.code != 'NoSuchKey') && (err.code != 'NotFound')) {
-					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
+				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+					// key not found, special case, don't log an error
+					// always include "Not found" in error message
+					err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
 				}
+				else {
+					// some other error
+					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
+				}
+				
 				download.destroy();
 				callback( err, null );
 				return;
