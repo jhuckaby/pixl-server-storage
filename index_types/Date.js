@@ -159,7 +159,9 @@ module.exports = Class.create({
 		}
 		
 		// load index summary for list of all populated dates
+		var dspf = state.perf.begin('date_summary');
 		this.get( sum_path, function(err, summary) {
+			dspf.end();
 			if (err || !summary) {
 				summary = { id: query.def.id, values: {} };
 			}
@@ -190,6 +192,7 @@ module.exports = Class.create({
 			}
 			
 			// now perform OR search for all applicable words
+			var drpf = state.perf.begin('date_range');
 			async.eachLimit( words, self.concurrency,
 				function(word, callback) {
 					// for each word, iterate over record ids
@@ -203,6 +206,8 @@ module.exports = Class.create({
 				},
 				function(err) {
 					// all done, perform final merge
+					drpf.end();
+					state.perf.count('date_buckets', words.length);
 					if (err) return callback(err);
 					self.mergeIndex( record_ids, temp_results, state.first ? 'or' : state.mode );
 					state.first = false;

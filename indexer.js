@@ -5,6 +5,7 @@
 var async = require('async');
 var Class = require("pixl-class");
 var Tools = require("pixl-tools");
+var Perf = require("pixl-perf");
 var nearley = require("nearley");
 var pxql_grammar = require("./pxql.js");
 var stemmer = require('porter-stemmer').stemmer;
@@ -1220,15 +1221,16 @@ module.exports = Class.create({
 		var path = config.base_path;
 		var pf = this.perf.begin('search');
 		
+		var orig_query = query;
+		if (typeof(query) == 'object') query = Tools.copyHash(query, true);
+		
 		this.shareLock( 'C|'+path, true, function(err, lock) {
 			// got shared lock
 			self._searchRecords( query, config, function(err, results, state) {
 				// search complete
-				var elapsed = pf.end();
-				
 				if (!err) self.logTransaction('search', path, {
-					query: query,
-					elapsed_ms: elapsed,
+					query: orig_query,
+					perf: state.perf ? state.perf.metrics() : {},
 					results: (self.logEventTypes.search || self.logEventTypes.all) ? Tools.numKeys(results) : 0
 				});
 				
@@ -1251,9 +1253,15 @@ module.exports = Class.create({
 			if (query == '*') {
 				// fetch all records
 				this.logDebug(8, "Fetching all records: " + config.base_path);
+				var apf = new Perf();
+				apf.begin();
+				apf.begin('all');
+				
 				return this.hashGetAll( config.base_path + '/_id', function(err, results) {
 					// ignore error, just return empty hash
-					callback( null, results || {}, {} );
+					apf.end('all');
+					apf.end();
+					callback( null, results || {}, { perf: apf } );
 				} );
 			}
 			else if (query.match(/^\([\s\S]+\)$/)) {
@@ -1282,6 +1290,12 @@ module.exports = Class.create({
 		state.record_ids = Object.create(null);
 		state.first = true;
 		
+		// track detailed perf of search operations
+		if (!state.perf) {
+			state.perf = new Perf();
+			state.perf.begin();
+		}
+		
 		// first, split criteria into subs (sub-queries), 
 		// stds (standard queries) and negs (negative queries)
 		var subs = [], stds = [], negs = [];
@@ -1302,11 +1316,14 @@ module.exports = Class.create({
 		}
 		
 		// stds need to be weighed and sorted by weight ascending
+		var wpf = state.perf.begin('weigh');
 		async.eachLimit( (query.mode == 'and') ? stds : [], this.concurrency,
 			function(crit, callback) {
 				self.weighCriterion(crit, config, callback);
 			},
 			function(err) {
+				wpf.end();
+				
 				// sort stds by weight ascending (only needed in AND mode)
 				if (query.mode == 'and') {
 					stds = stds.sort( function(a, b) { return a.weight - b.weight; } );
@@ -1317,9 +1334,12 @@ module.exports = Class.create({
 				var tasks = [].concat( subs, stds, negs );
 				async.eachSeries( tasks,
 					function(task, callback) {
+						task.perf = state.perf;
+						
 						if (task.criteria) {
-							// sub-query
+							// sub-query	
 							self._searchRecords( task, config, function(err, records) {
+								state.perf.count('subs', 1);
 								self.mergeIndex( state.record_ids, records, state.first ? 'or' : state.mode );
 								state.first = false;
 								callback();
@@ -1333,13 +1353,31 @@ module.exports = Class.create({
 							// custom index type, e.g. date, time, number
 							var func = 'searchIndex_' + task.def.type;
 							if (!self[func]) return callback( new Error("Unknown index type: " + task.def.type) );
-							self[func]( task, state, callback );
+							
+							var cpf = state.perf.begin('search_' + task.def.id + '_' + task.def.type);
+							self[func]( task, state, function(err) {
+								cpf.end();
+								state.perf.count(task.def.type + 's', 1);
+								callback(err);
+							} );
 						}
 						else if (task.literal) {
-							self.searchWordIndexLiteral(task, state, callback);
+							// literal multi-word phrase
+							var spf = state.perf.begin('search_' + task.def.id + '_literal');
+							self.searchWordIndexLiteral(task, state, function(err) {
+								spf.end();
+								state.perf.count('literals', 1);
+								callback(err);
+							});
 						}
 						else {
-							self.searchWordIndex(task, state, callback);
+							// single word search
+							var spf = state.perf.begin('search_' + task.def.id + '_word');
+							self.searchWordIndex(task, state, function(err) {
+								spf.end();
+								state.perf.count('words', 1);
+								callback(err);
+							});
 						}
 					},
 					function(err) {
@@ -1347,6 +1385,7 @@ module.exports = Class.create({
 						if (err) {
 							self.logError('index', "Index search failed: " + err);
 							state.record_ids = {};
+							state.err = err;
 						}
 						self.logDebug(10, "Search complete", state.record_ids);
 						callback(null, state.record_ids, Tools.copyHashRemoveKeys(state, { config:1, record_ids:1, first:1 }));
@@ -1357,7 +1396,7 @@ module.exports = Class.create({
 	},
 	
 	searchWordIndex: function(query, state, callback) {
-		// run one search query (list of words against one index)
+		// run one word query (single word against one index)
 		var self = this;
 		var config = state.config;
 		var def = query.def;
@@ -1385,6 +1424,7 @@ module.exports = Class.create({
 		// then it would probably be faster to apply the logic using _data getMulti (a.k.a row scan).
 		// Otherwise, perform a normal hash merge (which has to read every hash page).
 		var hash_page_size = config.hash_page_size || 1000;
+		var wpf = state.perf.begin('word_' + query.word);
 		
 		if ((mode == 'and') && query.weight && (query.weight / hash_page_size > num_cur_items)) {
 			this.logDebug(10, "Performing row scan on " + num_cur_items + " items", query);
@@ -1394,7 +1434,9 @@ module.exports = Class.create({
 				return config.base_path + '/_data/' + record_id;
 			} );
 			
+			var rspf = state.perf.begin('row_scan');
 			this.getMulti( data_paths, function(err, datas) {
+				rspf.end();
 				if (err) return callback(err);
 				
 				datas.forEach( function(data, idx) {
@@ -1404,11 +1446,15 @@ module.exports = Class.create({
 					}
 				} );
 				
+				state.perf.count('rows_scanned', datas.length);
+				wpf.end();
 				callback();
 			} ); // getMulti
 		} // row scan
 		else {
 			this.logDebug(10, "Performing '" + mode + "' hash merge on " + num_cur_items + " items", query);
+			
+			var hmpf = state.perf.begin('hash_merge');
 			this.hashEachPage( path,
 				function(items, callback) {
 					switch (mode) {
@@ -1430,9 +1476,12 @@ module.exports = Class.create({
 							}
 						break;
 					}
+					state.perf.count('hash_pages', 1);
 					callback();
 				},
 				function(err) {
+					hmpf.end();
+					wpf.end();
 					if (mode == 'and') state.record_ids = new_items;
 					callback(err);
 				}
@@ -1460,6 +1509,7 @@ module.exports = Class.create({
 			function(word, callback) {
 				// for each word, iterate over record ids
 				var keepers = Object.create(null);
+				var wpf = state.perf.begin('literal_' + word);
 				
 				self.hashEachSync( path_prefix + word,
 					function(record_id, raw_value) {
@@ -1495,6 +1545,7 @@ module.exports = Class.create({
 						else keepers[record_id] = 1;
 					},
 					function(err) {
+						wpf.end();
 						// If in a subsequent word pass, make sure all temp_results
 						// ids are still matched in the latest word
 						if (temp_idx > 0) self.mergeIndex( temp_results, keepers, 'and' );

@@ -119,7 +119,9 @@ module.exports = Class.create({
 		}
 		
 		// load index summary for list of all populated numbers
+		var nspf = state.perf.begin('number_summary');
 		this.get( sum_path, function(err, summary) {
+			nspf.end();
 			if (err || !summary) {
 				summary = { id: query.def.id, values: {} };
 			}
@@ -150,6 +152,7 @@ module.exports = Class.create({
 			}
 			
 			// now perform OR search for all applicable words
+			var nrpf = state.perf.begin('number_range');
 			async.eachLimit( words, self.concurrency,
 				function(word, callback) {
 					// for each word, iterate over record ids
@@ -163,6 +166,8 @@ module.exports = Class.create({
 				},
 				function(err) {
 					// all done, perform final merge
+					nrpf.end();
+					state.perf.count('number_buckets', words.length);
 					if (err) return callback(err);
 					self.mergeIndex( record_ids, temp_results, state.first ? 'or' : state.mode );
 					state.first = false;
