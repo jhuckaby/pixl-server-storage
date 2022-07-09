@@ -252,6 +252,12 @@ The `expiration_updates` property activates additional features in the [expirati
 
 Note that this feature incurs additional overhead, because the expiration date of every record needs to be stored in a global [Hash](docs/Hashes.md).  This slows down both the expiration set operation, and the nightly maintenance sweep to delete expired records.  For this reason, the `expiration_dates` property defaults to `false` (disabled).
 
+## lower_case_keys
+
+The `lower_case_keys` property causes all storage keys to be internally lower-cased, effectively making all storage paths case-insensitive.  This is the default (`true`).  If you set this property to `false`, then all storage keys retain their natural casing, effectively making them case-sensitive.
+
+Please note that if you use the [Local Filesystem](#local-filesystem) engine, then the filesystem itself may be case-insensitive (e.g. legacy macOS HFS).
+
 ## debug (standalone)
 
 The `debug` property is only used when using [Standalone Mode](#standalone-mode).  Setting this to `true` will cause the engine to emit debugging messages to the console.
