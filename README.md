@@ -415,27 +415,18 @@ Note that binary records are **not** cached.  This system is for JSON records on
 
 ## Amazon S3
 
-If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, here is how to do so.  First, you need to manually install the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module into your app:
-
-```
-npm install --save aws-sdk
-```
-
-Then configure your storage thusly:
+If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, configure your storage thusly:
 
 ```javascript
 {
 	"engine": "S3",
 	"AWS": {
-		"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
-		"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
 		"region": "us-west-1",
-		"correctClockSkew": true,
-		"maxRetries": 5,
-		"httpOptions": {
-			"connectTimeout": 5000,
-			"timeout": 5000
-		}
+		"credentials": {
+			"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
+			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
+		},
+		"maxAttempts": 5
 	},
 	"S3": {
 		"keyPrefix": "",
@@ -453,10 +444,6 @@ Then configure your storage thusly:
 ```
 
 Replace `YOUR_AMAZON_ACCESS_KEY` and `YOUR_AMAZON_SECRET_KEY` with your Amazon Access Key and Secret Key, respectively.  These can be generated on the Security Credentials page.  Replace `MY_S3_BUCKET_ID` with the ID if your own S3 bucket.  Make sure you match up the region too.
-
-The `AWS` object is passed directly to the `config.update()` function from the [aws-sdk](https://www.npmjs.com/package/aws-sdk) module, so you can also include any properties supported there.  See the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/guide/node-configuring.html) for more details.
-
-The `S3` object is passed directly to the S3 class constructor, so check the [docs](http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#constructor-property) to see what other properties are supported.   There are a few special `S3` properties used by pixl-server-storage, which are described below.
 
 If you plan on using Amazon AWS in other parts of your application, you can actually move the `AWS` config object into your outer server configuration.  The storage module will look for it there.
 
@@ -500,8 +487,6 @@ Besides hash marks, the special macro `[key]` will be substituted with the full 
 ### S3 Cache
 
 It is *highly* recommended that you enable caching for S3, which keeps a copy of the most recently used JSON records in RAM.  Not only will this increase overall performance, but it is especially important if you use any of the advanced storage features like [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) or the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md).
-
-The reason why caching is so important is because Amazon S3 is only [eventually consistent](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel) when replacing existing records, so corruption can occur when writing compound objects (i.e. a list or a hash) and then quickly reading them back in.  To protect against this, all writes can be cached in RAM, so subsequent reads can often bypass S3 and just read from the RAM cache instead, ensuring that the correct (latest) data is read.
 
 To enable the S3 cache, include a `cache` object in your `S3` configuration with the following properties:
 

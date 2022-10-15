@@ -1,15 +1,13 @@
 // Amazon AWS S3 Storage Plugin
-// Copyright (c) 2015 - 2019 Joseph Huckaby
+// Copyright (c) 2015 - 2022 Joseph Huckaby
 // Released under the MIT License
-
-// Requires the 'aws-sdk' module from npm
-// npm install aws-sdk
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
-var AWS = require('aws-sdk');
 var Cache = require("pixl-cache");
+var S3 = require("@aws-sdk/client-s3");
+var streamToBuffer = require("fast-stream-to-buffer");
 
 module.exports = Class.create({
 	
@@ -41,13 +39,6 @@ module.exports = Class.create({
 		this.keyTemplate = (s3_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
 		this.fileExtensions = !!s3_config.fileExtensions;
 		
-		if (this.debugLevel(10)) {
-			// S3 has a logger API but it's extremely verbose -- restrict to level 10 only
-			s3_config.logger = {
-				log: function(msg) { self.logDebug(10, "S3 Debug: " + msg); }
-			};
-		}
-		
 		// optional LRU cache
 		this.cache = null;
 		var cache_opts = s3_config.cache;
@@ -63,10 +54,36 @@ module.exports = Class.create({
 				});
 			});
 		}
-		delete s3_config.cache;
 		
-		AWS.config.update( aws_config );
-		this.s3 = new AWS.S3( Tools.copyHashRemoveKeys(s3_config, { keyPrefix:1, keyTemplate:1, fileExtensions:1, cache:1 }) );
+		// merge AWS and S3 configs
+		var combo_config = Tools.mergeHashes( aws_config, s3_config );
+		
+		// convert v2 config to v3
+		if (!combo_config.maxAttempts && combo_config.maxRetries) {
+			combo_config.maxAttempts = combo_config.maxRetries;
+			delete combo_config.maxRetries;
+		}
+		if (combo_config.accessKeyId) {
+			if (!combo_config.credentials) combo_config.credentials = {};
+			combo_config.credentials.accessKeyId = combo_config.accessKeyId;
+			delete combo_config.accessKeyId;
+		}
+		if (combo_config.secretAccessKey) {
+			if (!combo_config.credentials) combo_config.credentials = {};
+			combo_config.credentials.secretAccessKey = combo_config.secretAccessKey;
+			delete combo_config.secretAccessKey;
+		}
+		delete combo_config.correctClockSkew;
+		delete combo_config.httpOptions;
+		delete combo_config.keyPrefix;
+		delete combo_config.keyTemplate;
+		delete combo_config.fileExtensions;
+		delete combo_config.cache;
+		
+		this.s3Params = combo_config.params || {};
+		delete combo_config.params;
+		
+		this.s3 = new S3.S3Client(combo_config);
 	},
 	
 	prepKey: function(key) {
@@ -107,7 +124,7 @@ module.exports = Class.create({
 		var is_binary = this.storage.isBinaryKey(key);
 		key = this.prepKey(key);
 		
-		var params = {};
+		var params = Tools.copyHash( this.s3Params );
 		params.Key = this.extKey(key, orig_key);
 		params.Body = value;
 		
@@ -121,23 +138,21 @@ module.exports = Class.create({
 			params.ContentType = 'application/json';
 		}
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.putObject( params, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
+		this.s3.send( new S3.PutObjectCommand(params) )
+			.then( function(data) {
+				self.logDebug(9, "Store complete: " + key);
+				
+				// possibly cache in LRU
+				if (self.cache && !is_binary) {
+					self.cache.set( orig_key, params.Body, { date: Tools.timeNow(true) } );
+				}
+				
+				if (callback) callback(null, data);
+			} )
+			.catch( function(err) {
 				self.logError('s3', "Failed to store object: " + key + ": " + (err.message || err), err);
-			}
-			else self.logDebug(9, "Store complete: " + key);
-			
-			// possibly cache in LRU
-			if (self.cache && !is_binary) {
-				self.cache.set( orig_key, params.Body, { date: Tools.timeNow(true) } );
-			}
-			
-			if (callback) callback(err, data);
-		} );
+				if (callback) callback(err);
+			} );
 	},
 	
 	putStream: function(key, inp, callback) {
@@ -146,24 +161,21 @@ module.exports = Class.create({
 		var orig_key = key;
 		key = this.prepKey(key);
 		
-		var params = {};
+		var params = Tools.copyHash( this.s3Params );
 		params.Key = this.extKey(key, orig_key);
 		params.Body = inp;
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.upload(params, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
+		this.s3.send( new S3.PutObjectCommand(params) )
+			.then( function(data) {
+				self.logDebug(9, "Stream store complete: " + key);
+				if (callback) callback(null, data);
+			} )
+			.catch( function(err) {
 				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
-			}
-			else self.logDebug(9, "Stream store complete: " + key);
-			
-			if (callback) callback(err, data);
-		} );
+				if (callback) callback(err);
+			} );
 	},
 	
 	putStreamCustom: function(key, inp, opts, callback) {
@@ -172,25 +184,22 @@ module.exports = Class.create({
 		var orig_key = key;
 		key = this.prepKey(key);
 		
-		var params = {};
+		var params = Tools.copyHash( this.s3Params );
 		params.Key = this.extKey(key, orig_key);
 		params.Body = inp;
 		if (opts) Tools.mergeHashInto(params, opts);
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.upload(params, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
+		this.s3.send( new S3.PutObjectCommand(params) )
+			.then( function(data) {
+				self.logDebug(9, "Stream store complete: " + key);
+				if (callback) callback(null, data);
+			} )
+			.catch( function(err) {
 				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
-			}
-			else self.logDebug(9, "Stream store complete: " + key);
-			
-			if (callback) callback(err, data);
-		} );
+				if (callback) callback(err);
+			} );
 	},
 	
 	head: function(key, callback) {
@@ -214,13 +223,20 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.headObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
-				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
+		
+		this.s3.send( new S3.HeadObjectCommand(params) )
+			.then( function(data) {
+				self.logDebug(9, "Head complete: " + key);
+				
+				callback( null, {
+					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+					len: data.ContentLength
+				} );
+			} )
+			.catch( function(err) {
+				if ((err.name == 'NoSuchKey') || (err.name == 'NotFound') || (err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to head key: " + key + ": Not found");
@@ -230,16 +246,8 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err, null );
-				return;
-			}
-			
-			self.logDebug(9, "Head complete: " + key);
-			callback( null, {
-				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
-				len: data.ContentLength
+				callback( err );
 			} );
-		} );
 	},
 	
 	get: function(key, callback) {
@@ -269,13 +277,46 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.getObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
-				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
+		
+		this.s3.send( new S3.GetObjectCommand(params) )
+			.then( function(data) {
+				// stream to buffer
+				streamToBuffer( data.Body, function (err, body) {
+					if (err) {
+						self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
+						return callback(err);
+					}
+					
+					if (is_binary) {
+						self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
+					}
+					else {
+						body = body.toString();
+						
+						// possibly cache in LRU
+						if (self.cache) {
+							self.cache.set( orig_key, body, { date: Tools.timeNow(true) } );
+						}
+						
+						try { body = JSON.parse( body ); }
+						catch (e) {
+							self.logError('s3', "Failed to parse JSON record: " + key + ": " + e);
+							callback( e, null );
+							return;
+						}
+						self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? body : null);
+					}
+					
+					callback( null, body, {
+						mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
+						len: data.ContentLength
+					} );
+				} ); // streamToBuffer
+			} )
+			.catch( function(err) {
+				if ((err.name == 'NoSuchKey') || (err.name == 'NotFound') || (err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
@@ -285,37 +326,8 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err, null );
-				return;
-			}
-			
-			var body = null;
-			if (is_binary) {
-				body = data.Body;
-				self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
-			}
-			else {
-				body = data.Body.toString();
-				
-				// possibly cache in LRU
-				if (self.cache) {
-					self.cache.set( orig_key, body, { date: Tools.timeNow(true) } );
-				}
-				
-				try { body = JSON.parse( body ); }
-				catch (e) {
-					self.logError('s3', "Failed to parse JSON record: " + key + ": " + e);
-					callback( e, null );
-					return;
-				}
-				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? body : null);
-			}
-			
-			callback( null, body, {
-				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
-				len: data.ContentLength
+				callback( err );
 			} );
-		} );
 	},
 	
 	getStream: function(key, callback) {
@@ -326,27 +338,30 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching S3 Stream: " + key);
 		
-		var params = { Key: this.extKey(key, orig_key) };
-		var download = self.s3.getObject(params).createReadStream();
-		var proceed = false;
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
 		
-		download.on('error', function(err) {
-			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
-		});
-		download.once('end', function() {
-			self.logDebug(9, "S3 stream download complete: " + key);
-		} );
-		download.once('close', function() {
-			self.logDebug(9, "S3 stream download closed: " + key);
-		} );
-		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.headObject( params, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
-				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+		this.s3.send( new S3.GetObjectCommand(params) )
+			.then( function(data) {
+				var download = data.Body;
+				
+				download.on('error', function(err) {
+					self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
+				});
+				download.once('end', function() {
+					self.logDebug(9, "S3 stream download complete: " + key);
+				} );
+				download.once('close', function() {
+					self.logDebug(9, "S3 stream download closed: " + key);
+				} );
+				
+				callback( null, download, {
+					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+					len: data.ContentLength
+				} );
+			})
+			.catch( function(err) {
+				if ((err.name == 'NoSuchKey') || (err.name == 'NotFound') || (err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
@@ -356,18 +371,8 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				
-				download.destroy();
-				callback( err, null );
-				return;
-			}
-			
-			proceed = true;
-			callback( null, download, {
-				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
-				len: data.ContentLength
-			} );
-		}); // headObject
+				callback( err );
+			});
 	},
 	
 	getStreamRange: function(key, start, end, callback) {
@@ -378,7 +383,8 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching ranged S3 stream: " + key, { start, end });
 		
-		var params = { Key: this.extKey(key, orig_key) };
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
 		
 		// convert start/end to HTTP range header string
 		var range = "bytes=";
@@ -386,26 +392,29 @@ module.exports = Class.create({
 		range += '-';
 		if (!isNaN(end)) range += end;
 		
-		var download = self.s3.getObject( Tools.mergeHashes(params, { Range: range }) ).createReadStream();
-		var proceed = false;
+		params.Range = range;
 		
-		download.on('error', function(err) {
-			if (proceed) self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
-		});
-		download.once('end', function() {
-			self.logDebug(9, "S3 stream download complete: " + key);
-		} );
-		download.once('close', function() {
-			self.logDebug(9, "S3 stream download closed: " + key);
-		} );
-		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.headObject( params, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
-				if ((err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+		this.s3.send( new S3.GetObjectCommand(params) )
+			.then( function(data) {
+				var download = data.Body;
+				
+				download.on('error', function(err) {
+					self.logError('s3', "Failed to download key: " + key + ": " + (err.message || err), err);
+				});
+				download.once('end', function() {
+					self.logDebug(9, "S3 stream download complete: " + key);
+				} );
+				download.once('close', function() {
+					self.logDebug(9, "S3 stream download closed: " + key);
+				} );
+				
+				callback( null, download, {
+					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+					len: data.ContentLength
+				} );
+			})
+			.catch( function(err) {
+				if ((err.name == 'NoSuchKey') || (err.name == 'NotFound') || (err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
 					// key not found, special case, don't log an error
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
@@ -415,32 +424,8 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				
-				download.destroy();
-				callback( err, null );
-				return;
-			}
-			
-			// validate byte range, now that we have the head info
-			if (isNaN(start) && !isNaN(end)) {
-				start = data.ContentLength - end;
-				end = data.ContentLength ? data.ContentLength - 1 : 0;
-			} 
-			else if (!isNaN(start) && isNaN(end)) {
-				end = data.ContentLength ? data.ContentLength - 1 : 0;
-			}
-			if (isNaN(start) || isNaN(end) || (start < 0) || (start >= data.ContentLength) || (end < start) || (end >= data.ContentLength)) {
-				download.destroy();
-				callback( new Error("Invalid byte range (" + start + '-' + end + ") for key: " + key + " (len: " + data.ContentLength + ")"), null );
-				return;
-			}
-			
-			proceed = true;
-			callback( null, download, {
-				mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
-				len: data.ContentLength
-			} );
-		}); // headObject
+				callback( err );
+			});
 	},
 	
 	delete: function(key, callback) {
@@ -451,23 +436,24 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Deleting S3 Object: " + key);
 		
-		// double-callback protection (bug in aws-sdk)
-		var done = false;
-		this.s3.deleteObject( { Key: this.extKey(key, orig_key) }, function(err, data) {
-			if (done) return; else done = true;
-			
-			if (err) {
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
+		
+		this.s3.send( new S3.DeleteObjectCommand(params) )
+			.then( function(data) {
+				self.logDebug(9, "Delete complete: " + key);
+				
+				// possibly delete from LRU cache as well
+				if (self.cache && self.cache.has(orig_key)) {
+					self.cache.delete(orig_key);
+				}
+				
+				if (callback) callback(null, data);
+			} )
+			.catch( function(err) {
 				self.logError('s3', "Failed to delete object: " + key + ": " + (err.message || err), err);
-			}
-			else self.logDebug(9, "Delete complete: " + key);
-			
-			// possibly delete from LRU cache as well
-			if (self.cache && self.cache.has(orig_key)) {
-				self.cache.delete(orig_key);
-			}
-			
-			if (callback) callback(err, data);
-		} );
+				if (callback) callback(err);
+			} );
 	},
 	
 	runMaintenance: function(callback) {

@@ -1,6 +1,6 @@
 {
 	"name": "pixl-server-storage",
-	"version": "3.0.24",
+	"version": "3.1.0",
 	"description": "A key/value/list storage component for the pixl-server framework.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-server-storage",
@@ -21,17 +21,19 @@
 		"redis"
 	],
 	"dependencies": {
-		"pixl-server": "^1.0.0",
-		"pixl-class": "^1.0.3",
-		"pixl-tools": "^1.0.24",
-		"pixl-perf": "^1.0.0",
-		"pixl-cache": "^1.0.1",
+		"@aws-sdk/client-s3": "3.186.0",
 		"async": "2.6.4",
-		"nearley": "2.20.1",
+		"fast-stream-to-buffer": "1.0.0",
+		"he": "1.1.1",
 		"moo": "0.4.3",
+		"nearley": "2.20.1",
+		"pixl-cache": "^1.0.1",
+		"pixl-class": "^1.0.3",
+		"pixl-perf": "^1.0.0",
+		"pixl-server": "^1.0.0",
+		"pixl-tools": "^1.0.24",
 		"porter-stemmer": "0.9.1",
-		"unidecode": "0.1.8",
-		"he": "1.1.1"
+		"unidecode": "0.1.8"
 	},
 	"devDependencies": {
 		"pixl-unit": "^1.0.0"

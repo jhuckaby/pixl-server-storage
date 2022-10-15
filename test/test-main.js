@@ -446,10 +446,11 @@ module.exports = {
 				
 				self.storage.getStreamRange( key, 0, 5, function(err, storageStream, streamInfo) {
 					test.ok( !err, "No error fetching stream: " + err );
+					test.debug( "streamInfo: ", streamInfo );
 					test.ok( !!storageStream, "Got storage stream as 2nd arg");
 					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
 					test.ok( !!streamInfo, "Info was provided as the 3rd arg");
-					test.ok( streamInfo.len == 43, "Info has correct data length");
+					test.ok( streamInfo.len == 6, "Info has correct data length");
 					test.ok( streamInfo.mod > 0, "Info has a non-zero mod date");
 					
 					outStream.on('finish', function() {
@@ -496,7 +497,7 @@ module.exports = {
 					test.ok( !!storageStream, "Got storage stream as 2nd arg");
 					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
 					test.ok( !!streamInfo, "Info was provided as the 3rd arg");
-					test.ok( streamInfo.len == 43, "Info has correct data length");
+					test.ok( streamInfo.len == 23, "Info has correct data length");
 					test.ok( streamInfo.mod > 0, "Info has a non-zero mod date");
 					
 					outStream.on('finish', function() {
@@ -543,7 +544,7 @@ module.exports = {
 					test.ok( !!storageStream, "Got storage stream as 2nd arg");
 					test.ok( !!storageStream.pipe, "Storage stream has a pipe");
 					test.ok( !!streamInfo, "Info was provided as the 3rd arg");
-					test.ok( streamInfo.len == 43, "Info has correct data length");
+					test.ok( streamInfo.len == 10, "Info has correct data length");
 					test.ok( streamInfo.mod > 0, "Info has a non-zero mod date");
 					
 					outStream.on('finish', function() {

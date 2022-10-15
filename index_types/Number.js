@@ -59,7 +59,7 @@ module.exports = Class.create({
 		
 		if (value.match(/^(N?)(\d+)$/i)) {
 			var neg = RegExp.$1.toUpperCase();
-			var value = parseInt( RegExp.$2 );
+			var value = Math.floor( parseInt( RegExp.$2 ) * (def.multiply || 1) / (def.divide || 1) );
 			value = Math.min( NUMBER_INDEX_MAX, value );
 			
 			var tkey = 'T' + neg + Math.floor( Math.floor(value / 1000) * 1000 );
@@ -103,7 +103,7 @@ module.exports = Class.create({
 		
 		// clean number up
 		word = word.replace(/^N/i, '-').replace(/[^\d\-]+/g, '');
-		word = '' + Math.min( NUMBER_INDEX_MAX, Math.max( NUMBER_INDEX_MIN, parseInt(word) ) );
+		word = '' + Math.min( NUMBER_INDEX_MAX, Math.max( NUMBER_INDEX_MIN, Math.floor( parseInt(word) * (query.def.multiply || 1) / (query.def.divide || 1) ) ) );
 		word = word.replace(/\-/, 'N');
 		query.word = word;
 		
@@ -190,7 +190,7 @@ module.exports = Class.create({
 		
 		// clean number up
 		word = word.replace(/^N/i, '-').replace(/[^\d\-]+/g, '');
-		word = '' + Math.min( NUMBER_INDEX_MAX, Math.max( NUMBER_INDEX_MIN, parseInt(word) ) );
+		word = '' + Math.min( NUMBER_INDEX_MAX, Math.max( NUMBER_INDEX_MIN, Math.floor( parseInt(word) * (query.def.multiply || 1) / (query.def.divide || 1) ) ) );
 		word = word.replace(/\-/, 'N');
 		query.word = word;
 		
