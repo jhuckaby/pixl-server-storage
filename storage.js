@@ -670,6 +670,16 @@ module.exports = Class.create({
 			}
 		}; // deleteExpiredRecord
 		
+		var doEngineMaint = function() {
+			// allow engine to run maint as well
+			self.engine.runMaintenance( function() {
+				stats.elapsed_sec = Tools.timeNow() - stats.time_start;
+				self.logDebug(3, "Daily maintenance complete");
+				self.logTransaction('maint', cleanup_list_path, stats);
+				if (callback) callback();
+			} );
+		}; // finish
+		
 		this.listEach( cleanup_list_path, 
 			function(item, item_idx, callback) {
 				// delete item if still expired
@@ -705,7 +715,7 @@ module.exports = Class.create({
 				// list iteration complete
 				if (err) {
 					self.logDebug(10, "Failed to load list, skipping maintenance (probably harmless)", cleanup_list_path);
-					if (callback) callback();
+					doEngineMaint();
 				}
 				else {
 					// no error, delete list
@@ -713,15 +723,7 @@ module.exports = Class.create({
 						if (err) {
 							self.logError('maint', "Failed to delete cleanup list: " + cleanup_list_path + ": " + err);
 						}
-						
-						// allow engine to run maint as well
-						self.engine.runMaintenance( function() {
-							stats.elapsed_sec = Tools.timeNow() - stats.time_start;
-							self.logDebug(3, "Daily maintenance complete");
-							self.logTransaction('maint', cleanup_list_path, stats);
-							if (callback) callback();
-						} );
-						
+						doEngineMaint();
 					} ); // listDelete
 				} // succes
 			} // list complete
