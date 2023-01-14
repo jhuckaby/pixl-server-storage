@@ -626,16 +626,18 @@ Then configure your storage thusly:
 	"engine": "SQLite",
 	"SQLite": {
 		"base_dir": "data",
-		"filename": "sqlite.db"
+		"filename": "sqlite.db",
+		"pragmas": {
+			"auto_vacuum": 0,
+			"cache_size": -100000
+		}
 	}
 }
 ```
 
-The `base_dir` defaults to the current working directory, and will be created on startup if necessary.
+The `base_dir` defaults to the current working directory, and will be created on startup if necessary.  The `filename` is the name of the SQLite DB file on disk (also created if necessary).
 
-The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the SQLite keys with a common string, to separate your application's data in a shared database situation.
-
-The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+The optional `pragmas` object allows you set one or more [SQLite Pragmas](https://www.sqlite.org/pragma.html#toc) (configuration settings) on the database at startup.  Here you can specify things such as [auto_vacuum](https://www.sqlite.org/pragma.html#pragma_auto_vacuum) and [cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size), among many others.
 
 ## Hybrid
 

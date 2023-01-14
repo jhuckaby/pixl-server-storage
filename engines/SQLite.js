@@ -62,6 +62,18 @@ module.exports = Class.create({
 				self.db = new SQLite3.Database( db_file, callback );
 			},
 			function(callback) {
+				// optionally set pragmas on the db
+				if (!sql_config.pragmas) return process.nextTick(callback);
+				async.eachSeries( Object.keys(sql_config.pragmas),
+					function(key, callback) {
+						var value = sql_config.pragmas[key];
+						self.db.run(`PRAGMA ${key} = ${value};`, callback);
+					},
+					callback
+				); // eachSeries
+			},
+			function(callback) {
+				// create our table if necessary
 				self.db.run( 'CREATE TABLE IF NOT EXISTS items( key TEXT PRIMARY KEY, value BLOB, modified INTEGER )', callback );
 			},
 			function(callback) {

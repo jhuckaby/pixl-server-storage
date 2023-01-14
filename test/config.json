@@ -67,7 +67,11 @@
 		},
 		"SQLite": {
 			"base_dir": "data",
-			"filename": "sqlite.db"
+			"filename": "sqlite.db",
+			"pragmas": {
+				"auto_vacuum": 0,
+				"cache_size": -100000
+			}
 		}
 	}
 }
