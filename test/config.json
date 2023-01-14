@@ -64,6 +64,10 @@
 			"host": "127.0.0.1",
 			"port": 6379,
 			"keyPrefix": ""
+		},
+		"SQLite": {
+			"base_dir": "data",
+			"filename": "sqlite.db"
 		}
 	}
 }

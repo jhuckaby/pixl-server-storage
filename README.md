@@ -611,6 +611,32 @@ The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
 
+## SQLite
+
+If you want to use [SQLite](https://sqlite.com/) as a backing store, here is how to do so.  First, you need to manually install the [sqlite3](https://www.npmjs.com/package/sqlite3) module into your app:
+
+```
+npm install --save sqlite3
+```
+
+Then configure your storage thusly:
+
+```javascript
+{
+	"engine": "SQLite",
+	"SQLite": {
+		"base_dir": "data",
+		"filename": "sqlite.db"
+	}
+}
+```
+
+The `base_dir` defaults to the current working directory, and will be created on startup if necessary.
+
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the SQLite keys with a common string, to separate your application's data in a shared database situation.
+
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
 ## Hybrid
 
 Your application may need the features of multiple engines.  Specifically, you may want JSON (document) records to use one engine, and binary records to use another.  Binary records are specified with keys that end in a file extension, e.g. `.jpg`.  To facilitate this, there is a `Hybrid` engine available, which can load multiple sub-engines, one for JSON keys and one for binary keys.  Example use:
