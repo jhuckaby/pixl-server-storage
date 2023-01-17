@@ -408,9 +408,16 @@ module.exports = Class.create({
 					self.logDebug(9, "S3 stream download closed: " + key);
 				} );
 				
+				// get full length from the ContentRange header
+				var len = 0;
+				if (data.ContentRange && data.ContentRange.toString().match(/\/\s*(\d+)\s*$/)) {
+					len = parseInt( RegExp.$1 );
+				}
+				
 				callback( null, download, {
 					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
-					len: data.ContentLength
+					len: len,
+					cr: data.ContentRange
 				} );
 			})
 			.catch( function(err) {
