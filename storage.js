@@ -995,6 +995,10 @@ module.exports = Class.create({
 			last_second: this.lastSecondMetrics,
 			last_minute: this.lastMinuteMetrics,
 			recent_events: this.recentEvents,
+			queue: {
+				active: this.queue.running(),
+				pending: this.queue.length()
+			},
 			locks: {}
 		};
 		
