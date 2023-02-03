@@ -427,10 +427,12 @@ If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, co
 		"credentials": {
 			"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
 			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
-		},
-		"maxAttempts": 5
+		}
 	},
 	"S3": {
+		"connectTimeout": 5000,
+		"socketTimeout": 5000,
+		"maxAttempts": 50,
 		"keyPrefix": "",
 		"fileExtensions": true,
 		"params": {

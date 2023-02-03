@@ -7,6 +7,7 @@ var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
 var Cache = require("pixl-cache");
 var S3 = require("@aws-sdk/client-s3");
+var { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
 var streamToBuffer = require("fast-stream-to-buffer");
 
 module.exports = Class.create({
@@ -82,6 +83,16 @@ module.exports = Class.create({
 		
 		this.s3Params = combo_config.params || {};
 		delete combo_config.params;
+		
+		// allow user to specify HTTP timeout options for S3
+		if (combo_config.connectTimeout || combo_config.socketTimeout) {
+			combo_config.requestHandler = new NodeHttpHandler({
+				connectionTimeout: combo_config.connectTimeout || 0,
+				socketTimeout: combo_config.socketTimeout || 0
+			});
+			delete combo_config.connectTimeout;
+			delete combo_config.socketTimeout;
+		}
 		
 		this.s3 = new S3.S3Client(combo_config);
 	},
