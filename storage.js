@@ -35,7 +35,8 @@ module.exports = Class.create({
 		max_recent_events: 0,
 		cache_key_match: '',
 		expiration_updates: false,
-		lower_case_keys: true
+		lower_case_keys: true,
+		queue_timeout: 30000
 	},
 	
 	locks: null,
@@ -132,6 +133,7 @@ module.exports = Class.create({
 		this.maxRecentEvents = this.config.get('max_recent_events');
 		this.expHash = this.config.get('expiration_updates');
 		this.lowerKeys = this.config.get('lower_case_keys');
+		this.queueTimeout = this.config.get('queue_timeout');
 		
 		this.cacheKeyRegex = null;
 		if (this.config.get('cache_key_match')) {
@@ -550,7 +552,8 @@ module.exports = Class.create({
 			var func = task;
 			task = { action: 'custom', handler: func };
 		}
-		this.logDebug(9, "Enqueuing async task: " + (task.label || task.action), 
+		task._id = Tools.generateShortID();
+		this.logDebug(9, "Enqueuing async task: " + task._id + ": " + (task.label || task.action), 
 			this.debugLevel(10) ? task : null
 		);
 		this.queue.push( task );
@@ -559,9 +562,17 @@ module.exports = Class.create({
 	dequeue: function(task, callback) {
 		// run task and fire callback
 		var self = this;
-		this.logDebug(9, "Running async task: " + (task.label || task.action), 
+		this.logDebug(9, "Running async task: " + task._id + ": " + (task.label || task.action), 
 			this.debugLevel(10) ? task : null
 		);
+		
+		// optional timeout for queue item execution
+		var timer = this.queueTimeout ? timer = setTimeout( function() {
+			self.logError('queue', "Async task timed out: " + task._id + ": " + (task.label || task.action), { ms: self.queueTimeout });
+			if (callback) callback();
+			callback = null;
+			timer = null;
+		}, this.queueTimeout ) : null;
 		
 		switch (task.action) {
 			case 'expire_set':
@@ -585,7 +596,11 @@ module.exports = Class.create({
 								list_path: cleanup_list_path
 							});
 							
-							callback();
+							if (timer) clearTimeout(timer);
+							timer = null;
+							
+							if (callback) callback();
+							callback = null;
 						} ); // hashPut
 					} // expHash
 					else {
@@ -595,7 +610,11 @@ module.exports = Class.create({
 							list_path: cleanup_list_path
 						});
 						
-						callback();
+						if (timer) clearTimeout(timer);
+						timer = null;
+						
+						if (callback) callback();
+						callback = null;
 					}
 				} ); // listPush
 			break; // expire_set
@@ -604,7 +623,12 @@ module.exports = Class.create({
 				// custom handler
 				task.handler( task, function(err) {
 					if (err) self.logError('storage', "Failed to dequeue custom task: " + err);
-					callback();
+					
+					if (timer) clearTimeout(timer);
+					timer = null;
+					
+					if (callback) callback();
+					callback = null;
 				} );
 			break; // custom
 		} // switch action
