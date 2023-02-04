@@ -567,7 +567,7 @@ module.exports = Class.create({
 		);
 		
 		// optional timeout for queue item execution
-		var timer = this.queueTimeout ? timer = setTimeout( function() {
+		var timer = this.queueTimeout ? setTimeout( function() {
 			self.logError('queue', "Async task timed out: " + task._id + ": " + (task.label || task.action), { ms: self.queueTimeout });
 			if (callback) callback();
 			callback = null;
