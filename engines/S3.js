@@ -7,6 +7,7 @@ var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
 var Cache = require("pixl-cache");
 var S3 = require("@aws-sdk/client-s3");
+var { Upload } = require("@aws-sdk/lib-storage");
 var { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
 var streamToBuffer = require("fast-stream-to-buffer");
 
@@ -158,11 +159,11 @@ module.exports = Class.create({
 					self.cache.set( orig_key, params.Body, { date: Tools.timeNow(true) } );
 				}
 				
-				if (callback) callback(null, data);
+				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
 				self.logError('s3', "Failed to store object: " + key + ": " + (err.message || err), err);
-				if (callback) callback(err);
+				if (callback) process.nextTick( function() { callback(err); });
 			} );
 	},
 	
@@ -178,14 +179,19 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
-		this.s3.send( new S3.PutObjectCommand(params) )
+		var upload = new Upload({
+			client: this.s3,
+			params: params
+		});
+		
+		upload.done()
 			.then( function(data) {
 				self.logDebug(9, "Stream store complete: " + key);
-				if (callback) callback(null, data);
+				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
 				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
-				if (callback) callback(err);
+				if (callback) process.nextTick( function() { callback(err, null); });
 			} );
 	},
 	
@@ -202,14 +208,19 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
-		this.s3.send( new S3.PutObjectCommand(params) )
+		var upload = new Upload({
+			client: this.s3,
+			params: params
+		});
+		
+		upload.done()
 			.then( function(data) {
 				self.logDebug(9, "Stream store complete: " + key);
-				if (callback) callback(null, data);
+				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
 				self.logError('s3', "Failed to store stream: " + key + ": " + (err.message || err), err);
-				if (callback) callback(err);
+				if (callback) process.nextTick( function() { callback(err, null); });
 			} );
 	},
 	
@@ -241,9 +252,11 @@ module.exports = Class.create({
 			.then( function(data) {
 				self.logDebug(9, "Head complete: " + key);
 				
-				callback( null, {
-					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
-					len: data.ContentLength
+				process.nextTick( function() {
+					callback( null, {
+						mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+						len: data.ContentLength
+					} );
 				} );
 			} )
 			.catch( function(err) {
@@ -257,7 +270,7 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to head key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err );
+				process.nextTick( function() { callback( err ); } );
 			} );
 	},
 	
@@ -337,7 +350,7 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err );
+				process.nextTick( function() { callback( err ); } );
 			} );
 	},
 	
@@ -366,9 +379,11 @@ module.exports = Class.create({
 					self.logDebug(9, "S3 stream download closed: " + key);
 				} );
 				
-				callback( null, download, {
-					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
-					len: data.ContentLength
+				process.nextTick( function() {
+					callback( null, download, {
+						mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+						len: data.ContentLength
+					} );
 				} );
 			})
 			.catch( function(err) {
@@ -382,7 +397,7 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err );
+				process.nextTick( function() { callback( err ); } );
 			});
 	},
 	
@@ -425,10 +440,12 @@ module.exports = Class.create({
 					len = parseInt( RegExp.$1 );
 				}
 				
-				callback( null, download, {
-					mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
-					len: len,
-					cr: data.ContentRange
+				process.nextTick( function() { 
+					callback( null, download, {
+						mod: Math.floor( (new Date(data.LastModified)).getTime() / 1000 ),
+						len: len,
+						cr: data.ContentRange
+					} );
 				} );
 			})
 			.catch( function(err) {
@@ -442,7 +459,7 @@ module.exports = Class.create({
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
 				}
-				callback( err );
+				process.nextTick( function() { callback( err ); } );
 			});
 	},
 	
@@ -466,11 +483,11 @@ module.exports = Class.create({
 					self.cache.delete(orig_key);
 				}
 				
-				if (callback) callback(null, data);
+				if (callback) process.nextTick( function() { callback(null, data); } );
 			} )
 			.catch( function(err) {
 				self.logError('s3', "Failed to delete object: " + key + ": " + (err.message || err), err);
-				if (callback) callback(err);
+				if (callback) process.nextTick( function() { callback(err); } );
 			} );
 	},
 	
