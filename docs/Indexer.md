@@ -231,6 +231,7 @@ Text filters provide a way to cleanup specific markup languages, leaving only se
 |--------|-------------|
 | `html` | This filter strips all HTML tags, and decodes all HTML entities prior to indexing.  This also works for XML source. |
 | `markdown` | This filter is designed for [Markdown](https://en.wikipedia.org/wiki/Markdown) source text.  It filters out [fenced code blocks](https://help.github.com/articles/creating-and-highlighting-code-blocks/) and also applies the `html` filter as well (you can embed HTML in markdown). |
+| `alphanum` | This filter strips everything except for alphanumerics and underscores.  It's designed to reduce a string to a single indexable value. |
 
 Note that URLs are always shortened so that only the hostname is indexed.  Full URLs are notoriously difficult (and rather useless) to index for searching.  See [Text Cleanup](#text-cleanup) below for details.
 
@@ -784,7 +785,7 @@ Given an array of your sorted record IDs, you can then implement your own pagina
 If you have any fields indexed with the [master list](#master-list) feature enabled, you can fetch a "summary" of the data values using the [getFieldSummary()](API.md#getfieldsummary) method.  This returns a hash containing all the unique words from the index, and their total counts (occurrences) in the data.  Example use:
 
 ```js
-stotage.getFieldSummary( 'status', config, function(err, values) {
+storage.getFieldSummary( 'status', config, function(err, values) {
 	if (err) throw err;
 	
 	// values will contain a hash with word counts:

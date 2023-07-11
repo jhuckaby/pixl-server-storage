@@ -239,7 +239,7 @@ module.exports = Class.create({
 							if (checksum != old_data.checksum) {
 								// must reindex
 								state.changed[ def.id ] = 1;
-								self.updateIndex( old_data, data, def, state, callback );
+								self.updateIndex( old_data, data, ''+value, def, state, callback );
 							}
 							else {
 								// data not changed, no action required
@@ -250,7 +250,7 @@ module.exports = Class.create({
 						else {
 							// index doesn't exist for this record, create immediately
 							state.changed[ def.id ] = 1;
-							self.writeIndex( data, def, state, callback );
+							self.writeIndex( data, ''+value, def, state, callback );
 						}
 					}, // iterator
 					function(err) {
@@ -454,7 +454,7 @@ module.exports = Class.create({
 		} ); // lock
 	},
 	
-	writeIndex: function(data, def, state, callback) {
+	writeIndex: function(data, raw_value, def, state, callback) {
 		// create or update single field index
 		var self = this;
 		var words = data.words;
@@ -507,7 +507,8 @@ module.exports = Class.create({
 					def: def,
 					group: group,
 					base_path: base_path,
-					word_hash: word_hash
+					word_hash: word_hash,
+					raw_value: raw_value
 				});
 			} // master_list
 			
@@ -585,6 +586,11 @@ module.exports = Class.create({
 				for (var word in word_hash) {
 					if (!summary.values[word]) summary.values[word] = 0;
 					summary.values[word]++;
+					
+					if (task.def.master_labels) {
+						if (!summary.labels) summary.labels = {};
+						summary.labels[word] = task.raw_value;
+					}
 				} // foreach word
 				
 				// save summary back to storage
@@ -737,7 +743,10 @@ module.exports = Class.create({
 				
 				for (var word in word_hash) {
 					if (summary.values[word]) summary.values[word]--;
-					if (!summary.values[word]) delete summary.values[word];
+					if (!summary.values[word]) {
+						delete summary.values[word];
+						if (task.def.master_labels && summary.labels) delete summary.labels[word];
+					}
 				} // foreach word
 				
 				// save summary back to storage
@@ -765,7 +774,7 @@ module.exports = Class.create({
 		} ); // lock
 	},
 	
-	updateIndex: function(old_data, new_data, def, state, callback) {
+	updateIndex: function(old_data, new_data, raw_value, def, state, callback) {
 		// efficiently update single field index
 		var self = this;
 		var old_words = old_data.words;
@@ -825,6 +834,12 @@ module.exports = Class.create({
 			callback: callback || null
 		};
 		
+		if (!group.count) {
+			this.logDebug(9, "Actually, nothing changed in index: " + def.id + " for record: " + state.id + ", skipping updateIndex");
+			if (callback) callback();
+			return;
+		}
+		
 		// lock index for this
 		self.lock( base_path, true, function() {
 			// update master list if applicable
@@ -838,7 +853,8 @@ module.exports = Class.create({
 						def: def,
 						group: group,
 						base_path: base_path,
-						word_hash: added_words
+						word_hash: added_words,
+						raw_value: raw_value
 					});
 				}
 				if (Tools.numKeys(removed_words) > 0) {
@@ -952,6 +968,11 @@ module.exports = Class.create({
 	filterWords_html: function(value) {
 		// filter out html tags, entities
 		return he.decode( value.replace(/<.+?>/g, '') );
+	},
+	
+	filterWords_alphanum: function(value) {
+		// filter out everything except alphanum + underscore
+		return value.replace(/\W+/g, '_').replace(/_+/g, '_');
 	},
 	
 	getWordList: function(value, def, config) {

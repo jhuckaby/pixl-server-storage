@@ -1367,7 +1367,7 @@ storage.getFieldSummary( FIELD_ID, CONFIG, CALLBACK );
 The `getFieldSummary()` method fetches a summary of all word counts for an index field.  This requires a field indexed with the [master list](Indexer.md#master-list) feature enabled.  Then you can fetch a "summary" of the data values, which returns a hash containing all the unique words from the index, and their total counts (occurrences) in the data.  Example use:
 
 ```js
-stotage.getFieldSummary( 'status', config, function(err, values) {
+storage.getFieldSummary( 'status', config, function(err, values) {
 	if (err) throw err;
 	
 	// values should contain a hash with word counts:
