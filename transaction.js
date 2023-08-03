@@ -735,6 +735,9 @@ module.exports = Class.create({
 					} );
 				},
 				function(callback) {
+					// notify listeners that the commit is starting, and the rollback log is available
+					self.emit('commitStart', trans);
+					
 					// We must fsync the directory as well, as per: http://man7.org/linux/man-pages/man2/fsync.2.html
 					// Note: Yes, read-only is the only way: https://www.reddit.com/r/node/comments/4r8k11/how_to_call_fsync_on_a_directory/
 					fs.open( Path.dirname(trans.log), "r", function(err, dh) {
@@ -784,6 +787,7 @@ module.exports = Class.create({
 				if (err) {
 					var msg = "Failed to commit transaction: " + path + ": " + err.message;
 					self.logError('commit', msg, { id: trans.id });
+					self.emit('commitEnd', trans, err);
 					return callback( new Error(msg) );
 				}
 				
@@ -819,6 +823,7 @@ module.exports = Class.create({
 					delete trans.keys; // release memory
 				}
 				
+				self.emit('commitEnd', trans);
 				self.unlock( 'C|'+path );
 				self._transUnlock(path);
 				callback();

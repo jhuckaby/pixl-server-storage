@@ -26,17 +26,16 @@
 			}
 		},
 		"AWS": {
-			"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
-			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
 			"region": "us-west-1",
-			"correctClockSkew": true,
-			"maxRetries": 5,
-			"httpOptions": {
-				"connectTimeout": 5000,
-				"timeout": 5000
+			"credentials": {
+				"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
+				"secretAccessKey": "YOUR_AMAZON_SECRET_KEY"
 			}
 		},
 		"S3": {
+			"connectTimeout": 5000,
+			"socketTimeout": 5000,
+			"maxAttempts": 50,
 			"keyPrefix": "",
 			"fileExtensions": true,
 			"params": {

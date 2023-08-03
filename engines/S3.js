@@ -8,7 +8,7 @@ var Tools = require("pixl-tools");
 var Cache = require("pixl-cache");
 var S3 = require("@aws-sdk/client-s3");
 var { Upload } = require("@aws-sdk/lib-storage");
-var { NodeHttpHandler } = require("@aws-sdk/node-http-handler");
+var { NodeHttpHandler } = require("@smithy/node-http-handler");
 var streamToBuffer = require("fast-stream-to-buffer");
 
 module.exports = Class.create({
