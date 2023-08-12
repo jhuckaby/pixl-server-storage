@@ -79,12 +79,12 @@ module.exports = Class.create({
 	_hashShareLock: function(key, wait, callback) {
 		// internal hash shared lock wrapper
 		// uses unique key prefix so won't deadlock with user locks
-		this.shareLock( '|'+key, wait, callback );
+		this.shareLock( 'C|'+key, wait, callback );
 	},
 	
 	_hashShareUnlock: function(key) {
 		// internal hash shared unlock wrapper
-		this.shareUnlock( '|'+key );
+		this.shareUnlock( 'C|'+key );
 	},
 	
 	hashPut: function(path, hkey, hvalue, create_opts, callback) {

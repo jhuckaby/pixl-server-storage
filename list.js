@@ -111,12 +111,12 @@ module.exports = Class.create({
 	_listShareLock: function(key, wait, callback) {
 		// internal list shared lock wrapper
 		// uses unique key prefix so won't deadlock with user locks
-		this.shareLock( '|'+key, wait, callback );
+		this.shareLock( 'C|'+key, wait, callback );
 	},
 	
 	_listShareUnlock: function(key) {
 		// internal list shared unlock wrapper
-		this.shareUnlock( '|'+key );
+		this.shareUnlock( 'C|'+key );
 	},
 	
 	listPush: function(key, items, create_opts, callback) {

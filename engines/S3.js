@@ -234,8 +234,9 @@ module.exports = Class.create({
 		
 		// check cache first
 		if (this.cache && this.cache.has(orig_key)) {
+			var item = this.cache.getMeta(orig_key);
+			
 			process.nextTick( function() {
-				var item = self.cache.getMeta(orig_key);
 				self.logDebug(9, "Cached head complete: " + orig_key);
 				callback( null, {
 					mod: item.date,
@@ -285,9 +286,9 @@ module.exports = Class.create({
 		
 		// check cache first
 		if (this.cache && !is_binary && this.cache.has(orig_key)) {
-			process.nextTick( function() {
-				var data = self.cache.get(orig_key);
-				
+			var data = this.cache.get(orig_key);
+			
+			process.nextTick( function() {	
 				try { data = JSON.parse( data ); }
 				catch (e) {
 					self.logError('file', "Failed to parse JSON record: " + orig_key + ": " + e);

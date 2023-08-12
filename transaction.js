@@ -741,7 +741,7 @@ module.exports = Class.create({
 					// We must fsync the directory as well, as per: http://man7.org/linux/man-pages/man2/fsync.2.html
 					// Note: Yes, read-only is the only way: https://www.reddit.com/r/node/comments/4r8k11/how_to_call_fsync_on_a_directory/
 					fs.open( Path.dirname(trans.log), "r", function(err, dh) {
-						if (err) return callback(err);
+						if (err) return callback(); // this may fail on certain OSes, so treat as non-fatal
 						
 						fs.fsync(dh, function(err) {
 							// ignoring error here, as some filesystems may not allow this
