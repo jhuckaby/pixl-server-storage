@@ -17,6 +17,7 @@ var storage = server.Storage;
 	* [putStream](#putstream)
 	* [get](#get)
 	* [getMulti](#getmulti)
+	* [getBuffer](#getbuffer)
 	* [getStream](#getstream)
 	* [getStreamRange](#getstreamrange)
 	* [head](#head)
@@ -60,6 +61,8 @@ var storage = server.Storage;
 	* [hashPutMulti](#hashputmulti)
 	* [hashGet](#hashget)
 	* [hashGetMulti](#hashgetmulti)
+	* [hashUpdate](#hashupdate)
+	* [hashUpdateMulti](#hashupdatemulti)
 	* [hashEach](#hasheach)
 	* [hashEachSync](#hasheachsync)
 	* [hashEachPage](#hasheachpage)
@@ -1011,6 +1014,28 @@ storage.hashUpdate( 'users', 'bsanders', { age: 81 }, function(err) {
 ```
 
 This would update Bernie's age to 81 without affecting any of the other properties in his user record.
+
+## hashUpdateMulti
+
+```javascript
+storage.hashUpdateMulti( PATH, RECORDS, CALLBACK );
+```
+
+The `hashUpdateMulti()` method updates multiple key/value pairs in a hash.  The `PATH` specifies the main storage path of the hash, and `RECORDS` should be an object containing all the keys and values you want to update.  See [hashUpdate()](#hashupdate) for details on the update format.
+
+```js
+var updates = {
+	"bsanders": { age: 81 },
+	"hclinton": { age: 75 },
+	"dtrump": { age: 77 }
+};
+
+storage.hashUpdateMulti( 'users', records, function(err) {
+	if (err) throw err;
+} );
+```
+
+This would update the `age` properties in each record, without affecting the other data.
 
 ## hashEach
 

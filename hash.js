@@ -426,6 +426,25 @@ module.exports = Class.create({
 		}); // get
 	},
 	
+	hashUpdateMulti: function(path, records, callback) {
+		// update multiple hash records at once, given object of keys and values
+		// need concurrency limit of 1 because hashUpdate locks
+		var self = this;
+		
+		async.eachLimit(Object.keys(records), 1, 
+			function(hkey, callback) {
+				// iterator for each key
+				self.hashUpdate(path, hkey, records[hkey], function(err) {
+					callback(err);
+				} );
+			}, 
+			function(err) {
+				// all keys updated
+				callback(err);
+			}
+		);
+	},
+	
 	hashEachPage: function(path, iterator, callback) {
 		// call user iterator for each populated hash page, data only
 		// iterator will be passed page items hash object
