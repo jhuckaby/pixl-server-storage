@@ -311,7 +311,7 @@ module.exports = Class.create({
 				
 				if (!(state.hkey in data.items)) {
 					// key not found
-					var err = new Error("Failed to fetch key: " + state.hkey + ": Not found");
+					var err = new Error("Failed to fetch hash key: " + state.path + ": " + state.hkey + ": Not found");
 					err.code = "NoSuchKey";
 					return callback(err);
 				}
@@ -325,7 +325,7 @@ module.exports = Class.create({
 		// fetch multiple hash records at once, given array of keys
 		// callback is provided an array of values in matching order to keys
 		var self = this;
-		var records = {};
+		var records = Object.create(null);
 		
 		async.eachLimit(hkeys, this.concurrency, 
 			function(hkey, callback) {
