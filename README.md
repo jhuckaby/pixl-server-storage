@@ -426,7 +426,7 @@ If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, co
 		"region": "us-west-1",
 		"credentials": {
 			"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
-			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY", 
+			"secretAccessKey": "YOUR_AMAZON_SECRET_KEY"
 		}
 	},
 	"S3": {
