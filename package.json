@@ -1,6 +1,6 @@
 {
 	"name": "pixl-server-storage",
-	"version": "3.1.12",
+	"version": "3.1.13",
 	"description": "A key/value/list storage component for the pixl-server framework.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-server-storage",
