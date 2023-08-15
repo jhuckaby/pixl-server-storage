@@ -203,6 +203,37 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch Couchbase buffer given key
+		var self = this;
+		key = this.prepKey(key);
+		
+		this.logDebug(9, "Fetching Couchbase Object: " + key);
+		
+		this.bucket.get( key, function(err, result) {
+			if (!result) {
+				if (err && (err.code != CouchbaseAPI.errors.keyNotFound)) {
+					// some other error
+					err.message = "Failed to fetch key: " + key + ": " + err.message;
+					self.logError('couchbase', err.message);
+					callback( err, null );
+				}
+				else {
+					// record not found
+					// always use "NoSuchKey" in error code
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err, null );
+				}
+			}
+			else {
+				var body = result.value;
+				self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
+				callback( null, body );
+			}
+		} );
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;

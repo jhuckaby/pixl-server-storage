@@ -73,6 +73,16 @@ module.exports = Class.create({
 		}
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch hybrid buffer given key
+		if (this.storage.isBinaryKey(key)) {
+			this.binaryEngine.getBuffer( key, callback );
+		}
+		else {
+			this.docEngine.getBuffer( key, callback );
+		}
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		// streams are binary only!

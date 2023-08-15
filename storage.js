@@ -376,6 +376,30 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch buffer given key
+		var self = this;
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		key = this.normalizeKey( key );
+		
+		// invoke engine and track perf
+		var pf = this.perf.begin('get');
+		
+		this.engine.getBuffer( key, function(err, value, info) {
+			// get complete
+			var elapsed = pf.end();
+			if (err) return callback(err);
+			
+			self.logTransaction('get', key, {
+				elapsed_ms: elapsed
+			});
+			
+			callback(null, value, info);
+			if (!err) self.emit('get', key, value, info);
+		} );
+	},
+	
 	getStream: function(key, callback) {
 		// fetch value via stream pipe
 		var self = this;

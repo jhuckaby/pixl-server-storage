@@ -227,6 +227,35 @@ module.exports = Class.create({
 		}); // get
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch SQLite buffer given key
+		var self = this;
+		key = this.prepKey(key);
+		
+		this.logDebug(9, "Fetching SQLite Object: " + key);
+		
+		this.commands.get.get({ $key: key }, function(err, row) {
+			if (err) {
+				// an actual error
+				err.message = "Failed to fetch key: " + key + ": " + err;
+				self.logError('sqlite', '' + err);
+				callback(err);
+			}
+			else if (!row) {
+				// record not found
+				// always use "NoSuchKey" in error code
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				callback( err, null );
+			}
+			else {
+				// success
+				self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
+				callback( null, row.value );
+			}
+		}); // get
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;

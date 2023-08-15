@@ -355,6 +355,49 @@ module.exports = Class.create({
 			} );
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch s3 buffer given key
+		var self = this;
+		var orig_key = key;
+		key = this.prepKey(key);
+		
+		this.logDebug(9, "Fetching S3 Object: " + key);
+		
+		var params = Tools.copyHash( this.s3Params );
+		params.Key = this.extKey(key, orig_key);
+		
+		this.s3.send( new S3.GetObjectCommand(params) )
+			.then( function(data) {
+				// stream to buffer
+				streamToBuffer( data.Body, function (err, body) {
+					if (err) {
+						self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
+						return callback(err);
+					}
+					
+					self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
+					
+					callback( null, body, {
+						mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
+						len: data.ContentLength
+					} );
+				} ); // streamToBuffer
+			} )
+			.catch( function(err) {
+				if ((err.name == 'NoSuchKey') || (err.name == 'NotFound') || (err.code == 'NoSuchKey') || (err.code == 'NotFound')) {
+					// key not found, special case, don't log an error
+					// always include "Not found" in error message
+					err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+				}
+				else {
+					// some other error
+					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
+				}
+				process.nextTick( function() { callback( err ); } );
+			} );
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;

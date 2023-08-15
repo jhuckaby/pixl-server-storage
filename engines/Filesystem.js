@@ -477,6 +477,33 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getBuffer: function(key, callback) {
+		// fetch buffer given key
+		var self = this;
+		var file = this.getFilePath(key);
+		
+		this.logDebug(9, "Fetching Object: " + key, file);
+		
+		fs.readFile(file, function (err, data) {
+			if (err) {
+				if (err.message.match(/ENOENT/)) {
+					err.message = "File not found";
+					err.code = "NoSuchKey";
+				}
+				else {
+					// log fs errors that aren't simple missing files (i.e. I/O errors)
+					self.logError('file', "Failed to read file: " + key + ": " + file + ": " + err.message);
+				}
+				
+				err.message = "Failed to fetch key: " + key + ": " + err.message;
+				return callback( err, null );
+			}
+			
+			self.logDebug(9, "Binary fetch complete: " + key, '' + data.length + ' bytes');
+			callback( null, data );
+		} );
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;

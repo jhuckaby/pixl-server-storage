@@ -180,13 +180,27 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 
 Note that if *any* of the records fail, the entire operation fails, and the first error is passed to your callback.
 
+## getBuffer
+
+```javascript
+storage.getBuffer( KEY, CALLBACK );
+```
+
+The `getBuffer()` method retrieves a [Buffer](https://nodejs.org/api/buffer.html) to a given record's data, regardless if the key points to a JSON record or a binary record.  Your callback function is passed an error if one occurred, and the buffer value for the given record.  Example:
+
+```javascript
+storage.getBuffer( 'test1', function(err, buf) {
+	if (err) throw err;
+} );
+```
+
 ## getStream
 
 ```javascript
 storage.getStream( KEY, CALLBACK );
 ```
 
-The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#class-streamreadable) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
+The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#readable-streams) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
 
 ```javascript
 var fs = require('fs');

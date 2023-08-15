@@ -374,6 +374,33 @@ module.exports = {
 			} );
 		},
 		
+		function testBuffer(test) {
+			test.expect(8);
+			var self = this;
+			var key = 'buftest';
+			var value = { buf: "test" };
+			
+			this.storage.put( key, value, function(err) {
+				test.ok( !err, "No error creating buftest: " + err );
+				
+				self.storage.getBuffer( key, function(err, data) {
+					test.ok( !err, "No error fetching binary: " + err );
+					test.ok( !!data, "Data is true" );
+					test.ok( typeof(data) == 'object', "Data is an object (not a string)" );
+					test.ok( data.length > 0, "Data length is non-zero" );
+					
+					var json = JSON.parse( data.toString() );
+					test.ok( !!json, "Parsed JSON object from buftest" );
+					test.ok( json.buf === "test", "Correct data inside JSON buftest" );
+					
+					self.storage.delete( key, function(err) {
+						test.ok( !err, "No error deleting buftest key: " + err );
+						test.done();
+					} );
+				} );
+			} );
+		},
+		
 		function testStream(test) {
 			test.expect(14);
 			var self = this;

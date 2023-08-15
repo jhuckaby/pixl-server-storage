@@ -203,6 +203,36 @@ module.exports = Class.create({
 		} );
 	},
 	
+	getBuffer: function(key, callback) {
+		// get buffer to record value given key
+		var self = this;
+		key = this.prepKey(key);
+		
+		this.logDebug(9, "Fetching Redis Object: " + key);
+		
+		this.redis.get( key, function(err, result) {
+			if (!result) {
+				if (err) {
+					// an actual error
+					err.message = "Failed to fetch key: " + key + ": " + err;
+					self.logError('redis', ''+err);
+					callback( err, null );
+				}
+				else {
+					// record not found
+					// always use "NoSuchKey" in error code
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err, null );
+				}
+			}
+			else {
+				self.logDebug(9, "Binary fetch complete: " + key, '' + result.length + ' bytes');
+				callback( null, result );
+			}
+		} );
+	},
+	
 	getStream: function(key, callback) {
 		// get readable stream to record value given key
 		var self = this;
