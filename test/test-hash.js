@@ -38,7 +38,18 @@ module.exports = {
 			var self = this;
 			test.expect(2);
 			
-			this.storage.hashPut( 'hash1', 'key1', { foo: 'bar', number: 123 }, function(err) {
+			this.storage.hashPut( 'hash1', 'key1', { foo: 'bar', number: 122 }, function(err) {
+				test.ok( !err, "No error storing into hash: " + err );
+				test.ok( Object.keys(self.storage.locks).length == 0, "No more locks leftover in storage" );
+				test.done();
+			} );
+		},
+		
+		function hashUpdate1(test) {
+			var self = this;
+			test.expect(2);
+			
+			this.storage.hashUpdate( 'hash1', 'key1', { number: 123 }, function(err) {
 				test.ok( !err, "No error storing into hash: " + err );
 				test.ok( Object.keys(self.storage.locks).length == 0, "No more locks leftover in storage" );
 				test.done();
@@ -52,8 +63,8 @@ module.exports = {
 			this.storage.hashGet( 'hash1', 'key1', function(err, item) {
 				test.ok( !err, "No error fetching hash key: " + err );
 				test.ok( !!item, "Item is real" );
-				test.ok( item.number == 123, "List item number matches" );
-				test.ok( item.foo == 'bar', "List item value matches" );
+				test.ok( item.number == 123, "Hash item number matches" );
+				test.ok( item.foo == 'bar', "Hash item value matches" );
 				
 				// check internals
 				self.storage.get( 'hash1', function(err, hash) {

@@ -454,6 +454,7 @@ module.exports = Class.create({
 			'listEachPageUpdate',
 			'hashCreate', 
 			'hashPut', 
+			'hashUpdate',
 			'hashPutMulti', 
 			'hashCopy', 
 			'hashRename', 

@@ -199,6 +199,7 @@ When transactions are enabled, many compound storage methods (those that execute
 - **Hash Methods**
 	- [hashCreate()](API.md#hashcreate)
 	- [hashPut()](API.md#hashput)
+	- [hashUpdate()](API.md#hashupdate)
 	- [hashPutMulti()](API.md#hashputmulti)
 	- [hashCopy()](API.md#hashcopy)
 	- [hashRename()](API.md#hashrename)

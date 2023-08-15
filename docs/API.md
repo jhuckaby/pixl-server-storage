@@ -996,6 +996,22 @@ storage.hashGetMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err,
 } );
 ```
 
+## hashUpdate
+
+```javascript
+storage.hashUpdate( PATH, KEY, UPDATES, CALLBACK );
+```
+
+The `hashUpdate()` method updates an existing key/value pair in a hash.  The `PATH` specifies the main storage path of the hash, and the hash key itself is identified by `KEY`, which should be a string.  The `UPDATES` must be an object, but it can contain sparse keys.  Furthermore, it can contain dot or slash delimited paths, to update inner nested keys.  The updates are essentially applied atop the exiting record, merging and replacing (overwriting) where appropriate.  Example:
+
+```javascript
+storage.hashUpdate( 'users', 'bsanders', { age: 81 }, function(err) {
+	if (err) throw err;
+} );
+```
+
+This would update Bernie's age to 81 without affecting any of the other properties in his user record.
+
 ## hashEach
 
 ```javascript

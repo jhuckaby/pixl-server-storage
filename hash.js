@@ -350,6 +350,82 @@ module.exports = Class.create({
 		);
 	},
 	
+	hashUpdate: function(path, hkey, updates, callback) {
+		// update existing key/value pair in hash table
+		var self = this;
+		if (!path) return callback(new Error("Hash path must be a valid string."));
+		if (!hkey) return callback(new Error("Hash key must be a valid string."));
+		if (!Tools.isaHash(updates)) return callback(new Error("Hash updates must be an object."));
+		
+		this.logDebug(9, "Updating hash key: " + path + ": " + hkey, this.debugLevel(10) ? updates : null);
+		
+		// lock hash for this
+		this._hashLock(path, true, function() {
+			
+			// load header, do not create new
+			self._hashLoad(path, false, function(err, hash) {
+				if (err) {
+					self._hashUnlock(path);
+					return callback(err);
+				}
+				
+				var state = {
+					path: path,
+					data_path: path + '/data',
+					hkey: ''+hkey,
+					updates: updates,
+					hash: hash,
+					index_depth: -1,
+					key_digest: Tools.digestHex(hkey, 'md5')
+				};
+				
+				self._hashUpdateKey(state, function(err) {
+					// done
+					self._hashUnlock(path);
+					return callback(err);
+				}); // _hashPutKey
+			}); // load
+		}); // lock
+	},
+	
+	_hashUpdateKey: function(state, callback) {
+		// internal hash update method, store at one hashing level
+		// recurse for deeper indexes
+		var self = this;
+		
+		self.get(state.data_path, function(err, data) {
+			if (err) data = { type: 'hash_page', length: 0, items: {} };
+			
+			if (data.type == 'hash_index') {
+				// recurse for deeper level
+				state.index_depth++;
+				state.data_path += '/' + state.key_digest.substring(state.index_depth, state.index_depth + 1);
+				return self._hashUpdateKey(state, callback);
+			}
+			else {
+				// got page, our key should be at this level
+				data.items = Tools.copyHashRemoveProto( data.items );
+				
+				if (!(state.hkey in data.items)) {
+					// key not found
+					var err = new Error("Failed to fetch hash key: " + state.path + ": " + state.hkey + ": Not found");
+					err.code = "NoSuchKey";
+					return callback(err);
+				}
+				
+				var hvalue = data.items[state.hkey];
+				
+				// apply updates directly to forehead
+				for (var key in state.updates) {
+					Tools.setPath( hvalue, key, state.updates[key] );
+				}
+				
+				// save page
+				self.put(state.data_path, data, callback);
+			} // hash_page
+		}); // get
+	},
+	
 	hashEachPage: function(path, iterator, callback) {
 		// call user iterator for each populated hash page, data only
 		// iterator will be passed page items hash object
