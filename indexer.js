@@ -75,7 +75,7 @@ module.exports = Class.create({
 	validateIndexConfig: function(config) {
 		// make sure index config is kosher
 		// return false for success, or error on failure
-		if (!config || !config.fields || !config.fields.length) {
+		if (!config || !config.fields || !Tools.isaArray(config.fields)) {
 			return( new Error("Invalid index configuration object.") );
 		}
 		if (Tools.findObject(config.fields, { _primary: 1 })) {
@@ -104,6 +104,10 @@ module.exports = Class.create({
 		
 		// validate each sorter def
 		if (config.sorters) {
+			if (!Tools.isaArray(config.sorters)) {
+				return( new Error("Invalid index sorters array.") );
+			}
+			
 			for (var idx = 0, len = config.sorters.length; idx < len; idx++) {
 				var sorter = config.sorters[idx];
 				
@@ -167,13 +171,6 @@ module.exports = Class.create({
 			if ((value === null) && ("default_value" in def)) value = def.default_value;
 			if (value !== null) fields.push(def);
 		} );
-		
-		if (!fields.length) {
-			// nothing to index!
-			this.logDebug(6, "Nothing to index, skipping entire record");
-			if (callback) callback();
-			return;
-		}
 		
 		// start index and track perf
 		var pf = this.perf.begin('index');
