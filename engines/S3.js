@@ -10,6 +10,7 @@ var S3 = require("@aws-sdk/client-s3");
 var { Upload } = require("@aws-sdk/lib-storage");
 var { NodeHttpHandler } = require("@smithy/node-http-handler");
 var streamToBuffer = require("fast-stream-to-buffer");
+var StreamMeter = require("stream-meter");
 
 module.exports = Class.create({
 	
@@ -100,8 +101,6 @@ module.exports = Class.create({
 	
 	prepKey: function(key) {
 		// prepare key for S3 based on config
-		var md5 = Tools.digestHex(key, 'md5');
-		
 		var ns = '';
 		if (key.match(/^([\w\-\.]+)\//)) ns = RegExp.$1;
 		
@@ -110,6 +109,7 @@ module.exports = Class.create({
 		}
 		
 		if (this.keyTemplate) {
+			var md5 = Tools.digestHex(key, 'md5');
 			var idx = 0;
 			var temp = this.keyTemplate.replace( /\#/g, function() {
 				return md5.substr(idx++, 1);
@@ -153,6 +153,7 @@ module.exports = Class.create({
 		this.s3.send( new S3.PutObjectCommand(params) )
 			.then( function(data) {
 				self.logDebug(9, "Store complete: " + key);
+				self.storage.emit('billing', 's3_put', 1);
 				
 				// possibly cache in LRU
 				if (self.cache && !is_binary) {
@@ -162,6 +163,13 @@ module.exports = Class.create({
 				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
+				if (err.name == 'SlowDown') {
+					// special behavior for SlowDown errors
+					self.logDebug(6, "Received SlowDown from S3 put: " + orig_key + ": " + err + " (will retry)");
+					self.storage.emit('slowDown');
+					setTimeout( function() { self.put(orig_key, value, callback); }, 1000 );
+					return;
+				}
 				self.logError('s3', "Failed to store object: " + key + ": " + (err.message || err), err);
 				if (callback) process.nextTick( function() { callback(err); });
 			} );
@@ -173,9 +181,12 @@ module.exports = Class.create({
 		var orig_key = key;
 		key = this.prepKey(key);
 		
+		var meter = new StreamMeter();
+		inp.pipe(meter);
+		
 		var params = Tools.copyHash( this.s3Params );
 		params.Key = this.extKey(key, orig_key);
-		params.Body = inp;
+		params.Body = meter;
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
 		
@@ -187,6 +198,8 @@ module.exports = Class.create({
 		upload.done()
 			.then( function(data) {
 				self.logDebug(9, "Stream store complete: " + key);
+				self.storage.emit('billing', 's3_put', 1);
+				self.storage.emit('billing', 's3_bytes_out', meter.bytes);
 				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
@@ -201,9 +214,12 @@ module.exports = Class.create({
 		var orig_key = key;
 		key = this.prepKey(key);
 		
+		var meter = new StreamMeter();
+		inp.pipe(meter);
+		
 		var params = Tools.copyHash( this.s3Params );
 		params.Key = this.extKey(key, orig_key);
-		params.Body = inp;
+		params.Body = meter;
 		if (opts) Tools.mergeHashInto(params, opts);
 		
 		this.logDebug(9, "Storing S3 Binary Stream: " + key);
@@ -216,6 +232,8 @@ module.exports = Class.create({
 		upload.done()
 			.then( function(data) {
 				self.logDebug(9, "Stream store complete: " + key);
+				self.storage.emit('billing', 's3_put', 1);
+				self.storage.emit('billing', 's3_bytes_out', meter.bytes);
 				if (callback) process.nextTick( function() { callback(null, data); });
 			} )
 			.catch( function(err) {
@@ -252,6 +270,7 @@ module.exports = Class.create({
 		this.s3.send( new S3.HeadObjectCommand(params) )
 			.then( function(data) {
 				self.logDebug(9, "Head complete: " + key);
+				self.storage.emit('billing', 's3_head', 1);
 				
 				process.nextTick( function() {
 					callback( null, {
@@ -266,6 +285,13 @@ module.exports = Class.create({
 					// always include "Not found" in error message
 					err = new Error("Failed to head key: " + key + ": Not found");
 					err.code = "NoSuchKey";
+				}
+				else if (err.name == 'SlowDown') {
+					// special behavior for SlowDown errors
+					self.logDebug(6, "Received SlowDown from S3 head: " + orig_key + ": " + err + " (will retry)");
+					self.storage.emit('slowDown');
+					setTimeout( function() { self.head(orig_key, callback); }, 1000 );
+					return;
 				}
 				else {
 					// some other error
@@ -314,6 +340,9 @@ module.exports = Class.create({
 						return callback(err);
 					}
 					
+					self.storage.emit('billing', 's3_get', 1);
+					self.storage.emit('billing', 's3_bytes_in', body.length);
+					
 					if (is_binary) {
 						self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
 					}
@@ -347,6 +376,13 @@ module.exports = Class.create({
 					err = new Error("Failed to fetch key: " + key + ": Not found");
 					err.code = "NoSuchKey";
 				}
+				else if (err.name == 'SlowDown') {
+					// special behavior for SlowDown errors
+					self.logDebug(6, "Received SlowDown from S3 get: " + orig_key + ": " + err + " (will retry)");
+					self.storage.emit('slowDown');
+					setTimeout( function() { self.get(orig_key, callback); }, 1000 );
+					return;
+				}
 				else {
 					// some other error
 					self.logError('s3', "Failed to fetch key: " + key + ": " + (err.message || err), err);
@@ -376,6 +412,8 @@ module.exports = Class.create({
 					}
 					
 					self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
+					self.storage.emit('billing', 's3_get', 1);
+					self.storage.emit('billing', 's3_bytes_in', body.length);
 					
 					callback( null, body, {
 						mod: Math.floor((new Date(data.LastModified)).getTime() / 1000),
@@ -389,6 +427,13 @@ module.exports = Class.create({
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
 					err.code = "NoSuchKey";
+				}
+				else if (err.name == 'SlowDown') {
+					// special behavior for SlowDown errors
+					self.logDebug(6, "Received SlowDown from S3 getBuffer: " + orig_key + ": " + err + " (will retry)");
+					self.storage.emit('slowDown');
+					setTimeout( function() { self.getBuffer(orig_key, callback); }, 1000 );
+					return;
 				}
 				else {
 					// some other error
@@ -422,6 +467,9 @@ module.exports = Class.create({
 				download.once('close', function() {
 					self.logDebug(9, "S3 stream download closed: " + key);
 				} );
+				
+				self.storage.emit('billing', 's3_get', 1);
+				self.storage.emit('billing', 's3_bytes_in', data.ContentLength);
 				
 				process.nextTick( function() {
 					callback( null, download, {
@@ -478,6 +526,9 @@ module.exports = Class.create({
 					self.logDebug(9, "S3 stream download closed: " + key);
 				} );
 				
+				self.storage.emit('billing', 's3_get', 1);
+				self.storage.emit('billing', 's3_bytes_in', data.ContentRange);
+				
 				// get full length from the ContentRange header
 				var len = 0;
 				if (data.ContentRange && data.ContentRange.toString().match(/\/\s*(\d+)\s*$/)) {
@@ -521,6 +572,7 @@ module.exports = Class.create({
 		this.s3.send( new S3.DeleteObjectCommand(params) )
 			.then( function(data) {
 				self.logDebug(9, "Delete complete: " + key);
+				self.storage.emit('billing', 's3_delete', 1);
 				
 				// possibly delete from LRU cache as well
 				if (self.cache && self.cache.has(orig_key)) {
@@ -530,6 +582,13 @@ module.exports = Class.create({
 				if (callback) process.nextTick( function() { callback(null, data); } );
 			} )
 			.catch( function(err) {
+				if (err.name == 'SlowDown') {
+					// special behavior for SlowDown errors
+					self.logDebug(6, "Received SlowDown from S3 delete: " + orig_key + ": " + err + " (will retry)");
+					self.storage.emit('slowDown');
+					setTimeout( function() { self.delete(orig_key, callback); }, 1000 );
+					return;
+				}
 				self.logError('s3', "Failed to delete object: " + key + ": " + (err.message || err), err);
 				if (callback) process.nextTick( function() { callback(err); } );
 			} );
