@@ -167,7 +167,8 @@ module.exports = Class.create({
 		var fields = [];
 		
 		config.fields.forEach( function(def) {
-			var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.sub(def.source, record, true);
+			var value = def.source.match(/\[.+\]/) ? Tools.sub(def.source, record, true) : Tools.getPath(record, def.source);
+			if (value === undefined) value = null;
 			if ((value === null) && ("default_value" in def)) value = def.default_value;
 			if (value !== null) fields.push(def);
 		} );
@@ -208,7 +209,8 @@ module.exports = Class.create({
 							return;
 						}
 						
-						var value = def.source.match(/^\//) ? Tools.lookupPath(def.source, record) : Tools.sub(def.source, record, true);
+						var value = def.source.match(/\[.+\]/) ? Tools.sub(def.source, record, true) : Tools.getPath(record, def.source);
+						if (value === undefined) value = null;
 						if ((value === null) && ("default_value" in def)) value = def.default_value;
 						if (typeof(value) == 'object') value = JSON.stringify(value);
 						
@@ -917,7 +919,8 @@ module.exports = Class.create({
 		// add record to sorter index
 		var config = state.config;
 		
-		var value = Tools.lookupPath(sorter.source, record);
+		var value = Tools.getPath(record, sorter.source);
+		if (value === undefined) value = null;
 		if ((value === null) && ("default_value" in sorter)) value = sorter.default_value;
 		if (value === null) {
 			if (state.new_record) value = ((sorter.type == 'number') ? 0 : '');
