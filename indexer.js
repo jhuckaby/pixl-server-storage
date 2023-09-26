@@ -975,6 +975,11 @@ module.exports = Class.create({
 		return value.replace(/\W+/g, '_').replace(/_+/g, '_');
 	},
 	
+	filterWords_alphanum_array: function(value) {
+		// filter out everything except alphanum + underscore + comma, suitable for JSON arrays
+		return value.replace(/[\[\]\"\']+/g, '').replace(/[^\w\,]+/g, '_').replace(/_+/g, '_');
+	},
+	
 	getWordList: function(value, def, config) {
 		// clean and filter text down to list of alphanumeric words
 		// return array of clean words

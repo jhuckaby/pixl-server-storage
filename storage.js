@@ -56,7 +56,7 @@ module.exports = Class.create({
 	startup: function(callback) {
 		// setup storage plugin
 		var self = this;
-		this.logDebug(2, "Setting up storage system v" + this.version);
+		this.logDebug(5, "Setting up storage system v" + this.version);
 		
 		// advisory locking system (in RAM, single process only)
 		this.locks = {};

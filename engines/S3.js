@@ -33,14 +33,15 @@ module.exports = Class.create({
 		var aws_config = this.storage.config.get('AWS') || this.server.config.get('AWS');
 		var s3_config = this.config.get();
 		
-		this.logDebug(2, "Setting up Amazon S3 (" + aws_config.region + ")");
-		this.logDebug(3, "S3 Bucket ID: " + s3_config.params.Bucket);
+		this.logDebug(5, "Setting up Amazon S3 (" + aws_config.region + ")");
+		this.logDebug(6, "S3 Bucket ID: " + s3_config.params.Bucket);
 		
 		this.keyPrefix = (s3_config.keyPrefix || '').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
 		
 		this.keyTemplate = (s3_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
 		this.fileExtensions = !!s3_config.fileExtensions;
+		this.pretty = !!s3_config.pretty;
 		
 		// optional LRU cache
 		this.cache = null;
@@ -81,6 +82,7 @@ module.exports = Class.create({
 		delete combo_config.keyPrefix;
 		delete combo_config.keyTemplate;
 		delete combo_config.fileExtensions;
+		delete combo_config.pretty;
 		delete combo_config.cache;
 		
 		this.s3Params = combo_config.params || {};
@@ -146,7 +148,7 @@ module.exports = Class.create({
 		}
 		else {
 			this.logDebug(9, "Storing S3 JSON Object: " + key, this.debugLevel(10) ? params.Body : null);
-			params.Body = JSON.stringify( params.Body );
+			params.Body = this.pretty ? JSON.stringify( params.Body, null, "\t" ) : JSON.stringify( params.Body );
 			params.ContentType = 'application/json';
 		}
 		
