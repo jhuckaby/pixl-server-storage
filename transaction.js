@@ -535,7 +535,7 @@ module.exports = Class.create({
 		this._transLock(path, true, function() {
 			// got lock for transaction
 			var id = '' + Math.floor(self.nextTransID++);
-			var log_file = Path.join( self.transDir, "logs", id + '.log' );
+			var log_file = Path.join( self.transDir, "logs", process.pid + '-' + id + '.log' );
 			var trans = { id: id, path: path, log: log_file, date: Tools.timeNow(), pid: process.pid };
 			
 			self.logDebug(5, "Beginning new transaction on: " + path, trans);
