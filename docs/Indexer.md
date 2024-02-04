@@ -63,11 +63,9 @@ var storage = server.Storage;
 
 The indexer only processes words that contain standard U.S. ASCII alphanumeric characters, e.g. A-Z, 0-9, and underscore.  All other characters are skipped, and serve as word separators.  International (Unicode) characters are converted to ASCII at index and search time (see [Unicode Characters](#unicode-characters) below for more on this).
 
-The indexer is **very slow**.  All index operations involve reading and writing JSON storage records *at the word level* (i.e. a hash for each unique word!), and the system is designed to eat as little memory as possible.  Expect hundreds or even thousands of storage operations for indexing a single record.  Searching is fairly quick by comparison, because typically you're only searching on a small number of words.  This also assumes your storage back-end is fast (preferably local SSD filesystem), and your search queries are simple and straightforward.
+The indexer can be slow, depending on the storage engine.  All index operations involve reading and writing JSON storage records *at the word level* (i.e. a hash for each unique word!), and the system is designed to eat as little memory as possible.  Expect hundreds or even thousands of storage operations for indexing a single record.  Searching is fairly quick by comparison, because typically you're only searching on a small number of words.  This also assumes your storage back-end is fast (preferably local SSD filesystem, or you are using a very fast key/value store like Couchbase or SQLite), and your search queries are simple and straightforward.
 
-This system is not designed for large datasets.  Thousands of records is probably fine, and maybe even tens of thousands depending on the index types and data size.  *Hundreds of thousands* of records would likely end in tears.  Also, keep an eye on your [inodes](https://en.wikipedia.org/wiki/Inode), because this thing is hungry for them.
-
-Remember, this is just a silly hobby project.  You should not use this for any production applications.
+This system is not designed for large query results.  Thousands of records returned is probably fine, and maybe even tens of thousands depending on the index types and data size.  *Hundreds of thousands* of records would likely end in tears.  Also, if you are using the Filesystem storage engine, keep an eye on your [inodes](https://en.wikipedia.org/wiki/Inode), because this thing is hungry for them.
 
 ## Configuration
 
@@ -880,8 +878,7 @@ Make sure you leave the index field settings set to their old values when you ad
 - Make use of the [Stemmer](#stemming) for your full text fields.
 - Only enable `master_list` on fields with a small number of unique words.
 - Sorting is slow, consider using alphabetically sortable IDs, and sorting the records that way.
-- Searching by date range and number range is very slow, try to avoid.
-- Everything is slow, don't use this stupid library, LOL :)
+- Searching by date range and number range can be very slow.
 
 ## Indexer Internals
 
