@@ -10,7 +10,7 @@ Before using the indexer, please keep the following in mind:
 - You are expected to store your record data yourself.
 	- The indexer **only** indexes fields for searching purposes -- it does not store raw records for retrieval.
 - When performing a search, you **only** get your record IDs back.  
-	- You are expected to paginate and fetch your own record data (i.e. via [getMulti()](API.md#getMulti) or other).
+	- You are expected to paginate and fetch your own record data (i.e. via [getMulti()](API.md#getmulti) or other).
 
 The indexer works with any storage engine, but it is optimized for the local filesystem.  Transactions are automatically used for indexing and unindexing records, if they are enabled (this is highly recommended).
 
