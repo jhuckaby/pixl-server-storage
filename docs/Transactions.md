@@ -6,8 +6,8 @@ The transaction system works with any storage engine, but it is optimized for th
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Table of Contents
@@ -34,9 +34,9 @@ Transaction locking is advisory.  Meaning, transactions will all play nice with 
 
 The transaction system is designed for JSON records only.  Binary records are not included as part of a transaction, and operations are silently passed straight through.  Meaning, any calls accessing binary records inside of a transaction will result in the original record being changed.  This behavior may be changed in a future version.
 
-Please note that transactions aren't 100% [ACID compliant](https://en.wikipedia.org/wiki/ACID), but they do follow *most* of the rules.  When using the local filesystem engine, the real question is durability, as in what happens in the event of a sudden power loss.  When a transaction is committed, by design it could involve changing a huge amount of files.  While this operation is "effectively atomic" by way of advisory locking, the filesystem may still end up in an unknown state after sudden reboot, for example in the middle of a very large commit.  Now, the system does have automatic recovery using a rollback log, and *should* be able to restore the filesystem to the state right before the commit.  But really, when we're talking about yanking power cords, lightning strikes and brown-outs, who the hell knows.  The rollback log may be incomplete or corrupted (yes, we call [fsync](https://nodejs.org/api/fs.html#fs_fs_fsync_fd_callback) on it before ever starting the commit, but even then, things can happen -- fsync isn't a 100% guarantee, especially with SSDs).
+Please note that transactions aren't 100% [ACID compliant](https://en.wikipedia.org/wiki/ACID), but they do follow *most* of the rules.  When using the local filesystem engine, the real question is durability, as in what happens in the event of a sudden power loss.  When a transaction is committed, by design it could involve changing a huge amount of files.  While this operation is "effectively atomic" by way of advisory locking, the filesystem may still end up in an unknown state after sudden reboot, for example in the middle of a very large commit.  Now, the system does have automatic recovery using a rollback log, and *should* be able to restore the filesystem to the state right before the commit.  But really, when we're talking about yanking power cords, lightning strikes and brown-outs, who the hell knows.  The rollback log may be incomplete or corrupted (yes, we call [fsync](https://nodejs.org/api/fs.html#fsfsyncfd-callback) on it before ever starting the commit, but even then, things can happen -- fsync isn't a 100% guarantee, especially with SSDs).
 
-I guess the bottom line is, always keep backups of your data, and don't use this for anything mission critical.  It is really just a hobby project anyway.  The authors of this software are not responsible for any data loss!
+I guess the bottom line is, always keep backups of your data!
 
 ## Configuration
 
@@ -58,7 +58,7 @@ Choose your `trans_dir` carefully.  This directory is used to store temporary fi
 
 So basically, if you plan to use the [Filesystem](../README.md#local-filesystem) engine with a local (i.e. non-network) disk, you don't need to make any adjustments.  The default setting for `trans_dir` is a subdirectory just inside your `base_dir` engine property.  But if you are going with a networked (i.e. NFS) filesystem, or you're going to use [S3](../README.md#amazon-s3) or [Couchbase](../README.md#couchbase), then you should set `trans_dir` to a local filesystem path on a fast disk (ideally SSD).
 
-**Pro-Tip:** When using transactions with the Amazon S3 engine, consider setting the `maxRetries` property in your `S3` configuration object, so the AWS client library makes multiple attempts before failing an operation.  Network hiccups can happen.
+**Pro-Tip:** When using transactions with the Amazon S3 engine, consider setting the `maxAttempts` property in your `S3` configuration object, so the AWS client library makes multiple attempts before failing an operation.  Network hiccups can happen.
 
 ## Basic Use
 
@@ -86,7 +86,7 @@ The [begin()](API.md#begin) method is asynchronous because obtaining a lock may 
 Here is a more comprehensive example, which deposits a sum of money into a fictional bank account.  We are using the [async](https://www.npmjs.com/package/async) module for better flow control.
 
 ```js
-var async = require('async');
+const async = require('async');
 
 storage.begin( 'accounts', function(err, trans) {
 	// transaction has begun, now use 'trans' as storage proxy
@@ -248,7 +248,7 @@ Database recovery is complete.  Please see logs/recovery.log for full details.
 
 You can then start your application normally, i.e. without the `--recover` flag.  Alternatively, if you would prefer that the database automatically recovers and starts up on its own, just add the following property in your `Storage` configuration:
 
-```js
+```json
 {
 	"trans_auto_recover": true
 }
@@ -279,7 +279,7 @@ Inside the temp directory, two subdirectories are created: `data` and `logs`.  T
 
 When a transaction is first started, the only thing that happens is a unique ID is assigned, and a lock is obtained.  Both are based on the path that is passed into [begin()](API.md#begin).  Nothing is written to disk at this point -- that is deferred until actual operations are performed on the transaction object.
 
-Each record that is mutated (created, updated or deleted) inside a transaction is written to a temporary file, and also a ledger is kept in memory to keep track of which records are changed.  The in-memory ledger only contains keys and a "state" character, representing a created, updated or deleted record.  Only records created or updated have an associated temp file on disk.  Deleted records are marked in memory only (no need for a temp file).
+Each record that is mutated (created, updated or deleted) inside a transaction is written to a temporary file, and also a ledger is kept in memory to keep track of which records are changed.  The in-memory ledger only contains keys and a "state", representing a created, updated or deleted record.  Only records created or updated have an associated temp file on disk.  Deleted records are marked in memory only (no need for a temp file).
 
 For example, consider a transaction that begins with path `test1`...
 
@@ -289,7 +289,7 @@ storage.begin( 'test1', function(err, trans) {
 } );
 ```
 
-The transaction ID will be `5a105e8b9d40e1329780d62ea2265d8a` (which is just an MD5 of `test1`).  Now, let's say our `trans_dir` was set to `/var/tmp/db`, and inside our transaction we store a record with key `test1/record1`...
+The transaction ID will be `5a105e8b9d40e1329780d62ea2265d8a` (which is just an MD5 of `test1`).  Now, let's say our `trans_dir` was set to `/let/tmp/db`, and inside our transaction we store a record with key `test1/record1`...
 
 ```js
 trans.put( 'test1/record1', { foo: 12345 }, function(err) {
@@ -300,7 +300,7 @@ trans.put( 'test1/record1', { foo: 12345 }, function(err) {
 So at this point we wrote the `test1/record1` record using our `trans` object, but nothing has happened in the outer storage system (i.e. nothing was written to the primary storage engine).  Instead, the following temp file was written to disk, containing `{"foo":12345}`:
 
 ```
-/var/tmp/db/data/5a105e8b9d40e1329780d62ea2265d8a-0d1454fd1bcdc024acedcbe5cfff4ffd.json
+/tmp/db/data/5a105e8b9d40e1329780d62ea2265d8a-0d1454fd1bcdc024acedcbe5cfff4ffd.json
 ```
 
 The temp filename is made up of the transaction ID (`5a105e8b9d40e1329780d62ea2265d8a`) and the MD5 hash of the record key (`0d1454fd1bcdc024acedcbe5cfff4ffd`).  This is to insure it will not collide with any other records in any other concurrent transactions, doesn't require any further subdirectories, and we can easily retrieve it at commit time if we know the plain key.
@@ -378,7 +378,7 @@ The commit process basically replays all the transaction operations on primary s
 The log will contain the original JSON contents of all the records that will be mutated by the transaction.  It is basically a "snapshot" of the previous state, before we start the commit.  The log goes into the `logs` subdirectory under our `trans_dir` temp directory, and is named using the same Transaction ID hash:
 
 ```
-/var/tmp/db/logs/5a105e8b9d40e1329780d62ea2265d8a.log
+/tmp/db/logs/5a105e8b9d40e1329780d62ea2265d8a.log
 ```
 
 The log file format is plain text with line-delimited JSON for the records.  The first line is a header record that describes the transaction.  Here is an example log:

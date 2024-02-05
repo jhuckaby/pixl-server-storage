@@ -2,8 +2,8 @@
 
 Here are all the public methods you can call in the storage class.  These examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Table of Contents
@@ -89,13 +89,13 @@ var storage = server.Storage;
 
 ## put
 
-```javascript
+```js
 storage.put( KEY, VALUE, CALLBACK );
 ```
 
 The `put()` method stores a key/value pair.  It will create the record if it doesn't exist, or replace it if it does.  All keys should be strings.  The value may be an object or a `Buffer` (for binary blobs).  Objects are auto-serialized to JSON.  Your callback function is passed an error if one occurred.  Example:
 
-```javascript
+```js
 storage.put( 'test1', { foo: 'bar1' }, function(err) {
 	if (err) throw err;
 } );
@@ -103,9 +103,10 @@ storage.put( 'test1', { foo: 'bar1' }, function(err) {
 
 For binary values, the key *must* contain a file extension, e.g. `test1.gif`.  Example:
 
-```javascript
-var fs = require('fs');
-var buffer = fs.readFileSync('picture.gif');
+```js
+const fs = require('fs');
+let buffer = fs.readFileSync('picture.gif');
+
 storage.put( 'test1.gif', buffer, function(err) {
 	if (err) throw err;
 } );
@@ -113,18 +114,19 @@ storage.put( 'test1.gif', buffer, function(err) {
 
 ## putMulti
 
-```javascript
+```js
 storage.putMulti( RECORDS, CALLBACK );
 ```
 
 The `putMulti()` method stores multiple keys/values at once, from a specified object containing both.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than storing the records in sequence.  Example:
 
-```javascript
-var records = {
+```js
+let records = {
 	multi1: { fruit: 'apple' },
 	multi2: { fruit: 'orange' },
 	multi3: { fruit: 'banana' }
 };
+
 storage.putMulti( records, function(err) {
 	if (err) throw err;
 } );
@@ -134,15 +136,16 @@ Note that if any of the individual put operations fail, the entire `putMulti()` 
 
 ## putStream
 
-```javascript
+```js
 storage.putStream( KEY, STREAM, CALLBACK );
 ```
 
 The `putStream()` method stores a record using a [readable stream](https://nodejs.org/api/stream.html#stream_class_stream_readable), so it doesn't have to be read into memory.  This can be used to spool very large files to storage without using any RAM.  Note that this is treated as a binary record, so the key *must* contain a file extension, e.g. `test1.gif`.  Example:
 
-```javascript
-var fs = require('fs');
-var stream = fs.createReadStream('picture.gif');
+```js
+const fs = require('fs');
+let stream = fs.createReadStream('picture.gif');
+
 storage.putStream( 'test1.gif', stream, function(err) {
 	if (err) throw err;
 } );
@@ -152,13 +155,13 @@ Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster`
 
 ## get
 
-```javascript
+```js
 storage.get( KEY, CALLBACK );
 ```
 
 The `get()` method fetches a value given a key.  If the record is an object, it will be returned as such.  Or, if the record is a binary blob, a `Buffer` object will be returned.  Your callback function is passed an error if one occurred, and the data value for the given record.  Example:
 
-```javascript
+```js
 storage.get( 'test1', function(err, data) {
 	if (err) throw err;
 } );
@@ -166,13 +169,13 @@ storage.get( 'test1', function(err, data) {
 
 ## getMulti
 
-```javascript
+```js
 storage.getMulti( KEYS, CALLBACK );
 ```
 
 The `getMulti()` method fetches multiple values at once, from a specified array of keys.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than fetching the records in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
 
-```javascript
+```js
 storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 	if (err) throw err;
 	// values[0] will be the test1 record.
@@ -185,13 +188,13 @@ Note that if *any* of the records fail, the entire operation fails, and the firs
 
 ## getBuffer
 
-```javascript
+```js
 storage.getBuffer( KEY, CALLBACK );
 ```
 
 The `getBuffer()` method retrieves a [Buffer](https://nodejs.org/api/buffer.html) to a given record's data, regardless if the key points to a JSON record or a binary record.  Your callback function is passed an error if one occurred, and the buffer value for the given record.  Example:
 
-```javascript
+```js
 storage.getBuffer( 'test1', function(err, buf) {
 	if (err) throw err;
 } );
@@ -199,18 +202,19 @@ storage.getBuffer( 'test1', function(err, buf) {
 
 ## getStream
 
-```javascript
+```js
 storage.getStream( KEY, CALLBACK );
 ```
 
 The `getStream()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#readable-streams) to a given record's data, so it can be read or piped to a writable stream.  This is for very large records, so nothing is loaded into memory.  Example of spooling to a local file:
 
-```javascript
-var fs = require('fs');
-var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+```js
+const fs = require('fs');
+let writeStream = fs.createWriteStream('/let/tmp/downloaded.gif');
 
 storage.getStream( 'test1.gif', function(err, readStream, info) {
 	if (err) throw err;
+	
 	writeStream.on('finish', function() {
 		// data is completely written
 	} );
@@ -224,18 +228,19 @@ Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster`
 
 ## getStreamRange
 
-```javascript
+```js
 storage.getStreamRange( KEY, START, END, CALLBACK );
 ```
 
 The `getStreamRange()` method retrieves a [readable stream](https://nodejs.org/api/stream.html#class-streamreadable) to a specific slice of a record's data, so it can be read or piped to a writable stream.  The `start` and `end` arguments should be set to the starting and ending byte offset of the slice you want.  Both values are *inclusive*.  Example of spooling bytes `0-99` of a record to a local file:
 
-```javascript
-var fs = require('fs');
-var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+```js
+const fs = require('fs');
+let writeStream = fs.createWriteStream('/let/tmp/downloaded.gif');
 
 storage.getStreamRange( 'test1.gif', 0, 99, function(err, readStream, info) {
 	if (err) throw err;
+	
 	writeStream.on('finish', function() {
 		// data is completely written
 	} );
@@ -254,7 +259,7 @@ Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster`
 
 ## head
 
-```javascript
+```js
 storage.head( KEY, CALLBACK );
 ```
 
@@ -267,7 +272,7 @@ The `head()` method fetches metadata about an object given a key, without fetchi
 
 Example:
 
-```javascript
+```js
 storage.head( 'test1', function(err, data) {
 	if (err) throw err;
 	// data.mod
@@ -279,13 +284,13 @@ Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster`
 
 ## headMulti
 
-```javascript
+```js
 storage.headMulti( KEYS, CALLBACK );
 ```
 
 The `headMulti()` method pings multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than pinging the records in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
 
-```javascript
+```js
 storage.headMulti( ['test1', 'test2', 'test3'], function(err, values) {
 	if (err) throw err;
 	// values[0] will be the test1 head info.
@@ -296,13 +301,13 @@ storage.headMulti( ['test1', 'test2', 'test3'], function(err, values) {
 
 ## delete
 
-```javascript
+```js
 storage.delete( KEY, CALLBACK );
 ```
 
 The `delete()` method deletes an object given a key.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.delete( 'test1', function(err) {
 	if (err) throw err;
 } );
@@ -310,13 +315,13 @@ storage.delete( 'test1', function(err) {
 
 ## deleteMulti
 
-```javascript
+```js
 storage.deleteMulti( KEYS, CALLBACK );
 ```
 
 The `deleteMulti()` method deletes multiple records at once, from a specified array of keys.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than deleting the records in sequence.  Example:
 
-```javascript
+```js
 storage.deleteMulti( ['test1', 'test2', 'test3'], function(err) {
 	if (err) throw err;
 } );
@@ -324,13 +329,13 @@ storage.deleteMulti( ['test1', 'test2', 'test3'], function(err) {
 
 ## copy
 
-```javascript
+```js
 storage.copy( OLD_KEY, NEW_KEY, CALLBACK );
 ```
 
 The `copy()` method copies a value from one key and stores it at another.  If the destination record doesn't exist it is created, otherwise it is replaced.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.copy( 'test1', 'test2', function(err) {
 	if (err) throw err;
 } );
@@ -340,13 +345,13 @@ storage.copy( 'test1', 'test2', function(err) {
 
 ## rename
 
-```javascript
+```js
 storage.rename( OLD_KEY, NEW_KEY, CALLBACK );
 ```
 
 The `rename()` method copies a value from one key, stores it at another, and deletes the original key.  If the destination record doesn't exist it is created, otherwise it is replaced.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.rename( 'test1', 'test2', function(err) {
 	if (err) throw err;
 } );
@@ -356,7 +361,7 @@ storage.rename( 'test1', 'test2', function(err) {
 
 ## lock
 
-```javascript
+```js
 storage.lock( KEY, WAIT, CALLBACK );
 ```
 
@@ -366,7 +371,7 @@ If you pass `true` for the wait argument and the specified record is already loc
 
 ## unlock
 
-```javascript
+```js
 storage.unlock( KEY );
 ```
 
@@ -374,7 +379,7 @@ The `unlock()` method releases an exclusive lock on a particular record, specifi
 
 ## shareLock
 
-```javascript
+```js
 storage.shareLock( KEY, WAIT, CALLBACK );
 ```
 
@@ -384,7 +389,7 @@ If you pass `true` for the wait argument and the specified record is already loc
 
 ## shareUnlock
 
-```javascript
+```js
 storage.shareUnlock( KEY );
 ```
 
@@ -392,14 +397,14 @@ The `shareUnlock()` method releases a shared lock on a particular record, specif
 
 ## expire
 
-```javascript
+```js
 storage.expire( KEY, DATE );
 ```
 
 The `expire()` method sets an expiration date on a record given its key.  The date can be any string, Epoch seconds or `Date` object.  The daily maintenance system will automatically deleted all expired records when it runs (assuming it is enabled -- see [Daily Maintenance](../README.md#daily-maintenance)).  Example:
 
-```javascript
-var exp_date = ((new Date()).getTime() / 1000) + 86400; // tomorrow
+```js
+let exp_date = ((new Date()).getTime() / 1000) + 86400; // tomorrow
 storage.expire( 'test1', exp_date );
 ```
 
@@ -433,7 +438,7 @@ storage.getStats();
 
 The `getStats()` method returns information about current system performance, including min/avg/max metrics for the last second and minute.  It takes no arguments, and returns an object containing the following:
 
-```js
+```json
 {
 	"version": "2.0.0",
 	"engine": "Filesystem",
@@ -467,13 +472,13 @@ For details on these stats, see [Performance Metrics](../README.md#performance-m
 
 ## listCreate
 
-```javascript
+```js
 storage.listCreate( KEY, OPTIONS, CALLBACK );
 ```
 
 The `listCreate()` method creates a new, empty list.  Specify the desired key, options (see below) and a callback function.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listCreate( 'list1', {}, function(err) {
 	if (err) throw err;
 } );
@@ -481,7 +486,7 @@ storage.listCreate( 'list1', {}, function(err) {
 
 Unless otherwise specified, the list will be created with the default [page size](../README.md#list_page_size) (number of items per page).  However, you can override this in the options object by passing a `page_size` property:
 
-```javascript
+```js
 storage.listCreate( 'list1', { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -489,13 +494,13 @@ storage.listCreate( 'list1', { page_size: 100 }, function(err) {
 
 ## listPush
 
-```javascript
+```js
 storage.listPush( KEY, ITEMS, [OPTIONS], CALLBACK );
 ```
 
 Similar to the standard [Array.push()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push), the `listPush()` method pushes one or more items onto the end of a list.  The list will be created if it doesn't exist, using the default [page size](../README.md#list_page_size).  `ITEMS` can be a single object, or an array of objects.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listPush( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
 	if (err) throw err;
 } );
@@ -503,7 +508,7 @@ storage.listPush( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
 
 If the list doesn't exist, `listPush()` will create it.  If you specify an `OPTIONS` object, this will be used in the creation of the list, i.e. to specify the [page size](../README.md#list_page_size), and add any custom params you want.
 
-```javascript
+```js
 storage.listPush( 'list1', { username: 'jhuckaby', age: 38 }, { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -511,13 +516,13 @@ storage.listPush( 'list1', { username: 'jhuckaby', age: 38 }, { page_size: 100 }
 
 ## listUnshift
 
-```javascript
+```js
 storage.listUnshift( KEY, ITEMS, CALLBACK );
 ```
 
 Similar to the standard [Array.unshift()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift), the `listUnshift()` method unshifts one or more items onto the beginning of a list.  The list will be created if it doesn't exist, using the default [page size](../README.md#list_page_size).  `ITEMS` can be a single object, or an array of objects.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listUnshift( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
 	if (err) throw err;
 } );
@@ -525,7 +530,7 @@ storage.listUnshift( 'list1', { username: 'jhuckaby', age: 38 }, function(err) {
 
 If the list doesn't exist, `listUnshift()` will create it.  If you specify an `OPTIONS` object, this will be used in the creation of the list, i.e. to specify the [page size](../README.md#list_page_size), and add any custom params you want.
 
-```javascript
+```js
 storage.listUnshift( 'list1', { username: 'jhuckaby', age: 38 }, { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -533,13 +538,13 @@ storage.listUnshift( 'list1', { username: 'jhuckaby', age: 38 }, { page_size: 10
 
 ## listPop
 
-```javascript
+```js
 storage.listPop( KEY, CALLBACK );
 ```
 
 Similar to the standard [Array.pop()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/pop), the `listPop()` method pops one single item off the end of a list, and returns it.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the popped item, if successful.  Example:
 
-```javascript
+```js
 storage.listPop( 'list1', function(err, item) {
 	if (err) throw err;
 } );
@@ -549,13 +554,13 @@ If the list is empty, an error is not generated, but the item will be `null`.
 
 ## listShift
 
-```javascript
+```js
 storage.listShift( KEY, CALLBACK );
 ```
 
 Similar to the standard [Array.shift()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift), the `listShift()` method shifts one single item off the beginning of a list, and returns it.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the shifted item, if successful.  Example:
 
-```javascript
+```js
 storage.listShift( 'list1', function(err, item) {
 	if (err) throw err;
 } );
@@ -565,13 +570,13 @@ If the list is empty, an error is not generated, but the item will be `null`.
 
 ## listGet
 
-```javascript
+```js
 storage.listGet( KEY, INDEX, LENGTH, CALLBACK );
 ```
 
 The `listGet()` method fetches one or more items from a list, given the key, the starting index number (zero-based), the number of items to fetch (defaults to the entire list), and a callback.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be an array of the fetched items, if successful.  Example:
 
-```javascript
+```js
 storage.listGet( 'list1', 40, 5, function(err, items) {
 	if (err) throw err;
 } );
@@ -585,7 +590,7 @@ Your callback function is also passed the list info object as a 3rd argument, in
 
 ## listSplice
 
-```javascript
+```js
 storage.listSplice( KEY, INDEX, LENGTH, NEW_ITEMS, CALLBACK );
 ```
 
@@ -593,7 +598,7 @@ Similar to the standard [Array.splice()](https://developer.mozilla.org/en-US/doc
 
 Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be an array of the removed items, if successful.  Example:
 
-```javascript
+```js
 storage.listSplice( 'list1', 40, 5, [], function(err, items) {
 	if (err) throw err;
 } );
@@ -603,7 +608,7 @@ This example would remove 5 items starting at item index 40, and replace with no
 
 ## listFind
 
-```javascript
+```js
 storage.listFind( KEY, CRITERIA, CALLBACK );
 ```
 
@@ -611,7 +616,7 @@ The `listFind()` method will search a list for a particular item, based on a cri
 
 Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself, and the 3rd argument will be the item's index number (zero-based).  Example:
 
-```javascript
+```js
 storage.listFind( 'list1', { username: 'jhuckaby' }, function(err, item, idx) {
 	if (err) throw err;
 } );
@@ -621,13 +626,13 @@ If an item is not found, no error is generated.  However, the `item` will be nul
 
 ## listFindCut
 
-```javascript
+```js
 storage.listFindCut( KEY, CRITERIA, CALLBACK );
 ```
 
 The `listFindCut()` method will search a list for a particular item based on a criteria object, and if found, it'll delete it (remove it from the list using [listSplice()](#listsplice)).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself.  Example:
 
-```javascript
+```js
 storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
 	if (err) throw err;
 } );
@@ -635,15 +640,15 @@ storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
 
 ## listFindReplace
 
-```javascript
+```js
 storage.listFindReplace( KEY, CRITERIA, NEW_ITEM, CALLBACK );
 ```
 
 The `listFindReplace()` method will search a list for a particular item based on a criteria object, and if found, it'll replace it with the specified item.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var new_item = { username: 'huckabyj', foo: 'bar' };
+```js
+let criteria = { username: 'jhuckaby' };
+let new_item = { username: 'huckabyj', foo: 'bar' };
 
 storage.listFindReplace( 'list1', criteria, new_item, function(err) {
 	if (err) throw err;
@@ -652,15 +657,15 @@ storage.listFindReplace( 'list1', criteria, new_item, function(err) {
 
 ## listFindUpdate
 
-```javascript
+```js
 storage.listFindUpdate( KEY, CRITERIA, UPDATES, CALLBACK );
 ```
 
 The `listFindUpdate()` method will search a list for a particular item based on a criteria object, and if found, it'll "update" it with the keys/values specified.  Meaning, they are merged in with the existing item, adding new keys or replacing existing ones.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  If an item was found matching your criteria, the second argument will be the item itself, with all the updates applied.  Example:
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { gender: 'male', age: 38 };
+```js
+let criteria = { username: 'jhuckaby' };
+let updates = { gender: 'male', age: 38 };
 
 storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 	if (err) throw err;
@@ -669,9 +674,9 @@ storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 
 You can also increment or decrement numerical properties with this function.  If an item key exists and is a number, you can set any update key to a string prefixed with `+` (increment) or `-` (decrement), followed by the delta number (int or float), e.g. `+1`.  So for example, imagine a list of users, and an item property such as `number_of_logins`.  When a user logs in again, you could increment this counter like this:
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { number_of_logins: "+1" };
+```js
+let criteria = { username: 'jhuckaby' };
+let updates = { number_of_logins: "+1" };
 
 storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 	if (err) throw err;
@@ -680,7 +685,7 @@ storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 
 ## listFindEach
 
-```javascript
+```js
 storage.listFindEach( KEY, CRITERIA, ITERATOR, CALLBACK );
 ```
 
@@ -690,7 +695,7 @@ Your `ITERATOR` function is passed the item, the item index number, and a specia
 
 Your `CALLBACK` function is called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.listFindEach( 'list1', { username: 'jhuckaby' }, function(item, idx, callback) {
 	// do something with item, then fire callback
 	callback();
@@ -703,20 +708,20 @@ function(err) {
 
 ## listInsertSorted
 
-```javascript
+```js
 storage.listInsertSorted( KEY, ITEM, COMPARATOR, CALLBACK );
 ```
 
 The `listInsertSorted()` method inserts an item into a list, while keeping it sorted.  It doesn't resort the entire list every time, but rather it locates the correct position to insert the one item, based on sorting criteria, then performs a splice to insert it into place.  Example:
 
-```javascript
-var new_user = {
+```js
+let new_user = {
 	username: 'jhuckaby', 
 	age: 38, 
 	gender: 'male' 
 };
 
-var comparator = function(a, b) {
+let comparator = function(a, b) {
 	return( (a.username < b.username) ? -1 : 1 );
 };
 
@@ -728,7 +733,7 @@ storage.listInsertSorted( 'users', new_user, comparator, function(err) {
 
 If your sorting criteria is simple, i.e. a single top level property sorted ascending or descending, you can specify an array containing the key to sort by, and a direction (`1` for ascending, `-1` for descending), instead of a comparator function.  Example:
 
-```javascript
+```js
 storage.listInsertSorted( 'users', new_user, ['username', 1], function(err) {
 	if (err) throw err;
 } );
@@ -736,13 +741,13 @@ storage.listInsertSorted( 'users', new_user, ['username', 1], function(err) {
 
 ## listCopy
 
-```javascript
+```js
 storage.listCopy( OLD_KEY, NEW_KEY, CALLBACK );
 ```
 
 The `listCopy()` method copies a list and all its items to a new key.  Specify the existing list key, a new key, and a callback.  If anything exists at the destination key, it is clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listCopy( 'list1', 'list2', function(err) {
 	if (err) throw err;
 } );
@@ -752,13 +757,13 @@ If a list already exists at the destination key, you should delete it first.  It
 
 ## listRename
 
-```javascript
+```js
 storage.listRename( OLD_KEY, NEW_KEY, CALLBACK );
 ```
 
 The `listRename()` method renames (moves) a list and all its items to a new key.  Specify the existing list key, a new key, and a callback.  If anything exists at the destination key, it is clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listRename( 'list1', 'list2', function(err) {
 	if (err) throw err;
 } );
@@ -768,7 +773,7 @@ If a list already exists at the destination key, you should delete it first.  It
 
 ## listEach
 
-```javascript
+```js
 storage.listEach( KEY, ITERATOR, CALLBACK );
 ```
 
@@ -778,7 +783,7 @@ Your iterator function is passed the item, the item index number, and a special 
 
 Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.listEach( 'list1', function(item, idx, callback) {
 	// do something with item, then fire callback
 	callback();
@@ -791,7 +796,7 @@ function(err) {
 
 ## listEachPage
 
-```javascript
+```js
 storage.listEachPage( KEY, ITERATOR, CALLBACK );
 ```
 
@@ -801,7 +806,7 @@ Your iterator function is passed each page's items as an array, and a special ca
 
 Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.listEachPage( 'list1', function(items, callback) {
 	// do something with items, then fire callback
 	callback();
@@ -814,7 +819,7 @@ function(err) {
 
 ## listEachUpdate
 
-```javascript
+```js
 storage.listEachUpdate( KEY, ITERATOR, CALLBACK );
 ```
 
@@ -824,7 +829,7 @@ Your iterator function is passed the item, the item index number, and a special 
 
 Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.listEachUpdate( 'list1', function(item, idx, callback) {
 	// do something with item, then fire callback
 	item.something = "something new!";
@@ -838,7 +843,7 @@ function(err) {
 
 ## listEachPageUpdate
 
-```javascript
+```js
 storage.listEachPageUpdate( KEY, ITERATOR, CALLBACK );
 ```
 
@@ -848,7 +853,7 @@ Your iterator function is passed each page's items as an array, and a special ca
 
 Your `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.listEachPageUpdate( 'list1', function(items, callback) {
 	// do something with items, then fire callback
 	items.forEach( function(item) {
@@ -864,13 +869,13 @@ function(err) {
 
 ## listGetInfo
 
-```javascript
+```js
 storage.listGetInfo( KEY, CALLBACK );
 ```
 
 The `listGetInfo()` method retrieves information about the list, without loading any items.  Specifically, it fetches the list length, first and last page numbers, page size, and any custom keys you passed to the `OPTIONS` object when first creating the list.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the list info object, if successful.  Example:
 
-```javascript
+```js
 storage.listGetInfo( 'list1', function(err, list) {
 	if (err) throw err;
 } );
@@ -888,13 +893,13 @@ Here are the keys you can expect to see in the info object:
 
 ## listDelete
 
-```javascript
+```js
 storage.listDelete( KEY, ENTIRE, CALLBACK );
 ```
 
 The `listDelete()` method deletes a list.  If you pass `true` for the second argument, the *entire* list will be deleted, including the header (options, page size, etc.).  Otherwise the list will simply be "cleared" (all items deleted).  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.listDelete( 'list1', true, function(err) {
 	if (err) throw err;
 } );
@@ -904,13 +909,13 @@ storage.listDelete( 'list1', true, function(err) {
 
 ## hashCreate
 
-```javascript
+```js
 storage.hashCreate( PATH, OPTIONS, CALLBACK );
 ```
 
 The `hashCreate()` method creates a new, empty hash.  Specify the desired path, options (see below) and a callback function.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.hashCreate( 'hash1', {}, function(err) {
 	if (err) throw err;
 } );
@@ -918,7 +923,7 @@ storage.hashCreate( 'hash1', {}, function(err) {
 
 Unless otherwise specified, the hash will be created with the default [page size](../README.md#hash_page_size) (number of items per page).  However, you can override this in the options object by passing a `page_size` property:
 
-```javascript
+```js
 storage.hashCreate( 'hash1', { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -926,13 +931,13 @@ storage.hashCreate( 'hash1', { page_size: 100 }, function(err) {
 
 ## hashPut
 
-```javascript
+```js
 storage.hashPut( PATH, KEY, VALUE, [OPTIONS], CALLBACK );
 ```
 
 The `hashPut()` method stores a single key/value pair in a hash.  The `PATH` specifies the main storage path of the hash, and the hash key itself is identified by `KEY`, which should be a string.  The `VALUE` must be an object, serializable by JSON.
 
-```javascript
+```js
 storage.hashPut( 'users', 'bsanders', { name: 'Bernie', age: 75 }, function(err) {
 	if (err) throw err;
 } );
@@ -940,7 +945,7 @@ storage.hashPut( 'users', 'bsanders', { name: 'Bernie', age: 75 }, function(err)
 
 If the hash doesn't exist, `hashPut()` will create it.  If you specify an `OPTIONS` object, this will be used in the creation of the hash, i.e. to specify the [page size](../README.md#hash_page_size), and add any custom params you want.
 
-```javascript
+```js
 storage.hashPut( 'users', 'bsanders', { name: 'Bernie', age: 75 }, { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -948,14 +953,14 @@ storage.hashPut( 'users', 'bsanders', { name: 'Bernie', age: 75 }, { page_size: 
 
 ## hashPutMulti
 
-```javascript
+```js
 storage.hashPutMulti( PATH, RECORDS, [OPTIONS], CALLBACK );
 ```
 
 The `hashPutMulti()` method stores multiple key/value pairs in a hash.  The `PATH` specifies the main storage path of the hash, and `RECORDS` should be an object containing all the keys and values you want to store.
 
 ```js
-var records = {
+let records = {
 	"bsanders": { name: "Bernie", age: 75 },
 	"hclinton": { name: "Hillary", age: 68 },
 	"dtrump": { name: "Donald", age: 70 }
@@ -970,13 +975,13 @@ If the hash doesn't exist, `hashPutMulti()` will create it.  If you specify an `
 
 ## hashGet
 
-```javascript
+```js
 storage.hashGet( PATH, KEY, CALLBACK );
 ```
 
 The `hashGet()` method fetches a single value from a hash.  The `PATH` specifies the main storage path of the hash, and the hash key itself is identified by `KEY`, which should be a string.  Your callback will be passed an error object (falsey on success), and the desired hash value.
 
-```javascript
+```js
 storage.hashGet( 'users', 'bsanders', function(err, value) {
 	if (err) throw err;
 } );
@@ -984,13 +989,13 @@ storage.hashGet( 'users', 'bsanders', function(err, value) {
 
 ## hashGetMulti
 
-```javascript
+```js
 storage.hashGetMulti( PATH, KEYS, CALLBACK );
 ```
 
 The `hashGetMulti()` method fetches multiple hash values at once, from a specified `PATH` and array of hash `KEYS`.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than fetching the values in sequence.  Your callback function is passed an array of values which correspond to the specified keys.  Example:
 
-```javascript
+```js
 storage.hashGetMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err, values) {
 	if (err) throw err;
 	// values[0] will be the bsanders record.
@@ -1001,13 +1006,13 @@ storage.hashGetMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err,
 
 ## hashUpdate
 
-```javascript
+```js
 storage.hashUpdate( PATH, KEY, UPDATES, CALLBACK );
 ```
 
 The `hashUpdate()` method updates an existing key/value pair in a hash.  The `PATH` specifies the main storage path of the hash, and the hash key itself is identified by `KEY`, which should be a string.  The `UPDATES` must be an object, but it can contain sparse keys.  Furthermore, it can contain dot or slash delimited paths, to update inner nested keys.  The updates are essentially applied atop the exiting record, merging and replacing (overwriting) where appropriate.  Example:
 
-```javascript
+```js
 storage.hashUpdate( 'users', 'bsanders', { age: 81 }, function(err) {
 	if (err) throw err;
 } );
@@ -1017,14 +1022,14 @@ This would update Bernie's age to 81 without affecting any of the other properti
 
 ## hashUpdateMulti
 
-```javascript
+```js
 storage.hashUpdateMulti( PATH, RECORDS, CALLBACK );
 ```
 
 The `hashUpdateMulti()` method updates multiple key/value pairs in a hash.  The `PATH` specifies the main storage path of the hash, and `RECORDS` should be an object containing all the keys and values you want to update.  See [hashUpdate()](#hashupdate) for details on the update format.
 
 ```js
-var updates = {
+let updates = {
 	"bsanders": { age: 81 },
 	"hclinton": { age: 75 },
 	"dtrump": { age: 77 }
@@ -1039,7 +1044,7 @@ This would update the `age` properties in each record, without affecting the oth
 
 ## hashEach
 
-```javascript
+```js
 storage.hashEach( PATH, ITERATOR, CALLBACK );
 ```
 
@@ -1049,7 +1054,7 @@ Your iterator function is passed the key and value of the current item, and a ca
 
 The `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.hashEach( 'users', function(key, value, callback) {
 	// do something with key/value
 	callback();
@@ -1062,7 +1067,7 @@ function(err) {
 
 ## hashEachSync
 
-```javascript
+```js
 storage.hashEachSync( PATH, ITERATOR, CALLBACK );
 ```
 
@@ -1072,7 +1077,7 @@ Your iterator function is passed the key and value of the current item.  If you 
 
 The `CALLBACK` function is finally called when the loop is complete and all items were iterated over, or an error occurred somewhere in the middle.  It is passed an error object, or something falsey for success.  Example:
 
-```javascript
+```js
 storage.hashEach( 'users', function(key, value) {
 	// do something with key/value
 	// no callback here
@@ -1085,7 +1090,7 @@ function(err) {
 
 ## hashEachPage
 
-```javascript
+```js
 storage.hashEachPage( PATH, ITERATOR, CALLBACK );
 ```
 
@@ -1093,11 +1098,11 @@ The `hashEachPage()` method iterates over a hash one *page* at a time, invoking 
 
 Your iterator is passed exactly two arguments.  An object containing all the keys and values in the current page (this may contain up to [page size](../README.md#hash_page_size) items), and a callback function that you must fire to continue the loop.  Pass an error into the callback to abort the loop anywhere in the middle.  The final `CALLBACK` is fired when all keys are iterated over, or an error occurs.
 
-```javascript
+```js
 storage.hashEachPage( 'users', function(items, callback) {
 	// do something with page of items
-	for (var key in items) {
-		var value = items[key];
+	for (let key in items) {
+		let value = items[key];
 		// do something with key/value pair
 	}
 	
@@ -1112,19 +1117,19 @@ function(err) {
 
 ## hashGetAll
 
-```javascript
+```js
 storage.hashGetAll( PATH, CALLBACK );
 ```
 
 The `hashGetAll()` method loads a hash entirely into memory as fast as possible, and fires your callback with a single in-memory object containing *all* the key/value pairs.  Please use this with caution on large hashes, and keep track of your process memory usage.  The `CALLBACK` is fired with two arguments: an error if one occurred (falsey if not), and a hash object containing all your keys and values.
 
-```javascript
+```js
 storage.hashGetAll( 'users', function(err, items) {
 	if (err) throw err;
 	
 	// do something with all items
-	for (var key in items) {
-		var value = items[key];
+	for (let key in items) {
+		let value = items[key];
 		// do something with key/value pair
 	}
 } );
@@ -1132,13 +1137,13 @@ storage.hashGetAll( 'users', function(err, items) {
 
 ## hashCopy
 
-```javascript
+```js
 storage.hashCopy( OLD_PATH, NEW_PATH, CALLBACK );
 ```
 
 The `hashCopy()` method copies a hash and all of its items to a new path.  Specify the existing hash path, a new path, and a callback.  If anything exists at the destination path, it will be clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.hashCopy( 'hash1', 'hash2', function(err) {
 	if (err) throw err;
 } );
@@ -1148,13 +1153,13 @@ If a hash already exists at the destination path, you should delete it first.  I
 
 ## hashRename
 
-```javascript
+```js
 storage.hashRename( OLD_PATH, NEW_PATH, CALLBACK );
 ```
 
 The `hashRename()` method renames (moves) a hash and all of its items to a new path.  Specify the existing hash path, a new path, and a callback.  If anything exists at the destination path, it will be clobbered.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.hashRename( 'hash1', 'hash2', function(err) {
 	if (err) throw err;
 } );
@@ -1164,13 +1169,13 @@ If a hash already exists at the destination path, you should delete it first.  I
 
 ## hashDelete
 
-```javascript
+```js
 storage.hashDelete( PATH, KEY, [ENTIRE], CALLBACK );
 ```
 
 The `hashDelete()` method deletes a single key/value pair from the specified hash.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.hashDelete( 'users', 'dtrump', function(err) {
 	if (err) throw err;
 } );
@@ -1178,7 +1183,7 @@ storage.hashDelete( 'users', 'dtrump', function(err) {
 
 By default, if `hashDelete()` removes the last key from a hash, it leaves an "empty" hash in storage (i.e. one with a header, page size, options, etc.).  However, if you would prefer, you can trigger a full delete if the hash becomes empty after the key is removed.  To do this, pass `true` as the 3rd argument, just before your callback.  Example:
 
-```javascript
+```js
 storage.hashDelete( 'users', 'dtrump', true, function(err) {
 	if (err) throw err;
 } );
@@ -1186,13 +1191,13 @@ storage.hashDelete( 'users', 'dtrump', true, function(err) {
 
 ## hashDeleteMulti
 
-```javascript
+```js
 storage.hashDeleteMulti( PATH, KEYS, CALLBACK );
 ```
 
 The `hashDeleteMulti()` method deletes multiple hash records at once, from a specified array of keys.  Depending on your storage [concurrency](../README.md#concurrency) configuration, this may be significantly faster than deleting the records in sequence.  Example:
 
-```javascript
+```js
 storage.hashDeleteMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err) {
 	if (err) throw err;
 } );
@@ -1200,13 +1205,13 @@ storage.hashDeleteMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(e
 
 ## hashDeleteAll
 
-```javascript
+```js
 storage.hashDeleteAll( PATH, [ENTIRE], CALLBACK );
 ```
 
 The `hashDeleteAll()` method deletes a hash and all its contents.  If you pass `true` for the second argument, the *entire* hash will be deleted, including the header (options, page size, etc.).  Otherwise the hash will simply be "cleared" (all items deleted) but the hash header will remain.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  Example:
 
-```javascript
+```js
 storage.hashDeleteAll( 'users', true, function(err) {
 	if (err) throw err;
 } );
@@ -1214,13 +1219,13 @@ storage.hashDeleteAll( 'users', true, function(err) {
 
 ## hashGetInfo
 
-```javascript
+```js
 storage.hashGetInfo( PATH, CALLBACK );
 ```
 
 The `hashGetInfo()` method retrieves information about the hash, without loading any items.  Specifically, it fetches the hash length, page size, and any custom properties you passed to the `OPTIONS` object when first creating the list.  Your callback function is passed an error if one occurred, otherwise it'll be falsey.  The second argument will be the hash info object, if successful.  Example:
 
-```javascript
+```js
 storage.hashGetInfo( 'users', function(err, info) {
 	if (err) throw err;
 	console.log( "The hash has " + info.length + " keys." );

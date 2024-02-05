@@ -6,8 +6,8 @@ All list operations will automatically lock the list using [Advisory Locking](..
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Table of Contents
@@ -40,7 +40,7 @@ Care should be taken when calculating your list page sizes.  It all depends on h
 
 To create a list, call [listCreate()](API.md#listcreate).  Specify the desired key, options, and a callback function.  You can optionally pass in a custom page size via the second argument (otherwise it'll use the default size):
 
-```javascript
+```js
 storage.listCreate( 'list1', { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -54,7 +54,7 @@ Lists can be treated as arrays to a certain extent.  Methods are provided to [pu
 
 Examples:
 
-```javascript
+```js
 // push onto the end
 storage.listPush( 'list1', { username: 'tsmith', age: 25 }, function(err) {
 	if (err) throw err;
@@ -82,7 +82,7 @@ Furthermore, the [listPush()](API.md#listpush) and [listUnshift()](API.md#listun
 
 Items can be fetched from lists by calling [listGet()](API.md#listget), and specifying an index offset starting from zero.  You can fetch any number of items at a time, and the storage engine will figure out which pages need to be loaded.  To fetch items from the end of a list, use a negative index.  Example use:
 
-```javascript
+```js
 storage.listGet( 'list1', 40, 5, function(err, items) {
 	if (err) throw err;
 } );
@@ -90,7 +90,7 @@ storage.listGet( 'list1', 40, 5, function(err, items) {
 
 This would fetch 5 items starting at item index 40 (zero-based).  To fetch the entire list, set the index and length to zero:
 
-```javascript
+```js
 storage.listGet( 'list1', 0, 0, function(err, items) {
 	if (err) throw err;
 } );
@@ -102,8 +102,8 @@ You can "splice" a list just like you would an array.  That is, cut a chunk out 
 
 Here is an example which removes 2 items at index 40, and replaces with 2 new items:
 
-```javascript
-var new_items = [
+```js
+let new_items = [
 	{ username: 'jhuckaby', age: 38, gender: 'male' },
 	{ username: 'sfields', age: 34, gender: 'female' }
 ];
@@ -121,8 +121,8 @@ As with [listGet()](API.md#listget) you can specify a negative index number to t
 
 While it is possible to manually sort your list by fetching all the items as an array, sorting it in memory, then rewriting the entire list, this can be quite time consuming.  Instead, you can perform a [listInsertSorted()](API.md#listinsertsorted) when adding items to a list.  This will find the correct location for a single item based on sorting criteria, and then splice it into place, keeping the list sorted as you go.  Example:
 
-```javascript
-var new_user = {
+```js
+let new_user = {
 	username: 'jhuckaby', 
 	age: 38, 
 	gender: 'male' 
@@ -136,14 +136,14 @@ storage.listInsertSorted( 'users', new_user, ['username', 1], function(err) {
 
 That third argument is an array of sort criteria, consisting of the property name to sort by (e.g. `username`) and a sort direction (`1` for ascending, `-1` for descending).  You can alternately specify a comparator function here, which is called with the item you are inserting, and the item to compare it to.  This is similar to the built-in [Array.sort()](), which should return `1` or `-1` depending on if your item should come after, or before, the second item.  Example:
 
-```javascript
-var new_user = {
+```js
+let new_user = {
 	username: 'jhuckaby', 
 	age: 38, 
 	gender: 'male' 
 };
 
-var comparator = function(a, b) {
+let comparator = function(a, b) {
 	return( (a.username < b.username) ? -1 : 1 );
 };
 
@@ -159,7 +159,7 @@ For large lists, this can still take considerable time, as it is iterating over 
 
 Need to iterate over the items in your list, but don't want to load the entire thing into memory?  Use the [listEach()](API.md#listeach) method.  Example:
 
-```javascript
+```js
 storage.listEach( 'list1', function(item, idx, callback) {
 	// do something with item, then fire callback
 	callback();
@@ -174,7 +174,7 @@ Your iterator function is passed the item and a special callback function, which
 
 Alternatively, you can use [listEachPage()](API.md#listeachpage), which iterates over the internal list [pages](#list-page-size), and only fires your iterator function once per page, instead of once per item.  This is typically faster as it requires fewer function calls.  Example:
 
-```javascript
+```js
 storage.listEachPage( 'list1', function(items, callback) {
 	// do something with items, then fire callback
 	callback();
@@ -189,7 +189,7 @@ function(err) {
 
 To iterate over and possibly update items, you can use the [listEachUpdate()](API.md#listeachupdate) method.  Your iterator callback accepts a second boolean argument which can indicate that you made changes.  Example:
 
-```javascript
+```js
 storage.listEachUpdate( 'list1', function(item, idx, callback) {
 	// do something with item, then fire callback
 	item.something = "something new!";
@@ -205,7 +205,7 @@ As you can see, the iterator callback accepts two arguments, an error (or someth
 
 For a speed optimization, you can optionally iterate over entire list [pages](#list-page-size) rather than individual items.  To do this, use the [listEachPageUpdate()](API.md#listeachpageupdate) method.  In this case your iterator callback is passed an array of items on each page.  Example:
 
-```javascript
+```js
 storage.listEachPageUpdate( 'list1', function(items, callback) {
 	// do something with items, then fire callback
 	items.forEach( function(item) {
@@ -225,7 +225,7 @@ Several methods are provided for searching through lists for items matching a se
 
 All of these methods accept a "criteria" object, which may have one or more key/value pairs.  These must *all* match a list item for it to be selected.  For example, if you have a list of users, and you want to find a male with blue eyes, you would pass a criteria object similar to this:
 
-```javascript
+```js
 {
 	gender: "male",
 	eyes: "blue"
@@ -234,7 +234,7 @@ All of these methods accept a "criteria" object, which may have one or more key/
 
 Alternatively, you can use regular expression objects for the criteria values, for more complex matching.  Example:
 
-```javascript
+```js
 {
 	gender: /^MALE$/i,
 	eyes: /blu/
@@ -243,7 +243,7 @@ Alternatively, you can use regular expression objects for the criteria values, f
 
 Example of finding a single object with [listFind()](API.md#listfind):
 
-```javascript
+```js
 storage.listFind( 'list1', { username: 'jhuckaby' }, function(err, item, idx) {
 	if (err) throw err;
 } );
@@ -251,7 +251,7 @@ storage.listFind( 'list1', { username: 'jhuckaby' }, function(err, item, idx) {
 
 Example of finding and deleting a single object with [listFindCut()](API.md#listfindcut):
 
-```javascript
+```js
 storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
 	if (err) throw err;
 } );
@@ -259,9 +259,9 @@ storage.listFindCut( 'list1', { username: 'jhuckaby' }, function(err, item) {
 
 Example of finding and replacing a single object with [listFindReplace()](API.md#listfindreplace):
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var new_item = { username: 'huckabyj', foo: 'bar' };
+```js
+let criteria = { username: 'jhuckaby' };
+let new_item = { username: 'huckabyj', foo: 'bar' };
 
 storage.listFindReplace( 'list1', criteria, new_item, function(err) {
 	if (err) throw err;
@@ -270,9 +270,9 @@ storage.listFindReplace( 'list1', criteria, new_item, function(err) {
 
 Example of finding and updating a single object with [listFindUpdate()](API.md#listfindupdate):
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { gender: 'male', age: 38 };
+```js
+let criteria = { username: 'jhuckaby' };
+let updates = { gender: 'male', age: 38 };
 
 storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 	if (err) throw err;
@@ -281,9 +281,9 @@ storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 
 You can also increment or decrement numerical properties with [listFindUpdate()](API.md#listfindupdate).  If an item key exists and is a number, you can set any update key to a string prefixed with `+` (increment) or `-` (decrement), followed by the delta number (int or float), e.g. `+1`.  So for example, imagine a list of users, and an item property such as `number_of_logins`.  When a user logs in again, you could increment this counter like this:
 
-```javascript
-var criteria = { username: 'jhuckaby' };
-var updates = { number_of_logins: "+1" };
+```js
+let criteria = { username: 'jhuckaby' };
+let updates = { number_of_logins: "+1" };
 
 storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 	if (err) throw err;
@@ -292,7 +292,7 @@ storage.listFindUpdate( 'list1', criteria, updates, function(err, item) {
 
 And finally, here is an example of finding *all* items that match our criteria using [listFindEach()](API.md#listfindeach), and iterating over them:
 
-```javascript
+```js
 storage.listFindEach( 'list1', { gender: 'male' }, function(item, idx, callback) {
 	// do something with item, then fire callback
 	callback();
@@ -307,7 +307,7 @@ function(err) {
 
 To duplicate a list and all of its items, call [listCopy()](API.md#listcopy), specifying the old and new key.  Example:
 
-```javascript
+```js
 storage.listCopy( 'list1', 'list2', function(err) {
 	if (err) throw err;
 } );
@@ -315,7 +315,7 @@ storage.listCopy( 'list1', 'list2', function(err) {
 
 To rename a list, call [listRename()](API.md#listrename).  This is basically just a [listCopy()](API.md#listcopy) followed by a [listDelete()](API.md#listdelete).  Example:
 
-```javascript
+```js
 storage.listRename( 'list1', 'list2', function(err) {
 	if (err) throw err;
 } );
@@ -327,7 +327,7 @@ With both of these functions, it is highly recommended you make sure the destina
 
 To delete a list and all of its items, call [listDelete()](API.md#listdelete).  The second argument should be a boolean set to `true` if you want the list *entirely* deleted including the header (options, page size, etc.), or `false` if you only want the list *cleared* (delete the items only, leaving an empty list behind).  Example:
 
-```javascript
+```js
 storage.listDelete( 'list1', true, function(err) {
 	if (err) throw err;
 	// list is entirely deleted
@@ -338,7 +338,7 @@ storage.listDelete( 'list1', true, function(err) {
 
 Lists consist of a header record, plus additional records for each page.  The header is literally just a simple JSON record, stored at the exact key specified for the list.  So if you created an empty list with key `mylist`, and then you fetched the `mylist` record using a simple [get()](API.md#get), you'd see this:
 
-```javascript
+```js
 {
 	type: 'list',
 	length: 0,
@@ -360,7 +360,7 @@ This is the list header record, which defines the list and its pages.  Here are 
 
 The list pages are stored as records "under" the main key, by adding a slash, followed by the page number.  So if you pushed one item onto the list, the updated header record would look like this:
 
-```javascript
+```js
 {
 	type: 'list',
 	length: 1,
@@ -374,7 +374,7 @@ Notice that the `first_page` and `last_page` are both still set to `0`, even tho
 
 So then if you then fetched the key `mylist/0` you'd actually get the raw page data, which is a JSON record with an `items` array:
 
-```javascript
+```js
 {
 	items: [
 		{ username: "jhuckaby", gender: "male" }

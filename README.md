@@ -1,6 +1,6 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.npmjs.com/package/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), [Redis](https://redis.io/), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
+This module is a component for use in [pixl-server](https://www.github.com/jhuckaby/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), [Redis](https://redis.io/), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
 
 ## Features at a Glance
 
@@ -86,27 +86,27 @@ Here is the table of contents for this current document:
 
 Use [npm](https://www.npmjs.com/) to install the module:
 
-```
+```sh
 npm install pixl-server pixl-server-storage
 ```
 
 Here is a simple usage example.  Note that the component's official name is `Storage`, so that is what you should use for the configuration key, and for gaining access to the component via your server object.
 
-```javascript
-var PixlServer = require('pixl-server');
-var server = new PixlServer({
+```js
+const PixlServer = require('pixl-server');
+let server = new PixlServer({
 	
 	__name: 'MyServer',
 	__version: "1.0",
 	
 	config: {
-		"log_dir": "/var/log",
+		"log_dir": "/let/log",
 		"debug_level": 9,
 		
 		"Storage": {
 			"engine": "Filesystem",
 			"Filesystem": {
-				"base_dir": "/var/data/myserver",
+				"base_dir": "/let/data/myserver",
 			}
 		}
 	},
@@ -119,7 +119,7 @@ var server = new PixlServer({
 
 server.startup( function() {
 	// server startup complete
-	var storage = server.Storage;
+	let storage = server.Storage;
 	
 	// store key
 	storage.put( 'test-key', { foo:"hello", bar:42 }, function(err) {
@@ -134,31 +134,31 @@ server.startup( function() {
 } );
 ```
 
-Notice how we are loading the [pixl-server](https://www.npmjs.com/package/pixl-server) parent module, and then specifying [pixl-server-storage](https://www.npmjs.com/package/pixl-server-storage) as a component:
+Notice how we are loading the [pixl-server](https://www.github.com/jhuckaby/pixl-server) parent module, and then specifying [pixl-server-storage](https://www.github.com/jhuckaby/pixl-server-storage) as a component:
 
-```javascript
+```js
 components: [
 	require('pixl-server-storage')
 ]
 ```
 
-This example is a very simple server configuration, which will start a local filesystem storage instance pointed at `/var/data/myserver` as a base directory.  It then simply stores a test key, then fetches it back.
+This example is a very simple server configuration, which will start a local filesystem storage instance pointed at `/let/data/myserver` as a base directory.  It then simply stores a test key, then fetches it back.
 
 ## Standalone Mode
 
-If you want to access the storage component as a standalone class (i.e. not part of a [pixl-server](https://www.npmjs.com/package/pixl-server) server daemon), you can require the `pixl-server-storage/standalone` path and invoke it directly.  This can be useful for things like simple CLI scripts.  Example usage:
+If you want to access the storage component as a standalone class (i.e. not part of a [pixl-server](https://www.github.com/jhuckaby/pixl-server) server daemon), you can require the `pixl-server-storage/standalone` path and invoke it directly.  This can be useful for things like simple CLI scripts.  Example usage:
 
-```javascript
-var StandaloneStorage = require('pixl-server-storage/standalone');
+```js
+const StandaloneStorage = require('pixl-server-storage/standalone');
 
-var config = {
+const config = {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver"
+		"base_dir": "/let/data/myserver"
 	}
 };
 
-var storage = new StandaloneStorage(config, function(err) {
+let storage = new StandaloneStorage(config, function(err) {
 	if (err) throw err;
 	// storage system has started up and is ready to go
 	
@@ -179,7 +179,7 @@ var storage = new StandaloneStorage(config, function(err) {
 });
 ```
 
-Please note that standalone mode does not perform standard [pixl-server](https://www.npmjs.com/package/pixl-server) timer operations like emit `tick` and `minute` events, so things like performance metrics collection and [Daily Maintenance](#daily-maintenance) do not run.  It also doesn't register standard [SIGINT / SIGTERM](https://nodejs.org/api/process.html#process_signal_events) signal listeners for handing shutdown, so these must be handled by your code.
+Please note that standalone mode does not perform standard [pixl-server](https://www.github.com/jhuckaby/pixl-server) timer operations like emit `tick` and `minute` events, so things like performance metrics collection and [Daily Maintenance](#daily-maintenance) do not run.  It also doesn't register standard [SIGINT / SIGTERM](https://nodejs.org/api/process.html#process_signal_events) signal listeners for handing shutdown, so these must be handled by your code.
 
 # Configuration
 
@@ -189,11 +189,11 @@ The configuration for this component is set by passing in a `Storage` key in the
 
 The `engine` property is used to declare the name of the back-end storage engine to use.  Specifically, this is for using one of the built-in engine modules located in the `pixl-server-storage/engines/` directory.  See [Engines](#engines) below for details.  Example:
 
-```javascript
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver"
+		"base_dir": "/let/data/myserver"
 	}
 }
 ```
@@ -204,7 +204,7 @@ Note that the engine's own configuration should always go into a property named 
 
 The `engine_path` property can be used to load your own custom engine in any location.  The path should be either absolute, or relative to the location of the `pixl-server-storage/` directory.  Example:
 
-```javascript
+```json
 {
 	"engine": "MyCustomEngine",
 	"engine_path": "../../my_custom_storage_engine.js",
@@ -218,11 +218,11 @@ All engines must have a name, so you always need to declare a `engine` property 
 
 ## list_page_size
 
-The `list_page_size` property specifies the default page size (number of items per page) for new lists.  However, you can override this per each list when creating them.  See [Lists](docs/Lists.md) for details.
+The `list_page_size` property specifies the default page size (number of items per page) for new lists.  However, you can override this per each list when creating them.  See [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md) for details.
 
 ## hash_page_size
 
-The `hash_page_size` property specifies the default page size (number of items per page) for new hashes.  However, you can override this per each hash when creating them.  See [Hashes](docs/Hashes.md) for details.
+The `hash_page_size` property specifies the default page size (number of items per page) for new hashes.  However, you can override this per each hash when creating them.  See [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md) for details.
 
 ## concurrency
 
@@ -232,7 +232,7 @@ The `concurrency` property allows some operations to be parallelized in the stor
 
 The `maintenance` property allows the storage system to run routine maintenance, and is highly recommended for daemons that run 24x7.  This is typically enabled to run nightly, and performs tasks such as deleting expired records.  To enable it, set this to any `HH:MM` string where `HH` is the hour in 24-hour time and `MM` is the minute.  Pad with a zero if either value is under 10.  Example:
 
-```javascript
+```js
 {
 	"maintenance": "04:30" // run daily at 4:30 AM
 }
@@ -246,13 +246,13 @@ The `log_event_types` property allows you to configure exactly which transaction
 
 ## max_recent_events
 
-The `max_recent_events` property allows the storage system to track the latest N events in memory, which are then provided in the call to [getStats()](docs/API.md#getstats).  For details, see the [Performance Metrics](#performance-metrics) section below.
+The `max_recent_events` property allows the storage system to track the latest N events in memory, which are then provided in the call to [getStats()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#getstats).  For details, see the [Performance Metrics](#performance-metrics) section below.
 
 ## expiration_updates
 
 The `expiration_updates` property activates additional features in the [expiration system](#expiring-data).  Namely, setting this property to `true` allows you to update expiration dates of existing records.  Otherwise only a single expiration date may be set once per each record.
 
-Note that this feature incurs additional overhead, because the expiration date of every record needs to be stored in a global [Hash](docs/Hashes.md).  This slows down both the expiration set operation, and the nightly maintenance sweep to delete expired records.  For this reason, the `expiration_dates` property defaults to `false` (disabled).
+Note that this feature incurs additional overhead, because the expiration date of every record needs to be stored in a global [Hash](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md).  This slows down both the expiration set operation, and the nightly maintenance sweep to delete expired records.  For this reason, the `expiration_dates` property defaults to `false` (disabled).
 
 ## lower_case_keys
 
@@ -285,11 +285,11 @@ Partial Filesystem Path:
 
 The partial path is then combined with a base directory, which is configurable.  Here is an example configuration:
 
-```javascript
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver"
+		"base_dir": "/let/data/myserver"
 	}
 }
 ```
@@ -297,7 +297,7 @@ The partial path is then combined with a base directory, which is configurable. 
 So, putting all this together, the `test1` key would be stored on disk at this location:
 
 ```
-/var/data/myserver/5a/10/5e/5a105e8b9d40e1329780d62ea2265d8a.json
+/let/data/myserver/5a/10/5e/5a105e8b9d40e1329780d62ea2265d8a.json
 ```
 
 For binary records, the file extension will match whatever was in the key.
@@ -306,11 +306,11 @@ For binary records, the file extension will match whatever was in the key.
 
 To help segment your application data into categories on the filesystem, an optional `key_namespaces` configuration parameter can be specified, and set to a true value.  This will modify the key hashing algorithm to include a "prefix" directory, extracted from the plain key itself.  Example configuration:
 
-```javascript
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver",
+		"base_dir": "/let/data/myserver",
 		"key_namespaces": true
 	}
 }
@@ -329,10 +329,10 @@ Partial Filesystem Path:
 /users/01/9a/aa/019aaa6887e5ce3533dcc691b05e69e4.json
 ```
 
-So in this case the `users` prefix is extracted from the plain key, and then inserted at the beginning of the hash directories.  Here is the full filesystem path, assuming a base directory of `/var/data/myserver`:
+So in this case the `users` prefix is extracted from the plain key, and then inserted at the beginning of the hash directories.  Here is the full filesystem path, assuming a base directory of `/let/data/myserver`:
 
 ```
-/var/data/myserver/users/01/9a/aa/019aaa6887e5ce3533dcc691b05e69e4.json
+/let/data/myserver/users/01/9a/aa/019aaa6887e5ce3533dcc691b05e69e4.json
 ```
 
 In order to use key namespaces effectively, you need to make sure that *all* your plain keys contain some kind of namespace prefix, followed by a slash.  The idea is, you can then store your app's data in different physical locations using symlinks.  You can also determine how much disk space is taken up by each of your app's data categories, without having to walk all the hash directories.
@@ -341,11 +341,11 @@ In order to use key namespaces effectively, you need to make sure that *all* you
 
 For testing purposes, or for small datasets, you can optionally set the `raw_file_paths` Filesystem configuration parameter to any true value.  This will skip the MD5 hashing of all filesystem paths, and literally write them to the filesystem verbatim, as they come in (well, after [Key Normalization](#key-normalization) of course).  Example configuration:
 
-```javascript
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver",
+		"base_dir": "/let/data/myserver",
 		"raw_file_paths": true
 	}
 }
@@ -354,7 +354,7 @@ For testing purposes, or for small datasets, you can optionally set the `raw_fil
 So with raw file paths enabled our example key (`users/jhuckaby`) would literally end up on the filesystem right here:
 
 ```
-/var/data/myserver/users/jhuckaby.json
+/let/data/myserver/users/jhuckaby.json
 ```
 
 Using this mode you can easily overwhelm a filesystem with too many files in a single directory, depending on how you format your keys.  It is really only meant for testing purposes.
@@ -365,11 +365,11 @@ Note that if `raw_file_paths` is enabled, `key_namespaces` has no effect.
 
 For complete, low-level control over the key hashing and directory layout, you can specify a key "template" via the `key_template` configuration property.  This allows you to specify exactly how the directories are laid out, and whether the full plain key is part of the directory path, or just the MD5 hash.  For example, consider this configuration:
 
-```javascript
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver",
+		"base_dir": "/let/data/myserver",
 		"key_template": "##/##/##/[md5]"
 	}
 }
@@ -389,11 +389,11 @@ You can optionally enable caching for the filesystem, which keeps a copy of the 
 
 To enable the filesystem cache, include a `cache` object in your `Filesystem` configuration with the following properties:
 
-```js
+```json
 {
 	"engine": "Filesystem",
 	"Filesystem": {
-		"base_dir": "/var/data/myserver",
+		"base_dir": "/let/data/myserver",
 		"cache": {
 			"enabled": true,
 			"maxItems": 1000,
@@ -419,7 +419,7 @@ Note that binary records are **not** cached.  This system is for JSON records on
 
 If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, configure your storage thusly:
 
-```javascript
+```json
 {
 	"engine": "S3",
 	"AWS": {
@@ -463,7 +463,7 @@ Note that [binary keys](#storing-binary-blobs) already have file extensions, so 
 
 The S3 engine supports an optional key prefix, in case you are sharing a bucket with other applications, and want to keep all your app related records separate.  To specify this, include a `keyPrefix` property in your `S3` object (this goes alongside the `params`, but not inside of it).  Example:
 
-```js
+```json
 {
 	"S3": {
 		"keyPrefix": "myapp",
@@ -494,11 +494,13 @@ It is *highly* recommended that you enable caching for S3, which keeps a copy of
 
 To enable the S3 cache, include a `cache` object in your `S3` configuration with the following properties:
 
-```js
-"cache": {
-	"enabled": true,
-	"maxItems": 1000,
-	"maxBytes": 10485760
+```json
+{
+	"cache": {
+		"enabled": true,
+		"maxItems": 1000,
+		"maxBytes": 10485760
+	}
 }
 ```
 
@@ -522,13 +524,13 @@ Please note that as of this writing (April 2022), pixl-server-storage only suppo
 
 If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app, and it **must be v2**:
 
-```
+```sh
 npm install --save couchbase@2.6.12
 ```
 
 Then configure your storage thusly:
 
-```javascript
+```json
 {
 	"engine": "Couchbase",
 	"Couchbase": {
@@ -558,13 +560,13 @@ Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to
 
 If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [redis](https://www.npmjs.com/package/redis) module into your app:
 
-```
+```sh
 npm install --save redis
 ```
 
 Then configure your storage thusly:
 
-```javascript
+```json
 {
 	"engine": "Redis",
 	"Redis": {
@@ -585,13 +587,13 @@ The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3
 
 If you want to use a Redis cluster (e.g. [AWS ElastiCache](https://aws.amazon.com/elasticache/)), then here is how to do that.  First, you will need to manually install the following two modules into your app:
 
-```
+```sh
 npm install --save ioredis ioredis-timeout
 ```
 
 Then configure your storage thusly:
 
-```javascript
+```json
 {
 	"engine": "RedisCluster",
 	"RedisCluster": {
@@ -619,13 +621,13 @@ The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3
 
 If you want to use [SQLite](https://sqlite.com/) as a backing store, here is how to do so.  First, you need to manually install the [sqlite3](https://www.npmjs.com/package/sqlite3) module into your app:
 
-```
+```sh
 npm install --save sqlite3
 ```
 
 Then configure your storage thusly:
 
-```javascript
+```json
 {
 	"engine": "SQLite",
 	"SQLite": {
@@ -667,7 +669,7 @@ The `Hybrid` engine only has two properties, `docEngine` and `binaryEngine`.  Th
 		"binaryEngine": "S3"
 	},
 	"Filesystem": {
-		"base_dir": "/var/data/myserver"
+		"base_dir": "/let/data/myserver"
 	},
 	"AWS": {
 		"accessKeyId": "YOUR_AMAZON_ACCESS_KEY", 
@@ -720,15 +722,15 @@ The storage module supports the following basic methods for typical operations. 
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Storing Records
 
-To store a record, call the [put()](docs/API.md#put) method.  Pass in a key, a value, and a callback.  The value may be an Object (which is automatically serialized to JSON), or a `Buffer` for a binary blob (see [Storing Binary Blobs](#storing-binary-blobs) below).  If the record doesn't exist, it is created, otherwise it is replaced.
+To store a record, call the [put()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#put) method.  Pass in a key, a value, and a callback.  The value may be an Object (which is automatically serialized to JSON), or a `Buffer` for a binary blob (see [Storing Binary Blobs](#storing-binary-blobs) below).  If the record doesn't exist, it is created, otherwise it is replaced.
 
-```javascript
+```js
 storage.put( 'test1', { foo: 'bar1' }, function(err) {
 	if (err) throw err;
 } );
@@ -736,9 +738,9 @@ storage.put( 'test1', { foo: 'bar1' }, function(err) {
 
 ## Fetching Records
 
-To fetch a record, call the [get()](docs/API.md#get) method.  Pass in a key, and a callback.  The data returned will be parsed back into an Object if JSON, or a raw `Buffer` object will be returned for binary records.
+To fetch a record, call the [get()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#get) method.  Pass in a key, and a callback.  The data returned will be parsed back into an Object if JSON, or a raw `Buffer` object will be returned for binary records.
 
-```javascript
+```js
 storage.get( 'test1', function(err, data) {
 	if (err) throw err;
 } );
@@ -746,7 +748,7 @@ storage.get( 'test1', function(err, data) {
 
 If you try to fetch a nonexistent record, a special error object will be passed to your callback with its `code` property set to `NoSuchKey`.  This is a special case allowing you to easily differentiate a "record not found" error from another, more severe I/O error.  Example:
 
-```javascript
+```js
 storage.get( 'this_key_does_not_exist', function(err, data) {
 	if (err) {
 		if (err.code == 'NoSuchKey') {
@@ -762,9 +764,9 @@ storage.get( 'this_key_does_not_exist', function(err, data) {
 } );
 ```
 
-Some engines also allow you to "head" (i.e. ping) an object to retrieve some metadata about it, without fetching the value.  To do this, call the [head()](docs/API.md#head) method, and pass in the key.  The metadata usually consists of the size (`len`) and last modification date (`mod`).  Example:
+Some engines also allow you to "head" (i.e. ping) an object to retrieve some metadata about it, without fetching the value.  To do this, call the [head()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#head) method, and pass in the key.  The metadata usually consists of the size (`len`) and last modification date (`mod`).  Example:
 
-```javascript
+```js
 storage.head( 'test1', function(err, data) {
 	if (err) throw err;
 	// data.mod
@@ -776,7 +778,7 @@ Note that the [Couchbase](#couchbase) engine does not support `head`, but the [A
 
 You can fetch multiple records at once by calling `getMulti()` and passing in array of keys.  Example:
 
-```javascript
+```js
 storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 	if (err) throw err;
 	// values[0] will be the test1 record.
@@ -787,9 +789,9 @@ storage.getMulti( ['test1', 'test2', 'test3'], function(err, values) {
 
 ## Copying Records
 
-To make a copy of a record and store it under a new key, call the [copy()](docs/API.md#copy) method.  Pass in the old key, new key, and a callback.
+To make a copy of a record and store it under a new key, call the [copy()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#copy) method.  Pass in the old key, new key, and a callback.
 
-```javascript
+```js
 storage.copy( 'test1', 'test2', function(err) {
 	if (err) throw err;
 } );
@@ -799,9 +801,9 @@ storage.copy( 'test1', 'test2', function(err) {
 
 ## Renaming Records
 
-To rename a record, call the [rename()](docs/API.md#rename) method.  Pass in the old key, new key, and a callback.
+To rename a record, call the [rename()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#rename) method.  Pass in the old key, new key, and a callback.
 
-```javascript
+```js
 storage.rename( 'test1', 'test2', function(err) {
 	if (err) throw err;
 } );
@@ -811,9 +813,9 @@ storage.rename( 'test1', 'test2', function(err) {
 
 ## Deleting Records
 
-To delete a record, call the [delete()](docs/API.md#delete) method.  This is immediate and permanent.  Pass in the key, and a callback.
+To delete a record, call the [delete()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#delete) method.  This is immediate and permanent.  Pass in the key, and a callback.
 
-```javascript
+```js
 storage.delete( 'test1', function(err) {
 	if (err) throw err;
 } );
@@ -823,9 +825,9 @@ storage.delete( 'test1', function(err) {
 
 To store a binary value, pass a filled `Buffer` object as the value, and specify a key ending in a "file extension", e.g. `.gif`.  The latter requirement is so the engine can detect which records are binary and which are JSON, just by looking at the key.  Example:
 
-```javascript
-var fs = require('fs');
-var buffer = fs.readFileSync('picture.gif');
+```js
+const fs = require('fs');
+let buffer = fs.readFileSync('picture.gif');
 storage.put( 'test1.gif', buffer, function(err) {
 	if (err) throw err;
 } );
@@ -833,8 +835,8 @@ storage.put( 'test1.gif', buffer, function(err) {
 
 When fetching a binary record, a `Buffer` object will be passed to your callback:
 
-```javascript
-var fs = require('fs');
+```js
+const fs = require('fs');
 storage.get( 'test1.gif', function(err, buffer) {
 	if (err) throw err;
 	fs.writeFileSync('picture.gif', buffer);
@@ -843,13 +845,13 @@ storage.get( 'test1.gif', function(err, buffer) {
 
 # Using Streams
 
-You can store and fetch binary records using [streams](https://nodejs.org/api/stream.html), so as to not load any content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](docs/API.md#putstream) method.  Similarly, to fetch a readable stream to a record, call the [getStream()](docs/API.md#getstream) method.
+You can store and fetch binary records using [streams](https://nodejs.org/api/stream.html), so as to not load any content into memory.  This can be used to manage extremely large files in a memory-limited environment.  Note that the record content is treated as binary, so the keys *must* contain file extensions.  To store an object using a readable stream, call the [putStream()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#putstream) method.  Similarly, to fetch a readable stream to a record, call the [getStream()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#getstream) method.
 
 Example of storing a record by spooling the data from a file:
 
 ```js
-var fs = require('fs');
-var stream = fs.createReadStream('picture.gif');
+const fs = require('fs');
+let stream = fs.createReadStream('picture.gif');
 
 storage.putStream( 'test1.gif', stream, function(err) {
 	if (err) throw err;
@@ -859,8 +861,8 @@ storage.putStream( 'test1.gif', stream, function(err) {
 Example of fetching a read stream and spooling it to a file:
 
 ```js
-var fs = require('fs');
-var writeStream = fs.createWriteStream('/var/tmp/downloaded.gif');
+const fs = require('fs');
+let writeStream = fs.createWriteStream('/let/tmp/downloaded.gif');
 
 storage.getStream( 'test1.gif', function(err, readStream) {
 	if (err) throw err;
@@ -877,9 +879,9 @@ Please note that not all the storage engines support streams natively, so the co
 
 By default all records live indefinitely, and have no predetermined lifespan.  However, you can set an expiration date on any record, and it will be deleted on that day by the daily maintenance job (see [Daily Maintenance](#daily-maintenance) below).  Note that there is no support for an expiration *time*, but rather only a date.
 
-To set the expiration date for a record, call the [expire()](docs/API.md#expire) method, passing in the key and the desired expiration date.  This function completes instantly and requires no callback.  The date argument can be a JavaScript `Date` object, any supported date string (e.g. `YYYY-MM-DD`), or Epoch seconds.  Example:
+To set the expiration date for a record, call the [expire()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#expire) method, passing in the key and the desired expiration date.  This function completes instantly and requires no callback.  The date argument can be a JavaScript `Date` object, any supported date string (e.g. `YYYY-MM-DD`), or Epoch seconds.  Example:
 
-```javascript
+```js
 storage.expire( 'test1', '2015-05-12' );
 ```
 
@@ -893,7 +895,7 @@ You can register custom record types if they require special handling for deleti
 
 Your custom records are identified by a special top-level `type` property in their JSON.  This property must be set to a unique string that you pre-register with the storage system at startup.  Note that only JSON records are supported for custom deletion -- binary records are not.
 
-To register a custom record type, call the [addRecordType()](docs/API.md#addrecordtype) method, and pass in a custom type key (string), and an object containing key/value pairs for actions and handlers.  Currently only the `delete` action is defined, for handling maintenance (expiration) of your custom record type.  Example use:
+To register a custom record type, call the [addRecordType()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#addrecordtype) method, and pass in a custom type key (string), and an object containing key/value pairs for actions and handlers.  Currently only the `delete` action is defined, for handling maintenance (expiration) of your custom record type.  Example use:
 
 ```js
 storage.addRecordType( 'my_custom_type', {
@@ -905,15 +907,15 @@ storage.addRecordType( 'my_custom_type', {
 });
 ```
 
-So the idea here is whenever the [daily maintenance](#daily-maintenance) job runs, and encounters JSON records with a `type` property set to `my_custom_type`, your custom handler function would be called to handle the deletes for the expired records.  This would happen instead of a typical call to [delete()](docs/API.md#delete), which is the default behavior.
+So the idea here is whenever the [daily maintenance](#daily-maintenance) job runs, and encounters JSON records with a `type` property set to `my_custom_type`, your custom handler function would be called to handle the deletes for the expired records.  This would happen instead of a typical call to [delete()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#delete), which is the default behavior.
 
 # Advisory Locking
 
-The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key, and can be exclusive or shared.  You can also choose to wait for a lock to be released by passing `true` as the 2nd argument, or fail immediately if the key is already locked by passing `false`.  To lock a key in exclusive mode, call [lock()](docs/API.md#lock), and to unlock it call [unlock()](docs/API.md#unlock).
+The storage system provides a simple, in-memory advisory locking mechanism.  All locks are based on a specified key, and can be exclusive or shared.  You can also choose to wait for a lock to be released by passing `true` as the 2nd argument, or fail immediately if the key is already locked by passing `false`.  To lock a key in exclusive mode, call [lock()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#lock), and to unlock it call [unlock()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#unlock).
 
 Here is a simple use case:
 
-```javascript
+```js
 storage.lock( 'test1', true, function() {
 	// key is locked, now we can fetch
 	storage.get( key, function(err, data) {
@@ -941,7 +943,7 @@ storage.lock( 'test1', true, function() {
 
 The above example is a typical counter increment pattern using advisory locks.  The `test1` record is locked, fetched, its counter incremented, written back to disk, then finally unlocked.  The idea is, even though all the storage operations are async, all other requests for this record will block until the lock is released.  Remember that you always need to call `unlock()`, even if throwing an error.
 
-In addition to exclusive locks, you can request a "shared" lock.  Shared locking allows multiple clients to access the key simultaneously.  For example, one could lock a key for reading using shared locks, but lock it for writing using an exclusive lock.  To lock a key in shared mode, call [shareLock()](docs/API.md#sharelock), and to unlock it call [shareUnlock()](docs/API.md#shareunlock).  Example:
+In addition to exclusive locks, you can request a "shared" lock.  Shared locking allows multiple clients to access the key simultaneously.  For example, one could lock a key for reading using shared locks, but lock it for writing using an exclusive lock.  To lock a key in shared mode, call [shareLock()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#sharelock), and to unlock it call [shareUnlock()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#shareunlock).  Example:
 
 ```js
 storage.shareLock( 'test1', true, function() {
@@ -1063,15 +1065,15 @@ Performance metrics are logged with the `category` column set to `perf`.  The ac
 [Storage][perf][second][Last Second Performance Metrics][{"get":{"min":0.132,"max":8.828,"total":319.99,"count":249,"avg":1.285},"index":{"min":24.361,"max":31.813,"total":137.421,"count":5,"avg":27.484},"commit":{"min":16.693,"max":26.227,"total":105.538,"count":5,"avg":21.107},"put":{"min":0.784,"max":7.367,"total":198.952,"count":125,"avg":1.591}}]
 ```
 
-That JSON data is the same format returned by the [getStats()](docs/API.md#getstats) method.  See below for details.
+That JSON data is the same format returned by the [getStats()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#getstats) method.  See below for details.
 
 Note that performance metrics are only logged if there was at least one event.  If your application is completely idle, it will not log anything.
 
 # Performance Metrics
 
-If you want to fetch performance metrics on-demand, call the [getStats()](docs/API.md#getstats) method.  This returns an object containing a plethora of information, including min/avg/max metrics for all events.  Example response, formatted as JSON for display:
+If you want to fetch performance metrics on-demand, call the [getStats()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#getstats) method.  This returns an object containing a plethora of information, including min/avg/max metrics for all events.  Example response, formatted as JSON for display:
 
-```js
+```json
 {
 	"version": "2.0.0",
 	"engine": "Filesystem",
@@ -1125,7 +1127,7 @@ Here are descriptions of the main elements:
 | `version` | The current version of the `pixl-server-storage` module. |
 | `engine` | The name of the current engine Plugin, e.g. `Filesystem`. |
 | `concurrency` | The current concurrency setting (i.e. max threads). |
-| `transactions` | Whether [transactions](docs/Transactions.md) are enabled (true) or disabled (false). |
+| `transactions` | Whether [transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) are enabled (true) or disabled (false). |
 | `last_second` | A performance summary of the last second (see below). |
 | `last_minute` | A performance summary of the last minute (see below). |
 | `recent_events` | The most recent N events (see below). |
@@ -1133,7 +1135,7 @@ Here are descriptions of the main elements:
 
 The performance metrics (both `last_second` and `last_minute`) include minimums, averages, maximums, counts and totals for each event, and are provided in this format:
 
-```js
+```json
 {
 	"search": {
 		"min": 14.306,
@@ -1160,7 +1162,7 @@ The `recent_events` object will only be populated if the `max_recent_events` con
 
 If you plan on expiring records for future deletion (see [Expiring Data](#expiring-data) above), you should enable the nightly maintenance job.  This will iterate over all the records that expired on the current day, and actually delete them.  To do this, set the [maintenance](#maintenance) key in your storage configuration, and set it to a `HH::MM` string:
 
-```javascript
+```js
 {
 	"maintenance": "04:30" // run daily at 4:30 AM
 }
@@ -1183,72 +1185,68 @@ Here are the API methods your class should define:
 | `delete()` | KEY, CALLBACK | Delete the specified key, then fire the callback. |
 | `shutdown()` | CALLBACK | Optional, called as the server shuts down. Fire the callback when your engine has stopped. |
 
-It is recommended you use the [pixl-class](https://www.npmjs.com/package/pixl-class) class framework, and inherit from the `pixl-server/component` base class.  This implements some useful methods such as `logDebug()`.
+It is recommended you inherit from the `pixl-server/component` base class.  This implements some useful methods such as `logDebug()`.
 
 Here is an example skeleton class you can start from:
 
-```javascript
-var Class = require("pixl-class");
-var Component = require("pixl-server/component");
+```js
+const Component = require("pixl-server/component");
 
-module.exports = Class.create({
+module.exports = class MyEngine extends Component {
 	
-	__name: 'MyEngine',
-	__parent: Component,
-	
-	startup: function(callback) {
+	startup(callback) {
 		// setup initial connection
-		var self = this;
+		let self = this;
 		this.logDebug(2, "Setting up MyEngine");
 		callback();
-	},
+	}
 	
-	put: function(key, value, callback) {
+	put(key, value, callback) {
 		// store record given key and value
 		callback();
-	},
+	}
 	
-	head: function(key, callback) {
+	head(key, callback) {
 		// retrieve metadata on record (mod, len)
 		callback();
-	},
+	}
 	
-	get: function(key, callback) {
+	get(key, callback) {
 		// fetch record value given key
 		callback();
-	},
+	}
 	
-	delete: function(key, callback) {
+	delete(key, callback) {
 		// delete record
 		callback();
-	},
+	}
 	
-	shutdown: function(callback) {
+	shutdown(callback) {
 		// shutdown storage
 		this.logDebug(2, "Shutting down MyEngine");
 		callback();
 	}
 	
-});
+};
 ```
 
 # Unit Tests
 
 To run the unit test suite, issue this command from within the module directory:
 
-```
+```sh
 npm test
 ```
 
-If you install the [pixl-unit](https://www.npmjs.com/package/pixl-unit) module globally, you can provide various command-line options, such as verbose mode:
+If you install the [pixl-unit](https://www.github.com/jhuckaby/pixl-unit) module globally, you can provide various command-line options, such as verbose mode:
 
-```
+```sh
 pixl-unit test/test.js --verbose
 ```
 
 This also allows you to specify an alternate test configuration file via the `--configFile` option.  Using this you can load your own test config, which may use a different engine (e.g. S3, Couchbase, etc.):
 
-```
+```sh
 pixl-unit test/test.js --configFile /path/to/my/config.json
 ```
 

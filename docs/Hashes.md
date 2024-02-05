@@ -8,8 +8,8 @@ All hash operations will automatically lock the hash using [Advisory Locking](..
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Table of Contents
@@ -37,7 +37,7 @@ Care should be taken when calculating your hash page sizes.  It all depends on h
 
 To create a hash, call [hashCreate()](API.md#hashcreate).  Specify the desired storage path, options, and a callback function.  You can optionally pass in a custom page size via the second argument (otherwise it'll use the default size):
 
-```javascript
+```js
 storage.hashCreate( 'hash1', { page_size: 100 }, function(err) {
 	if (err) throw err;
 } );
@@ -53,7 +53,7 @@ To store a key/value pair, call [hashPut](API.md#hashput), and to fetch a value 
 
 Here is an example of storing and fetching a hash record.  The hash itself is located at the storage path `users`, and we are storing and fetching the hash key `bsanders` within that hash.
 
-```javascript
+```js
 // Store a key/value pair
 storage.hashPut( 'users', 'bsanders', { name: 'Bernie', age: 75 }, function(err) {
 	if (err) throw err;
@@ -73,7 +73,7 @@ Note that you do not need to explicitly create the hash via [hashCreate()](API.m
 In addition to storing single records, you can specify multiple at a time using the [hashPutMulti()](API.md#hashputmulti) method.  Instead of key and value arguments, pass in an object containing as many as you want:
 
 ```js
-var records = {
+let records = {
 	"bsanders": { name: "Bernie", age: 75 },
 	"hclinton": { name: "Hillary", age: 68 },
 	"dtrump": { name: "Donald", age: 70 }
@@ -86,7 +86,7 @@ storage.hashPutMulti( 'users', records, function(err) {
 
 Similarly, to fetch multiple records, use [hashGetMulti()](API.md#hashgetmulti).  Specify your desired keys in an array, and you'll get an array of values with numerical indexes that match up to your keys:
 
-```javascript
+```js
 storage.hashGetMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err, values) {
 	if (err) throw err;
 	// values[0] will be the bsanders record.
@@ -97,13 +97,13 @@ storage.hashGetMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err,
 
 Finally, if you simply want to fetch *all* the records in a hash in one fell swoop, and you aren't concerned with memory usage, call [hashGetAll()](API.md#hashgetall).
 
-```javascript
+```js
 storage.hashGetAll( 'users', function(err, items) {
 	if (err) throw err;
 	
 	// do something with all items
-	for (var key in items) {
-		var value = items[key];
+	for (let key in items) {
+		let value = items[key];
 		// do something with key/value pair
 	}
 } );
@@ -126,7 +126,7 @@ function(err) {
 
 Alternatively, you can use [hashEachSync()](API.md#hasheachsync) in which the iterator is invoked in a *synchronous* manner, i.e. continuing as soon as it returns (similar to [Array.forEach()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/forEach)).  However, please note that the full loop operation isn't synchronous, and you need to provide a callback to be fired when every key has been iterated over.  Example:
 
-```javascript
+```js
 storage.hashEachSync( 'users', function(key, value) {
 	// do something with key/value
 	// no callback here
@@ -139,11 +139,11 @@ function(err) {
 
 Finally, you can use [hashEachPage()](API.md#hasheachpage), which iterates over the internal hash pages, and only fires your iterator function once per page, instead of once per key.  This is typically faster as it requires fewer function calls.  Your iterator is invoked in an *asynchronous* manner, i.e. it must fire a callback to continue (similar to [async eachSeries()](http://caolan.github.io/async/docs.html#.eachSeries)).  Example:
 
-```javascript
+```js
 storage.hashEachPage( 'users', function(items, callback) {
 	// do something with page of items
-	for (var key in items) {
-		var value = items[key];
+	for (let key in items) {
+		let value = items[key];
 		// do something with each key/value pair
 	}
 	
@@ -160,7 +160,7 @@ function(err) {
 
 To duplicate a hash and all of its items at a new storage path, call [hashCopy()](API.md#hashcopy), specifying the old and new paths.  Example:
 
-```javascript
+```js
 storage.hashCopy( 'hash1', 'hash2', function(err) {
 	if (err) throw err;
 } );
@@ -168,7 +168,7 @@ storage.hashCopy( 'hash1', 'hash2', function(err) {
 
 To rename a hash, call [hashRename()](API.md#hashrename).  This is basically just a [hashCopy()](API.md#hashcopy) followed by a [hashDeleteAll()](API.md#hashdeleteall).  Example:
 
-```javascript
+```js
 storage.hashRename( 'hash1', 'hash2', function(err) {
 	if (err) throw err;
 } );
@@ -180,7 +180,7 @@ With both of these functions, it is highly recommended you make sure the destina
 
 To delete a single hash key, call [hashDelete()](API.md#hashdelete).  Example:
 
-```javascript
+```js
 storage.hashDelete( 'users', 'dtrump', function(err) {
 	if (err) throw err;
 } );
@@ -188,7 +188,7 @@ storage.hashDelete( 'users', 'dtrump', function(err) {
 
 If you delete the last key from a hash, an "empty" hash will remain in storage (this includes metadata such as the options, page size, etc).  If you want to delete the *entire* hash when the last key is removed, pass `true` as the 3rd argument before the callback:
 
-```javascript
+```js
 storage.hashDelete( 'users', 'dtrump', true, function(err) {
 	if (err) throw err;
 } );
@@ -196,7 +196,7 @@ storage.hashDelete( 'users', 'dtrump', true, function(err) {
 
 To delete multiple hash keys at once, use [hashDeleteMulti()](API.md#hashdeletemulti).  Specify your desired keys in an array:
 
-```javascript
+```js
 storage.hashDeleteMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(err) {
 	if (err) throw err;
 } );
@@ -204,7 +204,7 @@ storage.hashDeleteMulti( 'users', ['bsanders', 'hclinton', 'dtrump'], function(e
 
 Finally, to delete an *entire* hash including all its keys, call [hashDeleteAll()](API.md#hashdeleteall):
 
-```javascript
+```js
 storage.hashDeleteAll( 'users', function(err) {
 	if (err) throw err;
 } );
@@ -212,7 +212,7 @@ storage.hashDeleteAll( 'users', function(err) {
 
 As with `hashDelete()`, by default this will only empty a hash, leaving behind an empty header record (with options, page size, etc).  To delete that as well, pass `true` as the 2nd argument before the callback:
 
-```javascript
+```js
 storage.hashDeleteAll( 'users', true, function(err) {
 	if (err) throw err;
 } );

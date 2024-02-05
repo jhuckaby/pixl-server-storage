@@ -16,8 +16,8 @@ The indexer works with any storage engine, but it is optimized for the local fil
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
-```javascript
-var storage = server.Storage;
+```js
+let storage = server.Storage;
 ```
 
 ## Table of Contents
@@ -323,7 +323,7 @@ Here is a simple example:
 
 ```js
 // Index configuration
-var config = {
+let config = {
 	"base_path": "index/myapp",
 	"fields": [
 		{
@@ -351,7 +351,7 @@ var config = {
 };
 
 // Record object
-var record = {
+let record = {
 	"BodyText": "This is the body text of my ticket, which <b>may contain HTML</b> and \nmultiple\nlines.\n",
 	"ModifyDate": "2018/01/07",
 	"Tags": "bug, assigned, open"
@@ -802,7 +802,7 @@ If you want to make changes to your index configuration, i.e. add or remove fiel
 To add a new field to your index, you simply have to apply the change to your index configuration, then call [indexRecord()](API.md#indexrecord) on all your records again.  The indexer is smart enough to know that all your existing field values haven't changed, but you have added a new one which needs to be indexed.  Example:
 
 ```js
-var async = require('async');
+const async = require('async');
 
 // fetch all record ids
 storage.searchRecords( '*', config, function(err, results) {
@@ -832,7 +832,7 @@ storage.searchRecords( '*', config, function(err, results) {
 To delete a field, the process is similar to adding one.  You will have to iterate over all your records, and call [indexRecord()](API.md#indexrecord) on each one, except this time we'll add a special `delete` property to the index you want to delete.  This tells the library to force a delete on reindex.  Here is an example:
 
 ```js
-var async = require('async');
+const async = require('async');
 
 // mark the field you want to delete with a `delete` property
 config.fields[2].delete = true;
@@ -960,7 +960,7 @@ The first thing to notice is that everything is under a base path of `index/myap
 So in our example configuration, we have three indexed fields: `body`, `modified` and `tags`.  As you can see in the data layout, each one occupies its own "namespace" in storage, and contains hashes for each unique value, and in some cases a [summary](#master-list) record as well.  For reference, here was our sample record ("TICKET0001") was was used to populate the indexes:
 
 ```js
-var record = {
+let record = {
 	"BodyText": "This is the body text of my ticket, which <b>may contain HTML</b> and \nmultiple\nlines.\n",
 	"ModifyDate": "2018/01/07",
 	"Tags": "bug, assigned, open"
