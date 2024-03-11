@@ -69,6 +69,12 @@ module.exports = Class.create({
 		this.redis.on('end', function() {
 			self.logDebug(3, "Redis disconnected");
 		});
+
+		if (typeof this.redis.connect === 'function') {
+			self.logDebug(3, "node-redis connect")
+			// from v4 no auto connect anymore 
+			this.redis.connect(); 
+		}
 	},
 	
 	prepKey: function(key) {

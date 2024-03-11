@@ -572,7 +572,8 @@ Then configure your storage thusly:
 	"Redis": {
 		"host": "127.0.0.1",
 		"port": 6379,
-		"keyPrefix": ""
+		"keyPrefix": "",
+		"legacyMode": true
 	}
 }
 ```
@@ -582,6 +583,8 @@ Set the `host` and `port` for your own Redis server setup.  Please see [Redis Op
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+The semi-optional `legacyMode` property let you use this engine with newer version of `node-redis` (v4). You may not need this property if version of `node-redis` is lower than `v4.x`. See [`node-redis` change](https://github.com/redis/node-redis/blob/master/docs/v3-to-v4.md).
 
 ### RedisCluster
 
