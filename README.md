@@ -635,7 +635,8 @@ Then configure your storage thusly:
 		"filename": "sqlite.db",
 		"pragmas": {
 			"auto_vacuum": 0,
-			"cache_size": -100000
+			"cache_size": -100000,
+			"journal_mode": "WAL"
 		}
 	}
 }
@@ -643,7 +644,7 @@ Then configure your storage thusly:
 
 The `base_dir` defaults to the current working directory, and will be created on startup if necessary.  The `filename` is the name of the SQLite DB file on disk (also created if necessary).
 
-The optional `pragmas` object allows you set one or more [SQLite Pragmas](https://www.sqlite.org/pragma.html#toc) (configuration settings) on the database at startup.  Here you can specify things such as [auto_vacuum](https://www.sqlite.org/pragma.html#pragma_auto_vacuum) and [cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size), among many others.
+The optional `pragmas` object allows you set one or more [SQLite Pragmas](https://www.sqlite.org/pragma.html#toc) (configuration settings) on the database at startup.  Here you can specify things such as [auto_vacuum](https://www.sqlite.org/pragma.html#pragma_auto_vacuum), [cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size) and [journal_mode](https://www.sqlite.org/pragma.html#pragma_journal_mode), among many others.
 
 ## Hybrid
 
