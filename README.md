@@ -586,10 +586,10 @@ The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3
 
 ### RedisCluster
 
-If you want to use a Redis cluster (e.g. [AWS ElastiCache](https://aws.amazon.com/elasticache/)), then here is how to do that.  First, you will need to manually install the following two modules into your app:
+If you want to use a Redis cluster (e.g. [AWS ElastiCache](https://aws.amazon.com/elasticache/)), then here is how to do that.  First, you will need to manually install the following module into your app:
 
 ```sh
-npm install --save ioredis ioredis-timeout
+npm install --save ioredis
 ```
 
 Then configure your storage thusly:
@@ -600,10 +600,13 @@ Then configure your storage thusly:
 	"RedisCluster": {
 		"host": "127.0.0.1",
 		"port": 6379,
-		"timeout": 1000,
 		"connectRetries": 5,
 		"clusterOpts": {
-			"scaleReads": "master"
+			"scaleReads": "master",
+			"redisOptions": {
+				"commandTimeout": 5000,
+				"connectTimeout": 5000
+			}
 		},
 		"keyPrefix": "",
 		"keyTemplate": ""
@@ -611,9 +614,11 @@ Then configure your storage thusly:
 }
 ```
 
-Set the `host` and `port` for your own Redis cluster setup.  The `host` should point to the cluster endpoint, **not** an individual Redis server.  Set the `timeout` to the desired operation timeout in milliseconds (it defaults to `1000`).  The `connectRetries` sets the number of retries on the initial socket connect operation (it defaults to `5`).
+Set the `host` and `port` for your own Redis cluster setup.  The `host` should point to the cluster endpoint, **not** an individual Redis server.  The `connectRetries` sets the number of retries on the initial socket connect operation (it defaults to `5`).
 
-The `clusterOpts` property can hold several different cluster configuration options.  Please see the [ioredis API docs](https://github.com/luin/ioredis/blob/master/API.md#new-redisport-host-options) for other things you can include here, such as authentication and database selection.  It is **highly recommended** that you keep the `scaleReads` property set to `"master"`, for immediate consistency (required for [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md)).
+The `clusterOpts` property can hold several different cluster configuration options.  Please see [Cluster Options](https://redis.github.io/ioredis/interfaces/ClusterOptions.html) for other things you can include here, such as `scaleReads` and `redisOptions`.  For the `redisOptions` object, please see [Common Redis Options](https://redis.github.io/ioredis/interfaces/CommonRedisOptions.html) for other things you can include, such as timeouts, authentication and database selection.
+
+It is **highly recommended** that you keep the `scaleReads` property set to `"master"`, for immediate consistency (required for [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md)).
 
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
@@ -639,7 +644,9 @@ Then configure your storage thusly:
 			"auto_vacuum": 0,
 			"cache_size": -100000,
 			"journal_mode": "WAL"
-		}
+		},
+		"keyPrefix": "",
+		"keyTemplate": ""
 	}
 }
 ```
@@ -647,6 +654,10 @@ Then configure your storage thusly:
 The `base_dir` defaults to the current working directory, and will be created on startup if necessary.  The `filename` is the name of the SQLite DB file on disk (also created if necessary).
 
 The optional `pragmas` object allows you set one or more [SQLite Pragmas](https://www.sqlite.org/pragma.html#toc) (configuration settings) on the database at startup.  Here you can specify things such as [auto_vacuum](https://www.sqlite.org/pragma.html#pragma_auto_vacuum), [cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size) and [journal_mode](https://www.sqlite.org/pragma.html#pragma_journal_mode), among many others.
+
+The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the SQLite keys with a common string, to separate your application's data in a shared database situation.
+
+The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
 
 ## Hybrid
 

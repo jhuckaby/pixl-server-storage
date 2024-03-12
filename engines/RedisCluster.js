@@ -1,14 +1,13 @@
 // RedisCluster Storage Plugin
-// Copyright (c) 2015 - 2020 Joseph Huckaby
+// Copyright (c) 2015 - 2024 Joseph Huckaby
 // Released under the MIT License
 
-// Requires the 'ioredis' and 'ioredis-timeout' modules from npm
-// npm install --save ioredis ioredis-timeout
+// Requires the 'ioredis' module from npm
+// npm install --save ioredis
 
 const Class = require("pixl-class");
 const Component = require("pixl-server/component");
 const Redis = require('ioredis');
-const RedisTimeout = require('ioredis-timeout');
 const Tools = require("pixl-tools");
 
 module.exports = Class.create({
@@ -20,10 +19,13 @@ module.exports = Class.create({
 		
 		host: 'localhost',
 		port: 6379,
-		timeout: 1000,
 		connectRetries: 5,
 		clusterOpts: {
-			scaleReads: "master"
+			scaleReads: "master",
+			redisOptions: {
+				commandTimeout: 5000,
+				connectTimeout: 5000
+			}
 		},
 		
 		keyPrefix: "",
@@ -33,7 +35,7 @@ module.exports = Class.create({
 	startup: function(callback) {
 		// setup Redis connection
 		var self = this;
-		this.logDebug(2, "Setting up RedisClustr", this.config.get() );
+		this.logDebug(2, "Setting up RedisCluster", this.config.get() );
 		this.setup(callback);
 	},
 	
@@ -77,12 +79,7 @@ module.exports = Class.create({
 		}); // error
 		
 		this.redis.once('ready', function() {
-			self.logDebug(8, "Successfully connected to Redis");
-			
-			if (r_config.timeout) {
-				RedisTimeout(self.redis, parseInt(r_config.timeout));
-			}
-			
+			self.logDebug(8, "Successfully connected to Redis cluster");
 			callback();
 		});
 	},
