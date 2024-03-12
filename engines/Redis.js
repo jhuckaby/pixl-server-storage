@@ -1,14 +1,14 @@
 // Redis Storage Plugin
-// Copyright (c) 2015 - 2019 Joseph Huckaby
+// Copyright (c) 2015 - 2024 Joseph Huckaby
 // Released under the MIT License
 
-// Requires the 'redis' module from npm
-// npm install redis
+// Requires the 'ioredis' module from npm
+// npm install --save ioredis
 
-var Class = require("pixl-class");
-var Component = require("pixl-server/component");
-var Redis = require('redis');
-var Tools = require("pixl-tools");
+const Class = require("pixl-class");
+const Component = require("pixl-server/component");
+const Redis = require('ioredis');
+const Tools = require("pixl-tools");
 
 module.exports = Class.create({
 	
@@ -16,8 +16,14 @@ module.exports = Class.create({
 	__parent: Component,
 	
 	defaultConfig: {
-		host: "127.0.0.1",
+		
+		host: 'localhost',
 		port: 6379,
+		commandTimeout: 5000,
+		connectTimeout: 5000,
+		username: "",
+		password: "",
+		
 		keyPrefix: "",
 		keyTemplate: ""
 	},
@@ -25,10 +31,7 @@ module.exports = Class.create({
 	startup: function(callback) {
 		// setup Redis connection
 		var self = this;
-		
-		this.logDebug(2, "Setting up Redis", 
-			Tools.copyHashRemoveKeys( this.config.get(), { password:1 }) );
-		
+		this.logDebug(2, "Setting up Redis", this.config.get() );
 		this.setup(callback);
 	},
 	
@@ -39,35 +42,31 @@ module.exports = Class.create({
 		
 		this.keyPrefix = (r_config.keyPrefix || '').replace(/^\//, '');
 		if (this.keyPrefix && !this.keyPrefix.match(/\/$/)) this.keyPrefix += '/';
+		delete r_config.keyPrefix;
 		
 		this.keyTemplate = (r_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
+		delete r_config.keyTemplate;
 		
-		r_config.return_buffers = true;
-		r_config.retry_strategy = function(opts) {
-			// simple backoff strategy
-			return Math.min(opts.attempt * 100, 3000);
-		};
+		if (!r_config.username.length) delete r_config.username;
+		if (!r_config.password.length) delete r_config.password;
 		
-		this.redis = Redis.createClient( Tools.copyHashRemoveKeys(r_config, { keyPrefix:1, keyTemplate:1 }) );
+		r_config.lazyConnect = true;
+		r_config.reconnectOnError = function(err) { return true; };
+		
+		this.redis = new Redis(r_config);
 		
 		this.redis.on('error', function(err) {
-			if (!self.storage.started) return callback(err);
+			if (!self.storage.started) {
+				return callback( new Error("Redis Startup Error: " + (err.message || err)) );
+			}
 			
 			// error after startup?  Just log it I guess
 			self.logError('redis', ''+err);
-		});
+		}); // error
 		
-		this.redis.on('connect', function() {
-			self.logDebug(3, "Redis connected successfully");
-			if (!self.storage.started) return callback();
-		});
-		
-		this.redis.on('reconnecting', function(opts) {
-			self.logDebug(3, "Redis is reconnecting", opts);
-		});
-		
-		this.redis.on('end', function() {
-			self.logDebug(3, "Redis disconnected");
+		this.redis.connect(function() {
+			self.logDebug(8, "Successfully connected to Redis");
+			callback();
 		});
 	},
 	
@@ -167,7 +166,8 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching Redis Object: " + key);
 		
-		this.redis.get( key, function(err, result) {
+		var func = this.storage.isBinaryKey(key) ? 'getBuffer' : 'get';
+		this.redis[func]( key, function(err, result) {
 			if (!result) {
 				if (err) {
 					// an actual error
@@ -204,13 +204,13 @@ module.exports = Class.create({
 	},
 	
 	getBuffer: function(key, callback) {
-		// get buffer to record value given key
+		// fetch Redis buffer given key
 		var self = this;
 		key = this.prepKey(key);
 		
 		this.logDebug(9, "Fetching Redis Object: " + key);
 		
-		this.redis.get( key, function(err, result) {
+		this.redis.getBuffer( key, function(err, result) {
 			if (!result) {
 				if (err) {
 					// an actual error
@@ -329,8 +329,11 @@ module.exports = Class.create({
 	shutdown: function(callback) {
 		// shutdown storage
 		this.logDebug(2, "Shutting down Redis");
-		if (this.redis) this.redis.quit();
-		callback();
+		if (this.redis) {
+			this.redis.quit(callback);
+			this.redis = null;
+		}
+		else callback();
 	}
 	
 });

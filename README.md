@@ -558,10 +558,10 @@ Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to
 
 ## Redis
 
-If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [redis](https://www.npmjs.com/package/redis) module into your app:
+If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [ioredis](https://www.npmjs.com/package/ioredis) module into your app:
 
 ```sh
-npm install --save redis
+npm install --save ioredis
 ```
 
 Then configure your storage thusly:
@@ -572,12 +572,13 @@ Then configure your storage thusly:
 	"Redis": {
 		"host": "127.0.0.1",
 		"port": 6379,
-		"keyPrefix": ""
+		"keyPrefix": "",
+		"keyTemplate": ""
 	}
 }
 ```
 
-Set the `host` and `port` for your own Redis server setup.  Please see [Redis Options Properties](https://github.com/NodeRedis/node_redis#options-object-properties) for other things you can include here, such as authentication and database selection.
+Set the `host` and `port` for your own Redis server setup.  Please see [Common Redis Options](https://redis.github.io/ioredis/interfaces/CommonRedisOptions.html) for other things you can include here, such as timeouts, authentication and database selection.
 
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
@@ -604,7 +605,8 @@ Then configure your storage thusly:
 		"clusterOpts": {
 			"scaleReads": "master"
 		},
-		"keyPrefix": ""
+		"keyPrefix": "",
+		"keyTemplate": ""
 	}
 }
 ```
