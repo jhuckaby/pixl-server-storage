@@ -2,6 +2,7 @@
 // Copyright (c) 2015 - 2022 Joseph Huckaby
 // Released under the MIT License
 
+var Path = require('path');
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
 var Tools = require("pixl-tools");
@@ -594,6 +595,93 @@ module.exports = Class.create({
 				self.logError('s3', "Failed to delete object: " + key + ": " + (err.message || err), err);
 				if (callback) process.nextTick( function() { callback(err); } );
 			} );
+	},
+	
+	list: function(opts, callback) {
+		// generate list of objects in S3 given prefix
+		// this repeatedly calls ListObjectsV2 for lists > 1000
+		// opts: { remotePath, filespec, filter }
+		// result: { files([{ key, size, mtime }, ...]), total_bytes }
+		let self = this;
+		let done = false;
+		let files = [];
+		let total_bytes = 0;
+		let num_calls = 0;
+		let now = Tools.timeNow(true);
+		
+		if (typeof(opts) == 'string') opts = { remotePath: opts };
+		if (!opts.remotePath) opts.remotePath = '';
+		if (!opts.filespec) opts.filespec = /.*/;
+		if (!opts.filter) opts.filter = function() { return true; };
+		
+		if (opts.older) {
+			// convert older to filter func with mtime
+			if (typeof(opts.older) == 'string') opts.older = Tools.getSecondsFromText( opts.older );
+			opts.filter = function(file) { return file.mtime <= now - opts.older; };
+		}
+		
+		let params = Tools.mergeHashes( this.s3Params || {}, opts.params || {} );
+		params.Prefix = this.keyPrefix + opts.remotePath;
+		params.MaxKeys = 1000;
+		
+		let PREFIX_RE = new RegExp('^' + Tools.escapeRegExp(this.keyPrefix));
+		
+		this.logDebug(8, "Listing S3 files with prefix: " + params.Prefix, opts);
+		let tracker = this.perf ? this.perf.begin('s3_list') : null;
+		
+		Tools.async.whilst(
+			function() { 
+				return !done; 
+			},
+			function(callback) {
+				self.logDebug(9, "Listing chunk", params);
+				
+				self.s3.send( new S3.ListObjectsV2Command(params) )
+					.then( function(data) {
+						let items = data.Contents || [];
+						for (let idx = 0, len = items.length; idx < len; idx++) {
+							let item = items[idx];
+							let key = item.Key.replace(PREFIX_RE, '');
+							let bytes = item.Size;
+							let mtime = item.LastModified.getTime() / 1000;
+							let file = { key: key, size: bytes, mtime: mtime };
+							
+							// optional filter and filespec
+							if (opts.filter(file) && Path.basename(key).match(opts.filespec)) {
+								total_bytes += bytes;
+								files.push(file);
+							}
+						}
+						
+						// check for end of key list
+						if (!data.IsTruncated || !items.length) done = true;
+						else {
+							// advance to next chunk
+							params.StartAfter = items[ items.length - 1 ].Key;
+						}
+						
+						num_calls++;
+						callback();
+					} )
+					.catch( function(err) {
+						callback( err );
+					} );
+			},
+			function(err) {
+				if (tracker) tracker.end();
+				if (err) return process.nextTick( function() { callback(err, null, null); });
+				
+				self.logDebug(9, "S3 listing complete (" + Tools.commify(files.length) + " objects, " + Tools.getTextFromBytes(total_bytes) + ")", {
+					prefix: params.Prefix,
+					count: files.length,
+					bytes: total_bytes,
+					calls: num_calls
+				});
+				
+				// break out of promise context
+				process.nextTick( function() { callback( null, files, total_bytes ); } );
+			}
+		); // whilst
 	},
 	
 	runMaintenance: function(callback) {
