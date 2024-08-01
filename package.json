@@ -1,6 +1,6 @@
 {
 	"name": "pixl-server-storage",
-	"version": "3.2.1",
+	"version": "3.2.2",
 	"description": "A key/value/list storage component for the pixl-server framework.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-server-storage",
@@ -22,9 +22,9 @@
 		"sqlite"
 	],
 	"dependencies": {
-		"@aws-sdk/client-s3": "3.414.0",
-		"@aws-sdk/lib-storage": "3.414.0",
-		"@smithy/node-http-handler": "2.1.4",
+		"@aws-sdk/client-s3": "3.621.0",
+		"@aws-sdk/lib-storage": "3.621.0",
+		"@smithy/node-http-handler": "3.1.4",
 		"async": "2.6.4",
 		"fast-stream-to-buffer": "1.0.0",
 		"he": "1.1.1",
