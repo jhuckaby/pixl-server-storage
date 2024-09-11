@@ -721,7 +721,7 @@ module.exports = Class.create({
 		var doEngineMaint = function() {
 			// allow engine to run maint as well
 			self.engine.runMaintenance( function() {
-				stats.elapsed_sec = Tools.timeNow() - stats.time_start;
+				stats.elapsed_sec = Tools.shortFloat( Tools.timeNow() - stats.time_start );
 				self.logDebug(3, "Daily maintenance complete");
 				self.logTransaction('maint', cleanup_list_path, stats);
 				if (callback) callback();
