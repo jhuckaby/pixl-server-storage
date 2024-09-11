@@ -648,6 +648,7 @@ module.exports = Class.create({
 					self.logDebug(3, "Transaction rollback complete: " + trans.id, { path: path });
 					
 					// unlock at the VERY end, as a new transaction may be waiting on the same path
+					self.emit('commitEnd', trans, "rollback");
 					self.unlock( 'C|'+path );
 					self._transUnlock(path);
 					
@@ -787,9 +788,9 @@ module.exports = Class.create({
 				var elapsed = pf.end();
 				
 				if (err) {
+					// Note: in this case unlocking happens in abortTransaction
 					var msg = "Failed to commit transaction: " + path + ": " + err.message;
 					self.logError('commit', msg, { id: trans.id });
-					self.emit('commitEnd', trans, err);
 					return callback( new Error(msg) );
 				}
 				
