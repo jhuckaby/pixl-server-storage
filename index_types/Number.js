@@ -83,7 +83,7 @@ module.exports = Class.create({
 	
 	filterWords_number: function(value) {
 		// filter number queries
-		value = value.replace(/[^\d\-]+/g, '').replace(/\-/, 'N');
+		value = value.replace(/\.\d+$/, '').replace(/[^\d\-]+/g, '').replace(/\-/, 'N');
 		return value;
 	},
 	
