@@ -5,12 +5,16 @@
 // Requires the 'sqlite3' module from npm
 // npm install --save sqlite3
 
+const fs = require('fs');
 const Path = require('path');
+const zlib = require('zlib');
 const Class = require("pixl-class");
 const Component = require("pixl-server/component");
 const SQLite3 = require('sqlite3');
 const Tools = require("pixl-tools");
+const Perf = require("pixl-perf");
 const async = require('async');
+const noop = function() {};
 
 module.exports = Class.create({
 	
@@ -348,7 +352,138 @@ module.exports = Class.create({
 	
 	runMaintenance: function(callback) {
 		// run daily maintenance
-		callback();
+		// config.backups: { enabled, dir, filename, compress?, keep? }
+		var self = this;
+		var backups = this.config.get('backups') || null;
+		if (!backups || !backups.enabled || !backups.dir || !backups.filename) return callback();
+		
+		// here be dragons: try to wait for a moment BETWEEN transaction commits, to minimize risk of an "inconsistent" backup
+		if (this.storage.transactions && Tools.findObject(Object.values(this.storage.transactions), { committing: true })) {
+			// wait for next commitEnd event and try again
+			this.logDebug(9, "Maintenance: Transaction commit(s) are in progress, waiting until next commitEnd event...");
+			
+			this.storage.once('commitEnd', function(trans) {
+				self.logDebug(9, "Maintenance: Transaction commit " + trans.id + " (" + trans.path + ") ended, retrying now...");
+				self.runMaintenance(callback);
+			});
+			
+			return;
+		}
+		
+		// track perf for logging
+		var perf = new Perf();
+		perf.begin();
+		perf.begin('prep');
+		
+		// allow dir & filename to have date/time placeholders, e.g. `backup-[yyyy]-[mm]-[dd].db`
+		var dargs = Tools.getDateArgs( Tools.timeNow() );
+		var file = Tools.sub( Path.join(backups.dir, backups.filename), dargs, true );
+		if (!file) {
+			this.logError('backup', "Failed to expand placeholders on backup file: " + backups.filename);
+			return callback();
+		}
+		
+		// strip .gz prefix, just in case the user added it
+		file = file.replace(/\.gz$/i, '');
+		
+		// auto-create parent dirs as needed
+		if (!fs.existsSync(backups.dir)) {
+			try { Tools.mkdirp.sync(backups.dir); }
+			catch (err) {
+				this.logError('backup', "Failed to create backup directory: " + backups.dir);
+				return callback();
+			}
+		}
+		
+		// here we go
+		if (fs.existsSync(file)) fs.unlinkSync(file);
+		this.logDebug(6, "Performing database backup to: " + file);
+		perf.end('prep');
+		
+		var finish = function() {
+			// all done
+			perf.end();
+			self.logDebug(6, "Maintenance complete", perf.metrics());
+			callback();
+		};
+		
+		var keep = function() {
+			// delete oldest backups if over N on disk
+			var files = Tools.findFilesSync( backups.dir, { stats: true } );
+			if (files.length <= backups.keep) return finish();
+			perf.begin('keep');
+			
+			self.logDebug(6, "There are " + files.length + " backup files in " + backups.dir + ", keeping the latest " + backups.keep);
+			
+			// sort mtime descending so the newest are at the start of the array, then splice those off, leaving only the oldest to delete
+			Tools.sortBy( files, 'mtime', { type: 'number', dir: -1 } );
+			files.splice( 0, backups.keep );
+			
+			files.forEach( function(file) {
+				self.logDebug(7, "Deleting old backup file: " + file.path, file);
+				try { fs.unlinkSync(file.path); } catch (err) {
+					self.logError('backup', "Failed to delete backup file: " + file.path + ": " + err);
+				}
+			} );
+			
+			perf.end('keep');
+			finish();
+		}; // keep
+		
+		var compress = function() {
+			// compress backup and delete original
+			var gz_file = file + '.gz';
+			perf.begin('compress');
+			
+			if (fs.existsSync(gz_file)) fs.unlinkSync(gz_file);
+			self.logDebug(6, "Compressing backup to: " + gz_file);
+			
+			var gzip = zlib.createGzip();
+			var inp = fs.createReadStream( file );
+			var outp = fs.createWriteStream( gz_file );
+			
+			var handleError = function(err) {
+				self.logError('backup', "Failed to compress backup: " + gz_file + ": " + err);
+				fs.unlink(gz_file, noop);
+				
+				perf.end('compress');
+				if (backups.keep) keep();
+				else finish();
+			};
+			
+			gzip.on('error', handleError);
+			inp.on('error', handleError);
+			outp.on('error', handleError);
+			
+			inp.pipe(gzip).pipe(outp).on('finish', function() {
+				self.logDebug(6, "Backup compression complete: " + gz_file);
+				fs.unlink(file, noop);
+				
+				perf.end('compress');
+				if (backups.keep) keep();
+				else finish();
+			} );
+		}; // compress
+		
+		// Perform the backup -- unfortunately this locks the DB, and we can't use progressive mode
+		// because of how we handle transactions "outside" of SQLite's control.
+		perf.begin('backup');
+		
+		this.db.run('VACUUM INTO $filename', { $filename: Path.resolve(file) }, function(err) {
+			perf.end('backup');
+			if (err) {
+				self.logError('backup', "SQLite backup operation failed: " + err);
+				fs.unlink(file, noop);
+				return finish();
+			}
+			
+			self.logDebug(6, "SQLite backup operation completed: " + file);
+			
+			// now compress or keep or done
+			if (backups.compress) compress();
+			else if (backups.keep) keep();
+			else finish();
+		});
 	},
 	
 	shutdown: function(callback) {

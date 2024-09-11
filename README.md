@@ -645,6 +645,13 @@ Then configure your storage thusly:
 			"cache_size": -100000,
 			"journal_mode": "WAL"
 		},
+		"backups": {
+			"enabled": false,
+			"dir": "data/backups",
+			"filename": "backup-[yyyy]-[mm]-[dd].db",
+			"compress": true,
+			"keep": 7
+		},
 		"keyPrefix": "",
 		"keyTemplate": ""
 	}
@@ -654,6 +661,8 @@ Then configure your storage thusly:
 The `base_dir` defaults to the current working directory, and will be created on startup if necessary.  The `filename` is the name of the SQLite DB file on disk (also created if necessary).
 
 The optional `pragmas` object allows you set one or more [SQLite Pragmas](https://www.sqlite.org/pragma.html#toc) (configuration settings) on the database at startup.  Here you can specify things such as [auto_vacuum](https://www.sqlite.org/pragma.html#pragma_auto_vacuum), [cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size) and [journal_mode](https://www.sqlite.org/pragma.html#pragma_journal_mode), among many others.
+
+The optional `backups` object allows you to configure daily backups of the SQLite database file, which happens during the [daily maintenance](#daily-maintenance) event.  Set `enabled` to `true` to enable backups, then set `dir` to the directory to hold the backups, `filename` to the destination filename (you can use date/time placeholders here), `compress` to compress the backups with gzip, and `keep` to keep the latest N backups in the dir (i.e. auto-delete the oldest ones).  Please note that the backup operation locks the database, so it will cause other storage operations to hang while it is writing to the file.
 
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the SQLite keys with a common string, to separate your application's data in a shared database situation.
 
