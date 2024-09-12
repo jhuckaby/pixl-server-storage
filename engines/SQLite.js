@@ -465,25 +465,39 @@ module.exports = Class.create({
 			} );
 		}; // compress
 		
-		// Perform the backup -- unfortunately this locks the DB, and we can't use progressive mode
-		// because of how we handle transactions "outside" of SQLite's control.
+		// Perform the backup -- as long as WAL mode is enabled, this should only acquire a shared lock on the DB
+		// allowing reads and writes to continue (albeit slowly), and NOT be included in the backup
+		// see: https://sqlite.org/forum/forumpost/95c0e12f4c
 		perf.begin('backup');
 		
-		this.db.run('VACUUM INTO $filename', { $filename: Path.resolve(file) }, function(err) {
-			perf.end('backup');
-			if (err) {
-				self.logError('backup', "SQLite backup operation failed: " + err);
-				fs.unlink(file, noop);
-				return finish();
+		var db = this.db;
+		var backup = db.backup(file);
+		backup.step(-1);
+		
+		var timer = setInterval( function() {
+			if (backup.idle) { 
+				backup.step(-1); 
 			}
 			
-			self.logDebug(6, "SQLite backup operation completed: " + file);
+			if (backup.completed) {
+				perf.end('backup');
+				clearTimeout(timer);
+				self.logDebug(6, "SQLite backup operation completed: " + file);
+				
+				// now compress or keep or done
+				if (backups.compress) compress();
+				else if (backups.keep) keep();
+				else finish();
+			}
 			
-			// now compress or keep or done
-			if (backups.compress) compress();
-			else if (backups.keep) keep();
-			else finish();
-		});
+			if (backup.failed) {
+				perf.end('backup');
+				clearTimeout(timer);
+				self.logError('backup', "SQLite backup operation failed.  Please check permissions and available disk space.");
+				fs.unlink(file, noop);
+				finish();
+			}
+		}, 10 );
 	},
 	
 	shutdown: function(callback) {
