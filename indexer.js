@@ -129,7 +129,7 @@ module.exports = Class.create({
 	_indexRecord: function(id, record, config, callback) {
 		// index record (internal)
 		var self = this;
-		this.logDebug(8, "Indexing record: " + id, record);
+		this.logDebug(8, "Indexing record: " + id);
 		
 		var state = {
 			id: id,
