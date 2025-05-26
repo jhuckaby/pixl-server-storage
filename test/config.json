@@ -69,7 +69,13 @@
 			"filename": "sqlite.db",
 			"pragmas": {
 				"auto_vacuum": 0,
-				"cache_size": -100000
+				"cache_size": -100000,
+				"journal_mode": "WAL"
+			},
+			"cache": {
+				"enabled": true,
+				"maxItems": 1000,
+				"maxBytes": 10485760
 			}
 		}
 	}
