@@ -689,6 +689,7 @@ module.exports = Class.create({
 		// run daily maintenance - delete old temp files
 		var self = this;
 		var now = Tools.timeNow(true);
+		this.logDebug(3, "Running filesystem maintenance");
 		
 		fs.readdir( this.tempDir, function(err, files) {
 			if (err) return callback();
