@@ -280,7 +280,7 @@ storage.head( 'test1', function(err, data) {
 } );
 ```
 
-Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native head API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but there is no way to retrieve the last modified date.
+Please note that as of this writing, the `Couchbase`, `Redis` and `RedisCluster` engines have no native head API, so the `head()` method has to load the entire record.  It does return the record size in to the `len` property, but the `mod` property will always be set to `1`.
 
 ## headMulti
 
