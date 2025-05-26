@@ -107,6 +107,8 @@ module.exports = Class.create({
 	
 	runMaintenance: function(callback) {
 		// run daily maintenance
+		this.logDebug(3, "Running hybrid maintenance");
+		
 		async.series([
 			this.binaryEngine.runMaintenance.bind(this.binaryEngine),
 			this.docEngine.runMaintenance.bind(this.docEngine)
