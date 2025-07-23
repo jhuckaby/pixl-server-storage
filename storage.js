@@ -169,7 +169,7 @@ module.exports = Class.create({
 		// sanity checks
 		if (!value) return callback( new Error("Record value cannot be false.") );
 		
-		var isBuffer = !!value.fill;
+		var isBuffer = Buffer.isBuffer(value);
 		if (isBuffer && !this.isBinaryKey(key)) {
 			return callback( new Error("Buffer values are only allowed with keys containing file extensions, e.g. " + key + ".bin") );
 		}

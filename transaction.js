@@ -40,7 +40,7 @@ var TransStorageFunctions = {
 		// binary keys not part of transaction system
 		if (this.isBinaryKey(key)) return this.rawStorage.put(key, value, callback);
 		if (!value) return callback( new Error("Value cannot be false.") );
-		if (value.fill) return callback( new Error("Buffers not allowed in transactions.") );
+		if (Buffer.isBuffer(value)) return callback( new Error("Buffers not allowed in transactions.") );
 		
 		this.logDebug(9, "Storing JSON Object in transaction: " + key, this.debugLevel(10) ? value : null);
 		value = JSON.stringify( value );
