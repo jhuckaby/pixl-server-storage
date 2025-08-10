@@ -393,12 +393,11 @@ module.exports = Class.create({
 		this.db.run( this.commands.delete, { $key: key }, function(err) {
 			// In sqlite3 callbacks `this` is special, and contains `changes`
 			if (!err && !this.changes) {
-				err = new Error("Not found");
+				err = new Error("Failed to delete object: " + key + ": Not found");
 				err.code = "NoSuchKey";
 			}
 			if (err) {
 				self.logError('sqlite', "Failed to delete object: " + key + ": " + err);
-				err = new Error("Failed to delete object: " + key + ": " + err);
 				return callback(err);
 			}
 			self.logDebug(9, "Delete complete: " + key);
