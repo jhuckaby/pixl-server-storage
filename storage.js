@@ -521,6 +521,15 @@ module.exports = Class.create({
 		var self = this;
 		this.logDebug(9, "Copying record: " + old_key + " to " + new_key);
 		
+		// branch here if binary keys
+		if (this.isBinaryKey(old_key) && this.isBinaryKey(new_key)) {
+			this.getStream(old_key, function(err, stream) {
+				if (err) return callback(err, null);
+				self.putStream(new_key, stream, callback);
+			} );
+			return;
+		}
+		
 		// load old key
 		this.get(old_key, function(err, data) {
 			if (err) return callback(err, null);
