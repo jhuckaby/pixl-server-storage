@@ -961,13 +961,13 @@ module.exports = Class.create({
 	
 	filterWords_markdown: function(value) {
 		// filter out markdown syntax and html tags, entities
-		value = value.replace(/\n\`\`\`(.+?)\`\`\`/g, ''); // fenced code
+		value = value.replace(/```[\s\S]*?```/g, ''); // fenced code
 		return this.filterWords_html(value);
 	},
 	
 	filterWords_html: function(value) {
 		// filter out html tags, entities
-		return he.decode( value.replace(/<.+?>/g, '') );
+		return he.decode( value.replace(/<[^>]*>/g, '') );
 	},
 	
 	filterWords_alphanum: function(value) {
