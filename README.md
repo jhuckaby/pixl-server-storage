@@ -54,6 +54,7 @@ Here is the table of contents for this current document:
 		+ [S3 Key Prefix](#s3-key-prefix)
 		+ [S3 Key Template](#s3-key-template)
 		+ [S3 Cache](#s3-cache)
+		+ [S3 Compatible Services](#s3-compatible-services)
 	* [Couchbase](#couchbase)
 	* [Redis](#redis)
 		+ [RedisCluster](#rediscluster)
@@ -517,6 +518,60 @@ The cache will automatically expire objects in LRU fashion when either of the li
 It is recommended that you set the `maxItems` and `maxBytes` high enough to allow new data written to live for *at least* several seconds before getting expired out of the cache.  This depends on the overall storage throughput of your application, but 1,000 max items and 10 MB max bytes is probably fine for most use cases.
 
 Note that binary records are **not** cached, as they are generally large.  Only JSON records are cached, as they are usually much smaller and used in [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md).
+
+### S3 Compatible Services
+
+To use an S3 compatible service such as [MinIO](https://github.com/minio/minio), you'll need to add a few extra parameters to the `AWS` section:
+
+```js
+{
+	"endpoint": "http://minio:9000",
+	"endpointPrefix": false,
+	"forcePathStyle": true,
+	"hostPrefixEnabled": false
+}
+```
+
+Replace `minio:9000` with your MinIO hostname or IP address, and port number (9000 is the default).
+
+Here is a complete example with the new parameters added:
+
+```js
+{
+	"Storage": {
+		"transactions": true,
+		"trans_auto_recover": true,
+		
+		"engine": "S3",
+		"AWS": {
+			"endpoint": "http://minio:9000",
+			"endpointPrefix": false,
+			"forcePathStyle": true,
+			"hostPrefixEnabled": false,
+			"region": "us-west-1",
+			"credentials": {
+				"accessKeyId": "YOUR_MINIO_ACCESS_KEY", 
+				"secretAccessKey": "YOUR_MINIO_SECRET_KEY"
+			}
+		},
+		"S3": {
+			"connectTimeout": 5000,
+			"socketTimeout": 5000,
+			"maxAttempts": 50,
+			"keyPrefix": "",
+			"fileExtensions": true,
+			"params": {
+				"Bucket": "YOUR_MINIO_BUCKET_ID"
+			},
+			"cache": {
+				"enabled": true,
+				"maxItems": 1000,
+				"maxBytes": 10485760
+			}
+		}
+	}
+}
+```
 
 ## Couchbase
 
