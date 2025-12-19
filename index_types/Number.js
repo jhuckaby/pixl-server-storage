@@ -83,6 +83,23 @@ module.exports = Class.create({
 	
 	filterWords_number: function(value) {
 		// filter number queries
+		
+		// support simple date-to-epoch conversion here
+		if (value.match(/^(\d{4})\D+(\d{2})\D+(\d{2})$/)) {
+			var dargs = Tools.getDateArgs( value + " 00:00:00" );
+			value = '' + (dargs.epoch || 0);
+		}
+		else if (value.match(/^(today)$/)) {
+			// normalize "today" to midnight today (server timezone)
+			var midnight = Tools.normalizeTime( Tools.timeNow(true), { hour:0, min:0, sec:0 } );
+			var dargs = Tools.getDateArgs( midnight );
+			value = '' + (dargs.epoch || 0);
+		}
+		else if (value.match(/^(now)$/)) {
+			var dargs = Tools.getDateArgs( Tools.timeNow(true) );
+			value = '' + (dargs.epoch || 0);
+		}
+		
 		value = value.replace(/\.\d+$/, '').replace(/[^\d\-]+/g, '').replace(/\-/, 'N');
 		return value;
 	},
