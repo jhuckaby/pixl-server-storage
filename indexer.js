@@ -1105,6 +1105,13 @@ module.exports = Class.create({
 							// range between two values (inclusive)
 							var low = RegExp.$1;
 							var high = RegExp.$2;
+							
+							var lwords = this.getWordList(low, def, config);
+							if (lwords.length) low = lwords[0];
+							
+							var hwords = this.getWordList(high, def, config);
+							if (hwords.length) high = hwords[0];
+							
 							crit = {
 								mode: 'and', 
 								criteria: [
