@@ -54,9 +54,9 @@ Choose your `trans_dir` carefully.  This directory is used to store temporary fi
 |----------------|----------------|
 | Local Filesystem | Make sure your `trans_dir` is on the *same mount* as your local storage data, to ensure speed and safety.  This is the default. |
 | NFS Filesystem | Make sure your `trans_dir` is **NOT** on the NFS mount, but instead points to a local fast SSD mount. |
-| S3 or Couchbase | Make sure your `trans_dir` points to a local fast SSD mount. |
+| S3 | Make sure your `trans_dir` points to a local fast SSD mount. |
 
-So basically, if you plan to use the [Filesystem](../README.md#local-filesystem) engine with a local (i.e. non-network) disk, you don't need to make any adjustments.  The default setting for `trans_dir` is a subdirectory just inside your `base_dir` engine property.  But if you are going with a networked (i.e. NFS) filesystem, or you're going to use [S3](../README.md#amazon-s3) or [Couchbase](../README.md#couchbase), then you should set `trans_dir` to a local filesystem path on a fast disk (ideally SSD).
+So basically, if you plan to use the [Filesystem](../README.md#local-filesystem) engine with a local (i.e. non-network) disk, you don't need to make any adjustments.  The default setting for `trans_dir` is a subdirectory just inside your `base_dir` engine property.  But if you are going with a networked (i.e. NFS) filesystem, or you're going to use [S3](../README.md#amazon-s3), then you should set `trans_dir` to a local filesystem path on a fast disk (ideally SSD).
 
 **Pro-Tip:** When using transactions with the Amazon S3 engine, consider setting the `maxAttempts` property in your `S3` configuration object, so the AWS client library makes multiple attempts before failing an operation.  Network hiccups can happen.
 
@@ -180,7 +180,7 @@ storage.begin( 'some_path', function(err, trans) {
 
 It should be noted that if you receive an error from a [commit()](API.md#commit) call, it is *vital* that you call [abort()](API.md#abort) to undo whatever operations may have already executed.  A commit error is typically very bad, and your storage system will be in an unknown state.  Only by calling [abort()](API.md#abort) can you restore it to before the transaction started.
 
-If the [abort()](API.md#abort) also fails, then the database raises a fatal error and exits immediately.  See [Emergency Shutdown](#emergency-shutdown) below for details about what this means, and [Recovery](#recovery) for how to get back up and running.  Examples of fatal errors include your disk running completely out of space, or a major network failure when using NFS, S3 or Couchbase.
+If the [abort()](API.md#abort) also fails, then the database raises a fatal error and exits immediately.  See [Emergency Shutdown](#emergency-shutdown) below for details about what this means, and [Recovery](#recovery) for how to get back up and running.  Examples of fatal errors include your disk running completely out of space, or a major network failure when using NFS, or S3.
 
 ## Automatic API Wrappers
 
@@ -215,7 +215,7 @@ You can still use these methods inside of your own transaction, and they will "j
 
 ## Emergency Shutdown
 
-If a fatal storage error is encountered in the middle of an abort (rollback) operation, the database immediately shuts itself down.  This is because your data will be in an undefined state, stuck in the middle of partial transaction.  This should be a very rare event, only occurring when the underlying storage completely fails to write records.  Examples include a disk running out of space (local or NFS filesystem), or a hard network failure with S3 or Couchbase.  When this happens, the Node.js process will exit (by default), and will need to be recovered (see [Recovery](#recovery) below).
+If a fatal storage error is encountered in the middle of an abort (rollback) operation, the database immediately shuts itself down.  This is because your data will be in an undefined state, stuck in the middle of partial transaction.  This should be a very rare event, only occurring when the underlying storage completely fails to write records.  Examples include a disk running out of space (local or NFS filesystem), or a hard network failure with S3.  When this happens, the Node.js process will exit (by default), and will need to be recovered (see [Recovery](#recovery) below).
 
 Upon fatal error, your application can hook the event and provide its own emergency shutdown procedure.  Simply add an event listener on the storage object for the `fatal` event.  It will be passed an `Error` object describing the actual error that occurred.  It is then up to your code to call `process.exit()`.  Example:
 
@@ -271,7 +271,7 @@ The transaction system is implemented by temporarily "branching" the storage sys
 
 ### Temporary Directory
 
-A local temporary directory on disk is always used for transactions, regardless of the storage engine.  Even if you are using S3 or Couchbase for primary storage, transactions still use temp files on disk before and during commit.  This is to insure both speed and data safety.  You can control where the temporary files live by setting the `trans_dir` configuration property.
+A local temporary directory on disk is always used for transactions, regardless of the storage engine.  Even if you are using S3 for primary storage, transactions still use temp files on disk before and during commit.  This is to insure both speed and data safety.  You can control where the temporary files live by setting the `trans_dir` configuration property.
 
 Inside the temp directory, two subdirectories are created: `data` and `logs`.  The `data` directory is used to hold all modified records during a transaction (before commit).  Each is named using a unique transaction ID (see below) and a hash of the original key.  This ensures no files will collide with each other, even with many concurrent transactions.  The `logs` directory is for rollback logs.  When a transaction is committed, the original state of the mutated records is written to the log, so it can be applied in reverse during a recovery event.
 
@@ -409,7 +409,7 @@ So here is the commit process, step by step:
 
 The idea here is that no matter where a crash or sudden power loss occurs during the commit process, a full rollback can always be achieved.  The actual changes on the main storage system are only made once the rollback log is fully written and flushed to disk, and the log itself is only deleted when the record changes are also made (and flushed, where possible).
 
-This is not a 100% guarantee of data durability, as corruption can happen during a crash or power loss.  The rollback log may only be partially written, or corrupted in some way where a replay is not possible.  This can happen because fsync calls are not guaranteed on all operating systems, filesystems or disk media (e.g. certain SSDs), and really all bets are off if you are using S3 or Couchbase for primary storage.
+This is not a 100% guarantee of data durability, as corruption can happen during a crash or power loss.  The rollback log may only be partially written, or corrupted in some way where a replay is not possible.  This can happen because fsync calls are not guaranteed on all operating systems, filesystems or disk media (e.g. certain SSDs), and really all bets are off if you are using S3 for primary storage.
 
 Basically it's all just a big crap shoot, but we're trying to cover as many error cases as possible.
 

@@ -1,12 +1,12 @@
 # Overview
 
-This module is a component for use in [pixl-server](https://www.github.com/jhuckaby/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server), [Redis](https://redis.io/), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
+This module is a component for use in [pixl-server](https://www.github.com/jhuckaby/pixl-server).  It implements a simple key/value storage system that can use multiple back-ends, such as [Amazon S3](https://aws.amazon.com/s3/), [Redis](https://redis.io/), or a local filesystem.  It introduces the concept of a "chunked linked list", which supports extremely fast push, pop, shift, unshift, and random reads/writes.  Also provided is a fast hash table implementation with key iteration, a transaction system, and an indexing and search system.
 
 ## Features at a Glance
 
 * Uses very little memory in most cases.
 * Store JSON or binary (raw) data records.
-* Supports multiple back-ends including Amazon S3, Couchbase, Redis, and local filesystem.
+* Supports multiple back-ends including Amazon S3, Redis, and local filesystem.
 * Linked lists with very fast push, pop, shift, unshift, and random reads/writes.
 * Hash tables with key iterators, and very fast reads / writes.
 * Advisory locking system with shared and exclusive locks.
@@ -55,7 +55,6 @@ Here is the table of contents for this current document:
 		+ [S3 Key Template](#s3-key-template)
 		+ [S3 Cache](#s3-cache)
 		+ [S3 Compatible Services](#s3-compatible-services)
-	* [Couchbase](#couchbase)
 	* [Redis](#redis)
 		+ [RedisCluster](#rediscluster)
 	* [SQLite](#sqlite)
@@ -267,7 +266,7 @@ The `debug` property is only used when using [Standalone Mode](#standalone-mode)
 
 # Engines
 
-The storage system can be backed by a number of different "engines", which actually perform the reads and writes.  A simple local filesystem implementation is included, as well as modules for Amazon S3, Couchbase and Redis.  Each one requires a bit of extra configuration.
+The storage system can be backed by a number of different "engines", which actually perform the reads and writes.  A simple local filesystem implementation is included, as well as modules for Amazon S3 and Redis.  Each one requires a bit of extra configuration.
 
 ## Local Filesystem
 
@@ -573,44 +572,6 @@ Here is a complete example with the new parameters added:
 }
 ```
 
-## Couchbase
-
-Please note that as of this writing (April 2022), pixl-server-storage only supports Couchbase Client v2, so you need to force install version `2.6.12` (see instructions below).  Work is underway to support the v3 API, which has many breaking changes.
-
-If you want to use [Couchbase](http://www.couchbase.com/nosql-databases/couchbase-server) as a backing store, here is how to do so.  First, you need to manually install the [couchbase](https://www.npmjs.com/package/couchbase) module into your app, and it **must be v2**:
-
-```sh
-npm install --save couchbase@2.6.12
-```
-
-Then configure your storage thusly:
-
-```json
-{
-	"engine": "Couchbase",
-	"Couchbase": {
-		"connectString": "couchbase://127.0.0.1",
-		"bucket": "default",
-		"username": "",
-		"password": "",
-		"serialize": false,
-		"keyPrefix": ""
-	}
-}
-```
-
-Set the `connectString` for your own Couchbase server setup.  You can embed a username and password into the string if they are required to connect (this is different from the bucket password), and use `couchbases://` for SSL, if desired.
-
-The `bucket` property should be set to the bucket name.  If you don't know this then `default` is probably correct.  The `password` property is the bucket password, and may or may not be required, depending on your Couchbase server setup.
-
-The `serialize` property, when set to `true`, will cause all object values to be serialized to JSON before storing, and they will also be parsed from JSON when fetching.  When set to `false` (the default), this is left up to Couchbase to handle.
-
-The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Couchbase keys with a common string, to separate your application's data in a shared bucket situation.
-
-The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
-
-Note that for Couchbase Server v5.0+ (Couchbase Node SDK 2.5+), you will have to supply both a `username` and `password` for a valid user created in the Couchbase UI.  Prior to v5+ you could omit the `username` and only specify a `password`, or no password at all if your bucket has no authentication.
-
 ## Redis
 
 If you want to use [Redis](https://redis.io/) as a backing store, here is how to do so.  First, you need to manually install the [ioredis](https://www.npmjs.com/package/ioredis) module into your app:
@@ -852,8 +813,6 @@ storage.head( 'test1', function(err, data) {
 } );
 ```
 
-Note that the [Couchbase](#couchbase) engine does not support `head`, but the [Amazon S3](#amazon-s3) and [Local Filesystem](#local-filesystem) engines both do.
-
 You can fetch multiple records at once by calling `getMulti()` and passing in array of keys.  Example:
 
 ```js
@@ -951,7 +910,7 @@ storage.getStream( 'test1.gif', function(err, readStream) {
 } );
 ```
 
-Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Couchbase and Redis APIs do not support streams, so they are currently simulated in those engines.  Streams *are* supported natively in both the Filesystem and Amazon S3 engines.
+Please note that not all the storage engines support streams natively, so the content may actually be loaded into RAM in the background.  Namely, as of this writing, the Redis APIs do not support streams, so they are currently simulated in those engines.  Streams *are* supported natively in both the Filesystem and Amazon S3 engines.
 
 # Expiring Data
 
@@ -1322,7 +1281,7 @@ If you install the [pixl-unit](https://www.github.com/jhuckaby/pixl-unit) module
 pixl-unit test/test.js --verbose
 ```
 
-This also allows you to specify an alternate test configuration file via the `--configFile` option.  Using this you can load your own test config, which may use a different engine (e.g. S3, Couchbase, etc.):
+This also allows you to specify an alternate test configuration file via the `--configFile` option.  Using this you can load your own test config, which may use a different engine (e.g. S3, etc.):
 
 ```sh
 pixl-unit test/test.js --configFile /path/to/my/config.json
