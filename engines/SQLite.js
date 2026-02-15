@@ -1,16 +1,15 @@
 // SQLite Storage Plugin
-// Copyright (c) 2023 Joseph Huckaby
+// Copyright (c) 2023 - 2026 Joseph Huckaby
 // Released under the MIT License
 
-// Requires the 'sqlite3' module from npm
-// npm install --save sqlite3
+// Requires the 'better-sqlite3' module
 
 const fs = require('fs');
 const Path = require('path');
 const zlib = require('zlib');
 const Class = require("pixl-class");
 const Component = require("pixl-server/component");
-const SQLite3 = require('sqlite3');
+const BetterSqlite3 = require('better-sqlite3');
 const Tools = require("pixl-tools");
 const Perf = require("pixl-perf");
 const Cache = require("pixl-cache");
@@ -81,36 +80,34 @@ module.exports = Class.create({
 		}
 		
 		var db_file = Path.join( this.baseDir, sql_config.filename );
-		this.logDebug(3, "Opening database file: " + db_file);
+		this.logDebug(3, "Opening database file: " + db_file, sql_config.pragmas || {});
 		
-		async.series([
-			function(callback) {
-				self.db = new SQLite3.Database( db_file, callback );
-			},
-			function(callback) {
-				// optionally set pragmas on the db
-				if (!sql_config.pragmas) return process.nextTick(callback);
-				async.eachSeries( Object.keys(sql_config.pragmas),
-					function(key, callback) {
-						var value = sql_config.pragmas[key];
-						self.db.run(`PRAGMA ${key} = ${value};`, callback);
-					},
-					callback
-				); // eachSeries
-			},
-			function(callback) {
-				// create our table if necessary
-				self.db.run( 'CREATE TABLE IF NOT EXISTS items( key TEXT PRIMARY KEY, value BLOB, modified INTEGER )', callback );
-			},
-		], 
-		function(err) {
-			if (err) {
-				self.logError('sqlite', "FATAL ERROR: Database setup failed: " + err);
-				return callback(err);
+		try {
+			// open sync connection
+			this.db = new BetterSqlite3(db_file);
+			
+			// optionally set pragmas on the db
+			if (sql_config.pragmas) {
+				Object.keys(sql_config.pragmas).forEach(function(key) {
+					var value = sql_config.pragmas[key];
+					// value may be string (e.g. WAL) or number
+					self.db.pragma(`${key} = ${value}`);
+				});
 			}
+			
+			// create our table if necessary
+			this.db.prepare('CREATE TABLE IF NOT EXISTS items( key TEXT PRIMARY KEY, value BLOB, modified INTEGER )').run();
+		}
+		catch (err) {
+			this.logError('sqlite', "FATAL ERROR: Database setup failed: " + err);
+			return callback(err);
+		}
+		
+		// behave asynchronously for API compatibility
+		process.nextTick(function() {
 			self.logDebug(3, "Setup complete");
 			callback();
-		}); // async.series
+		});
 	},
 	
 	prepKey: function(key) {
@@ -148,20 +145,22 @@ module.exports = Class.create({
 			value = Buffer.from( JSON.stringify( value ) );
 		}
 		
-		this.db.run( this.commands.put, { $key: key, $value: value, $now: now }, function(err) {
-			if (err) {
+		process.nextTick(function() {
+			try {
+				self.db.prepare(self.commands.put).run({ key: key, value: value, now: now });
+				self.logDebug(9, "Store complete: " + key);
+				// possibly cache in LRU
+				if (self.cache && !is_binary) {
+					self.cache.set( key, value, { date: Tools.timeNow(true) } );
+				}
+				if (callback) callback(null);
+			}
+			catch (err) {
 				err.message = "Failed to store object: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
+				if (callback) callback(err);
 			}
-			else self.logDebug(9, "Store complete: " + key);
-			
-			// possibly cache in LRU
-			if (self.cache && !is_binary) {
-				self.cache.set( key, value, { date: Tools.timeNow(true) } );
-			}
-			
-			if (callback) callback(err);
-		} ); // put
+		});
 	},
 	
 	putStream: function(key, inp, callback) {
@@ -200,24 +199,22 @@ module.exports = Class.create({
 			return;
 		} // cache
 		
-		this.db.get( this.commands.head, { $key: key }, function(err, row) {
-			if (err) {
-				// an actual error
+		process.nextTick(function() {
+			try {
+				var row = self.db.prepare(self.commands.head).get({ key: key });
+				if (!row) {
+					var err = new Error("Failed to head key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					return callback(err, null);
+				}
+				callback(null, { mod: row.modified, len: row['length(value)'] });
+			}
+			catch (err) {
 				err.message = "Failed to head key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
-			else if (!row) {
-				// record not found
-				// always use "NoSuchKey" in error code
-				var err = new Error("Failed to head key: " + key + ": Not found");
-				err.code = "NoSuchKey";
-				callback( err, null );
-			}
-			else {
-				callback( null, { mod: row.modified, len: row['length(value)'] } );
-			}
-		}); // head
+		});
 	},
 	
 	get: function(key, callback) {
@@ -247,44 +244,36 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching SQLite Object: " + key);
 		
-		this.db.get( this.commands.get, { $key: key }, function(err, row) {
-			if (err) {
-				// an actual error
+		process.nextTick(function() {
+			try {
+				var row = self.db.prepare(self.commands.get).get({ key: key });
+				if (!row) {
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					return callback(err, null);
+				}
+				if (is_binary) {
+					self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
+					return callback(null, row.value);
+				}
+				if (self.cache) {
+					self.cache.set( key, row.value, { date: Tools.timeNow(true) } );
+				}
+				var json = null;
+				try { json = JSON.parse( row.value.toString() ); }
+				catch (err) {
+					self.logError('sqlite', "Failed to parse JSON record: " + key + ": " + err);
+					return callback(err, null);
+				}
+				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? json : null);
+				callback(null, json);
+			}
+			catch (err) {
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
-			else if (!row) {
-				// record not found
-				// always use "NoSuchKey" in error code
-				var err = new Error("Failed to fetch key: " + key + ": Not found");
-				err.code = "NoSuchKey";
-				callback( err, null );
-			}
-			else {
-				// success
-				if (is_binary) {
-					self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
-					callback( null, row.value );
-				}
-				else {
-					// possibly cache in LRU
-					if (self.cache) {
-						self.cache.set( key, row.value, { date: Tools.timeNow(true) } );
-					}
-					
-					var json = null;
-					try { json = JSON.parse( row.value.toString() ); }
-					catch (err) {
-						self.logError('sqlite', "Failed to parse JSON record: " + key + ": " + err);
-						callback( err, null );
-						return;
-					}
-					self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? json : null);
-					callback( null, json );
-				}
-			}
-		}); // get
+		});
 	},
 	
 	getBuffer: function(key, callback) {
@@ -294,26 +283,23 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Fetching SQLite Object: " + key);
 		
-		this.db.get( this.commands.get, { $key: key }, function(err, row) {
-			if (err) {
-				// an actual error
+		process.nextTick(function() {
+			try {
+				var row = self.db.prepare(self.commands.get).get({ key: key });
+				if (!row) {
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					return callback(err, null);
+				}
+				self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
+				callback(null, row.value);
+			}
+			catch (err) {
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
-			else if (!row) {
-				// record not found
-				// always use "NoSuchKey" in error code
-				var err = new Error("Failed to fetch key: " + key + ": Not found");
-				err.code = "NoSuchKey";
-				callback( err, null );
-			}
-			else {
-				// success
-				self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
-				callback( null, row.value );
-			}
-		}); // get
+		});
 	},
 	
 	getStream: function(key, callback) {
@@ -390,25 +376,25 @@ module.exports = Class.create({
 		
 		this.logDebug(9, "Deleting SQLite Object: " + key);
 		
-		this.db.run( this.commands.delete, { $key: key }, function(err) {
-			// In sqlite3 callbacks `this` is special, and contains `changes`
-			if (!err && !this.changes) {
-				err = new Error("Failed to delete object: " + key + ": Not found");
-				err.code = "NoSuchKey";
+		process.nextTick(function() {
+			try {
+				var info = self.db.prepare(self.commands.delete).run({ key: key });
+				if (!info.changes) {
+					var err = new Error("Failed to delete object: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					return callback(err);
+				}
+				self.logDebug(9, "Delete complete: " + key);
+				if (self.cache && self.cache.has(key)) {
+					self.cache.delete(key);
+				}
+				callback();
 			}
-			if (err) {
+			catch (err) {
 				self.logError('sqlite', "Failed to delete object: " + key + ": " + err);
-				return callback(err);
+				callback(err);
 			}
-			self.logDebug(9, "Delete complete: " + key);
-			
-			// possibly delete from LRU cache as well
-			if (self.cache && self.cache.has(key)) {
-				self.cache.delete(key);
-			}
-			
-			callback();
-		}); // delete
+		});
 	},
 	
 	runMaintenance: function(callback) {
@@ -528,39 +514,30 @@ module.exports = Class.create({
 			} );
 		}; // compress
 		
-		// Perform the backup -- as long as WAL mode is enabled, this should only acquire a shared lock on the DB
-		// allowing reads and writes to continue (albeit slowly), and NOT be included in the backup
-		// see: https://sqlite.org/forum/forumpost/95c0e12f4c
+		// Perform the backup using better-sqlite3's async backup API
+		// As long as WAL mode is enabled, this should only acquire a shared lock
 		perf.begin('backup');
-		
 		var db = this.db;
-		var backup = db.backup(file);
-		backup.step(-1);
-		
-		var timer = setInterval( function() {
-			if (backup.idle) { 
-				backup.step(-1); 
+		db.backup(file, {
+			progress: function(info) {
+				// transfer pages per tick (tuneable)
+				return 100;
 			}
-			
-			if (backup.completed) {
-				perf.end('backup');
-				clearTimeout(timer);
-				self.logDebug(6, "SQLite backup operation completed: " + file);
-				
-				// now compress or keep or done
-				if (backups.compress) compress();
-				else if (backups.keep) keep();
-				else finish();
-			}
-			
-			if (backup.failed) {
-				perf.end('backup');
-				clearTimeout(timer);
-				self.logError('backup', "SQLite backup operation failed.  Please check permissions and available disk space.");
-				fs.unlink(file, noop);
-				finish();
-			}
-		}, 10 );
+		})
+		.then(function() {
+			perf.end('backup');
+			self.logDebug(6, "SQLite backup operation completed: " + file);
+			// now compress or keep or done
+			if (backups.compress) compress();
+			else if (backups.keep) keep();
+			else finish();
+		})
+		.catch(function(err) {
+			perf.end('backup');
+			self.logError('backup', "SQLite backup operation failed.  Please check permissions and available disk space. " + err);
+			fs.unlink(file, noop);
+			finish();
+		});
 	},
 	
 	shutdown: function(callback) {
@@ -569,15 +546,15 @@ module.exports = Class.create({
 		this.logDebug(2, "Shutting down SQLite");
 		
 		if (this.db) {
-			// close db
-			self.db.close( function(err) {
-				if (err) self.logError('sqlite', "Failed to shutdown database cleanly: " + err);
-				else self.logDebug(3, "Shutdown complete");
-				callback();
-			} );
-			self.db = null;
-			self.commands = null;
+			try { this.db.close(); }
+			catch (err) { this.logError('sqlite', "Failed to shutdown database cleanly: " + err); }
+			this.db = null;
+			this.commands = null;
 		}
+		process.nextTick(function() {
+			self.logDebug(3, "Shutdown complete");
+			callback();
+		});
 	}
 	
 });

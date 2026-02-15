@@ -642,10 +642,10 @@ The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3
 
 ## SQLite
 
-If you want to use [SQLite](https://sqlite.com/) as a backing store, here is how to do so.  First, you need to manually install the [sqlite3](https://www.npmjs.com/package/sqlite3) module into your app:
+If you want to use [SQLite](https://sqlite.com/) as a backing store, here is how to do so.  First, you need to manually install the [better-sqlite3](https://www.npmjs.com/package/better-sqlite3) module into your app:
 
 ```sh
-npm install --save sqlite3
+npm install --save better-sqlite3
 ```
 
 Then configure your storage thusly:
@@ -1291,7 +1291,7 @@ pixl-unit test/test.js --configFile /path/to/my/config.json
 
 **The MIT License (MIT)**
 
-Copyright (c) 2015 - 2018 Joseph Huckaby.
+Copyright (c) 2015 - 2026 Joseph Huckaby.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
