@@ -148,18 +148,19 @@ module.exports = Class.create({
 		process.nextTick(function() {
 			try {
 				self.db.prepare(self.commands.put).run({ key: key, value: value, now: now });
-				self.logDebug(9, "Store complete: " + key);
-				// possibly cache in LRU
-				if (self.cache && !is_binary) {
-					self.cache.set( key, value, { date: Tools.timeNow(true) } );
-				}
-				if (callback) callback(null);
 			}
 			catch (err) {
 				err.message = "Failed to store object: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				if (callback) callback(err);
 			}
+			
+			self.logDebug(9, "Store complete: " + key);
+			// possibly cache in LRU
+			if (self.cache && !is_binary) {
+				self.cache.set( key, value, { date: Tools.timeNow(true) } );
+			}
+			if (callback) callback(null);
 		});
 	},
 	
@@ -200,20 +201,22 @@ module.exports = Class.create({
 		} // cache
 		
 		process.nextTick(function() {
+			var row = null;
 			try {
-				var row = self.db.prepare(self.commands.head).get({ key: key });
-				if (!row) {
-					var err = new Error("Failed to head key: " + key + ": Not found");
-					err.code = "NoSuchKey";
-					return callback(err, null);
-				}
-				callback(null, { mod: row.modified, len: row['length(value)'] });
+				row = self.db.prepare(self.commands.head).get({ key: key });
 			}
 			catch (err) {
 				err.message = "Failed to head key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
+			
+			if (!row) {
+				var err = new Error("Failed to head key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback(err, null);
+			}
+			callback(null, { mod: row.modified, len: row['length(value)'] });
 		});
 	},
 	
@@ -245,34 +248,36 @@ module.exports = Class.create({
 		this.logDebug(9, "Fetching SQLite Object: " + key);
 		
 		process.nextTick(function() {
+			var row = null;
 			try {
-				var row = self.db.prepare(self.commands.get).get({ key: key });
-				if (!row) {
-					var err = new Error("Failed to fetch key: " + key + ": Not found");
-					err.code = "NoSuchKey";
-					return callback(err, null);
-				}
-				if (is_binary) {
-					self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
-					return callback(null, row.value);
-				}
-				if (self.cache) {
-					self.cache.set( key, row.value, { date: Tools.timeNow(true) } );
-				}
-				var json = null;
-				try { json = JSON.parse( row.value.toString() ); }
-				catch (err) {
-					self.logError('sqlite', "Failed to parse JSON record: " + key + ": " + err);
-					return callback(err, null);
-				}
-				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? json : null);
-				callback(null, json);
+				row = self.db.prepare(self.commands.get).get({ key: key });
 			}
 			catch (err) {
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
+			
+			if (!row) {
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback(err, null);
+			}
+			if (is_binary) {
+				self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
+				return callback(null, row.value);
+			}
+			if (self.cache) {
+				self.cache.set( key, row.value, { date: Tools.timeNow(true) } );
+			}
+			var json = null;
+			try { json = JSON.parse( row.value.toString() ); }
+			catch (err) {
+				self.logError('sqlite', "Failed to parse JSON record: " + key + ": " + err);
+				return callback(err, null);
+			}
+			self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? json : null);
+			callback(null, json);
 		});
 	},
 	
@@ -284,21 +289,23 @@ module.exports = Class.create({
 		this.logDebug(9, "Fetching SQLite Object: " + key);
 		
 		process.nextTick(function() {
+			var row = null;
 			try {
-				var row = self.db.prepare(self.commands.get).get({ key: key });
-				if (!row) {
-					var err = new Error("Failed to fetch key: " + key + ": Not found");
-					err.code = "NoSuchKey";
-					return callback(err, null);
-				}
-				self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
-				callback(null, row.value);
+				row = self.db.prepare(self.commands.get).get({ key: key });
 			}
 			catch (err) {
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
 			}
+			
+			if (!row) {
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback(err, null);
+			}
+			self.logDebug(9, "Binary fetch complete: " + key, '' + row.value.length + ' bytes');
+			callback(null, row.value);
 		});
 	},
 	
@@ -377,23 +384,25 @@ module.exports = Class.create({
 		this.logDebug(9, "Deleting SQLite Object: " + key);
 		
 		process.nextTick(function() {
+			var info = null;
 			try {
-				var info = self.db.prepare(self.commands.delete).run({ key: key });
-				if (!info.changes) {
-					var err = new Error("Failed to delete object: " + key + ": Not found");
-					err.code = "NoSuchKey";
-					return callback(err);
-				}
-				self.logDebug(9, "Delete complete: " + key);
-				if (self.cache && self.cache.has(key)) {
-					self.cache.delete(key);
-				}
-				callback();
+				info = self.db.prepare(self.commands.delete).run({ key: key });
 			}
 			catch (err) {
 				self.logError('sqlite', "Failed to delete object: " + key + ": " + err);
 				callback(err);
 			}
+			
+			if (!info.changes) {
+				var err = new Error("Failed to delete object: " + key + ": Not found");
+				err.code = "NoSuchKey";
+				return callback(err);
+			}
+			self.logDebug(9, "Delete complete: " + key);
+			if (self.cache && self.cache.has(key)) {
+				self.cache.delete(key);
+			}
+			callback();
 		});
 	},
 	
