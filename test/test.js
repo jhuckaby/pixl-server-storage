@@ -51,6 +51,7 @@ module.exports = {
 			
 			// override Filesystem base dir to go somewhere more sane
 			if (storage_config.Filesystem) storage_config.Filesystem.base_dir = base_data_dir;
+			if (storage_config.SQLite) storage_config.SQLite.base_dir = base_data_dir;
 		});
 		
 		// delete old unit test log
@@ -58,6 +59,7 @@ module.exports = {
 			// startup mock server
 			server.startup( function() {
 				// startup complete
+				server.logger.debug(9, "BASE DIR: " + base_data_dir);
 				
 				// write log in sync mode, for troubleshooting
 				server.logger.set('sync', true);
@@ -89,6 +91,16 @@ module.exports = {
 				
 				// finally add indexer tests
 				self.tests = self.tests.concat( indexerTests.tests );
+				
+				// log memory usage at end
+				self.tests.push( function(test) {
+					if (global.gc) { global.gc(); global.gc(); }
+					test.ok( true );
+					setTimeout( function() { 
+						self.storage.logDebug(9, "MEMORY USAGE: " + Tools.getTextFromBytes( process.memoryUsage.rss() ), process.memoryUsage() );
+						test.done(); 
+					}, 1 );
+				} );
 				
 				// startup complete
 				// delay this by 1ms so the log is in the correct order (pre-start is async)
