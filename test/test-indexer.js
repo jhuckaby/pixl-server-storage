@@ -9,8 +9,11 @@ var cp = require('child_process');
 var async = require('async');
 var Tools = require('pixl-tools');
 
+var sample_tickets = null;
+var fixtures = null;
+
 var sample_data = require('./sample-data.json');
-var sample_tickets = sample_data.Ticket;
+var orig_sample_tickets = sample_data.Ticket;
 
 var index_config = {
 	base_path: "/index/ontrack",
@@ -50,7 +53,7 @@ var index_config = {
 	remove_words: ["the","of","and","a","to","in","is","you","that","it","he","was","for","on","are","as","with","his","they","I","at","be","this","have","from","or","one","had","by","word","but","not","what","all","were","we","when","your","can","said","there","use","an","each","which","she","do","how","their","if","will","up","other","about","out","many","then","them","these","so","some","her","would","make","like","him","into","time","has","look","two","more","write","go","see","number","no","way","could","people","my","than","first","water","been","call","who","oil","its","now","find","long","down","day","did","get","come","made","may","part"]
 };
 
-var fixtures = {
+var orig_fixtures = {
 	searchRecordsExact2: {
 		'title:"Released to Preproduction"': { "2653": 1, "2654": 1, "2659": 1, "2662": 1, "2665": 1 },
 		'status:open title:"Released to Preproduction"': { "2653": 1, "2654": 1 },
@@ -317,6 +320,13 @@ var fixtures = {
 
 module.exports = {
 	tests: [
+		
+		function resetFixtures(test) {
+			fixtures = Tools.copyHash( orig_fixtures, true );
+			sample_tickets = Tools.copyHash( orig_sample_tickets, true );
+			test.ok( true );
+			test.done();
+		},
 	
 		// insert record
 		
