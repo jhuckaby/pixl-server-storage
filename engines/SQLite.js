@@ -153,6 +153,7 @@ module.exports = Class.create({
 				err.message = "Failed to store object: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				if (callback) callback(err);
+				return;
 			}
 			
 			self.logDebug(9, "Store complete: " + key);
@@ -208,7 +209,7 @@ module.exports = Class.create({
 			catch (err) {
 				err.message = "Failed to head key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
-				callback(err);
+				return callback(err);
 			}
 			
 			if (!row) {
@@ -256,6 +257,7 @@ module.exports = Class.create({
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
+				return;
 			}
 			
 			if (!row) {
@@ -297,6 +299,7 @@ module.exports = Class.create({
 				err.message = "Failed to fetch key: " + key + ": " + err;
 				self.logError('sqlite', '' + err);
 				callback(err);
+				return;
 			}
 			
 			if (!row) {
@@ -391,6 +394,7 @@ module.exports = Class.create({
 			catch (err) {
 				self.logError('sqlite', "Failed to delete object: " + key + ": " + err);
 				callback(err);
+				return;
 			}
 			
 			if (!info.changes) {
