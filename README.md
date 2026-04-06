@@ -396,8 +396,8 @@ To enable the filesystem cache, include a `cache` object in your `Filesystem` co
 		"base_dir": "/let/data/myserver",
 		"cache": {
 			"enabled": true,
-			"maxItems": 1000,
-			"maxBytes": 10485760
+			"maxItems": 100000,
+			"maxBytes": 104857600
 		}
 	}
 }
@@ -440,8 +440,8 @@ If you want to use [Amazon S3](http://aws.amazon.com/s3/) as a backing store, co
 		},
 		"cache": {
 			"enabled": true,
-			"maxItems": 1000,
-			"maxBytes": 10485760
+			"maxItems": 100000,
+			"maxBytes": 104857600
 		}
 	}
 }
@@ -498,8 +498,8 @@ To enable the S3 cache, include a `cache` object in your `S3` configuration with
 {
 	"cache": {
 		"enabled": true,
-		"maxItems": 1000,
-		"maxBytes": 10485760
+		"maxItems": 100000,
+		"maxBytes": 104857600
 	}
 }
 ```
@@ -564,8 +564,8 @@ Here is a complete example with the new parameters added:
 			},
 			"cache": {
 				"enabled": true,
-				"maxItems": 1000,
-				"maxBytes": 10485760
+				"maxItems": 100000,
+				"maxBytes": 104857600
 			}
 		}
 	}
@@ -668,6 +668,11 @@ Then configure your storage thusly:
 			"compress": true,
 			"keep": 7
 		},
+		"cache": {
+			"enabled": true,
+			"maxItems": 100000,
+			"maxBytes": 104857600
+		},
 		"keyPrefix": "",
 		"keyTemplate": ""
 	}
@@ -680,9 +685,60 @@ The optional `pragmas` object allows you set one or more [SQLite Pragmas](https:
 
 The optional `backups` object allows you to configure daily backups of the SQLite database file, which happens during the [daily maintenance](#daily-maintenance) event.  Set `enabled` to `true` to enable backups, then set `dir` to the directory to hold the backups, `filename` to the destination filename (you can use date/time placeholders here), `compress` to compress the backups with gzip, and `keep` to keep the latest N backups in the dir (i.e. auto-delete the oldest ones).  Please note that the backup operation locks the database, so it will cause other storage operations to hang while it is writing to the file.
 
+See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
+
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the SQLite keys with a common string, to separate your application's data in a shared database situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+## Postgres
+
+If you want to use [Postgres](https://www.postgresql.org/) as a backing store, here is how to do so.  First, you need to manually install the [pg](https://www.npmjs.com/package/pg) module into your app:
+
+```sh
+npm install --save pg
+```
+
+Then configure your storage thusly:
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"min": 0,
+		"max": 32,
+		"host": "localhost",
+		"database": "postgres",
+		"user": "postgres",
+		"password": "postgres",
+		"port": 5432,
+		"statement_timeout": 5000,
+		"query_timeout": 6000,
+		"connectionTimeoutMillis": 30000,
+		"idleTimeoutMillis": 10000,
+		"table": "items",
+		"cache": {
+			"enabled": true,
+			"maxItems": 100000,
+			"maxBytes": 104857600
+		}
+	}
+}
+```
+
+The Postgres engine uses a single table to act as the key/value store.  The table is automatically created on startup if needed:
+
+```sql
+CREATE TABLE IF NOT EXISTS items( key TEXT PRIMARY KEY, value BYTEA NOT NULL, modified BIGINT NOT NULL )
+```
+
+You can customize the table name via the `table` configuration property.  It defaults to simply `items`.
+
+[Connection Pooling](https://node-postgres.com/features/pooling) is utilized to open many simultaneous connections to greatly increase throughput.  Set the `max` property to the maximum number of concurrent connections your database can handle.  Ideally this should be set to the global [concurrency](#concurrency) setting.
+
+See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
+
+Note that pooling and caching have little effect when the database is running locally (i.e. localhost).  They offer much more benefit when the database is located remotely over some number of network hops.
 
 ## Hybrid
 
