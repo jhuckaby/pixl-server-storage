@@ -149,7 +149,7 @@ module.exports = Class.create({
 		}
 		else {
 			this.logDebug(9, "Storing S3 JSON Object: " + key, this.debugLevel(10) ? params.Body : null);
-			params.Body = this.pretty ? JSON.stringify( params.Body, null, "\t" ) : JSON.stringify( params.Body );
+			params.Body = Buffer.from( this.pretty ? JSON.stringify( params.Body, null, "\t" ) : JSON.stringify( params.Body ) );
 			params.ContentType = 'application/json';
 		}
 		
@@ -257,13 +257,22 @@ module.exports = Class.create({
 		if (this.cache && this.cache.has(orig_key)) {
 			var item = this.cache.getMeta(orig_key);
 			
-			process.nextTick( function() {
-				self.logDebug(9, "Cached head complete: " + orig_key);
-				callback( null, {
-					mod: item.date,
-					len: item.value.length
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to head key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err );
 				} );
-			} );
+			}
+			else {
+				process.nextTick( function() {
+					self.logDebug(9, "Cached head complete: " + orig_key);
+					callback( null, {
+						mod: item.date,
+						len: item.value.length
+					} );
+				} );
+			}
 			return;
 		} // cache
 		
@@ -288,6 +297,11 @@ module.exports = Class.create({
 					// always include "Not found" in error message
 					err = new Error("Failed to head key: " + key + ": Not found");
 					err.code = "NoSuchKey";
+
+					if (self.cache && !self.storage.isBinaryKey(orig_key)) {
+						// store 'empty' stub in cache
+						self.cache.set( orig_key, Buffer.alloc(0), { date: 0 } );
+					}
 				}
 				else if (err.name == 'SlowDown') {
 					// special behavior for SlowDown errors
@@ -315,19 +329,29 @@ module.exports = Class.create({
 		
 		// check cache first
 		if (this.cache && !is_binary && this.cache.has(orig_key)) {
-			var data = this.cache.get(orig_key);
+			var item = this.cache.getMeta(orig_key);
 			
-			process.nextTick( function() {	
-				try { data = JSON.parse( data ); }
-				catch (e) {
-					self.logError('file', "Failed to parse JSON record: " + orig_key + ": " + e);
-					callback( e, null );
-					return;
-				}
-				self.logDebug(9, "Cached JSON fetch complete: " + orig_key, self.debugLevel(10) ? data : null);
-				
-				callback( null, data );
-			} );
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err );
+				} );
+			}
+			else {
+				process.nextTick( function() {
+					var data = null;
+					try { data = JSON.parse( item.value.toString() ); }
+					catch (e) {
+						self.logError('file', "Failed to parse JSON record: " + orig_key + ": " + e);
+						callback( e, null );
+						return;
+					}
+					self.logDebug(9, "Cached JSON fetch complete: " + orig_key, self.debugLevel(10) ? data : null);
+
+					callback( null, data );
+				} );
+			}
 			return;
 		} // cache
 		
@@ -350,14 +374,12 @@ module.exports = Class.create({
 						self.logDebug(9, "Binary fetch complete: " + key, '' + body.length + ' bytes');
 					}
 					else {
-						body = body.toString();
-						
 						// possibly cache in LRU
 						if (self.cache) {
 							self.cache.set( orig_key, body, { date: Tools.timeNow(true) } );
 						}
 						
-						try { body = JSON.parse( body ); }
+						try { body = JSON.parse( body.toString() ); }
 						catch (e) {
 							self.logError('s3', "Failed to parse JSON record: " + key + ": " + e);
 							callback( e, null );
@@ -378,6 +400,11 @@ module.exports = Class.create({
 					// always include "Not found" in error message
 					err = new Error("Failed to fetch key: " + key + ": Not found");
 					err.code = "NoSuchKey";
+
+					if (self.cache && !is_binary) {
+						// store 'empty' stub in cache
+						self.cache.set( orig_key, Buffer.alloc(0), { date: 0 } );
+					}
 				}
 				else if (err.name == 'SlowDown') {
 					// special behavior for SlowDown errors
@@ -577,9 +604,10 @@ module.exports = Class.create({
 				self.logDebug(9, "Delete complete: " + key);
 				self.storage.emit('billing', 's3_delete', 1);
 				
-				// possibly delete from LRU cache as well
-				if (self.cache && self.cache.has(orig_key)) {
-					self.cache.delete(orig_key);
+				// possibly "delete" from LRU cache as well
+				if (self.cache && !self.storage.isBinaryKey(orig_key)) {
+					// store 'empty' stub in cache
+					self.cache.set( orig_key, Buffer.alloc(0), { date: 0 } );
 				}
 				
 				if (callback) process.nextTick( function() { callback(null, data); } );

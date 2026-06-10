@@ -215,7 +215,7 @@ module.exports = Class.create({
 		}
 		else {
 			this.logDebug(9, "Storing JSON Object: " + key, this.debugLevel(10) ? value : file);
-			value = this.pretty ? JSON.stringify( value, null, "\t" ) : JSON.stringify( value );
+			value = Buffer.from( this.pretty ? JSON.stringify( value, null, "\t" ) : JSON.stringify( value ) );
 		}
 		
 		var dir = path.dirname( file );
@@ -378,13 +378,22 @@ module.exports = Class.create({
 		if (this.cache && this.cache.has(key)) {
 			var item = this.cache.getMeta(key);
 			
-			process.nextTick( function() {
-				self.logDebug(9, "Cached head complete: " + key);
-				callback( null, {
-					mod: item.date,
-					len: item.value.length
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to head key: " + key + ": File not found");
+					err.code = "NoSuchKey";
+					callback( err );
 				} );
-			} );
+			}
+			else {
+				process.nextTick( function() {
+					self.logDebug(9, "Cached head complete: " + key);
+					callback( null, {
+						mod: item.date,
+						len: item.value.length
+					} );
+				} );
+			}
 			return;
 		} // cache
 		
@@ -393,6 +402,11 @@ module.exports = Class.create({
 				if (err.message.match(/ENOENT/)) {
 					err.message = "File not found";
 					err.code = "NoSuchKey";
+					
+					if (self.cache && !self.storage.isBinaryKey(key)) {
+						// store 'empty' stub in cache
+						self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+					}
 				}
 				else {
 					// log fs errors that aren't simple missing files (i.e. I/O errors)
@@ -421,30 +435,42 @@ module.exports = Class.create({
 		
 		// check cache first
 		if (this.cache && !is_binary && this.cache.has(key)) {
-			var data = this.cache.get(key);
+			var item = this.cache.getMeta(key);
 			
-			process.nextTick( function() {
-				try { data = JSON.parse( data ); }
-				catch (e) {
-					self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
-					callback( e, null );
-					return;
-				}
-				self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
-				
-				callback( null, data );
-			} );
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to fetch key: " + key + ": File not found");
+					err.code = "NoSuchKey";
+					callback( err );
+				} );
+			}
+			else {
+				process.nextTick( function() {
+					var data = null;
+					try { data = JSON.parse( item.value.toString() ); }
+					catch (e) {
+						self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
+						callback( e, null );
+						return;
+					}
+					self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
+					
+					callback( null, data );
+				} );
+			}
 			return;
 		} // cache
 		
-		var opts = {};
-		if (!this.storage.isBinaryKey(key)) opts = { encoding: 'utf8' };
-		
-		fs.readFile(file, opts, function (err, data) {
+		fs.readFile(file, function (err, data) {
 			if (err) {
 				if (err.message.match(/ENOENT/)) {
 					err.message = "File not found";
 					err.code = "NoSuchKey";
+					
+					if (self.cache && !is_binary) {
+						// store 'empty' stub in cache
+						self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+					}
 				}
 				else {
 					// log fs errors that aren't simple missing files (i.e. I/O errors)
@@ -461,7 +487,7 @@ module.exports = Class.create({
 			}
 			
 			if (!is_binary) {
-				try { data = JSON.parse( data ); }
+				try { data = JSON.parse( data.toString() ); }
 				catch (e) {
 					self.logError('file', "Failed to parse JSON record: " + key + ": " + e);
 					callback( e, null );
@@ -595,6 +621,11 @@ module.exports = Class.create({
 				if (err.message.match(/ENOENT/)) {
 					err.message = "File not found";
 					err.code = "NoSuchKey";
+					
+					if (self.cache && !self.storage.isBinaryKey(key)) {
+						// store 'empty' stub in cache
+						self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+					}
 				}
 				
 				self.logError('file', "Failed to delete file: " + key + ": " + file + ": " + err.message);
@@ -605,9 +636,10 @@ module.exports = Class.create({
 			else {
 				self.logDebug(9, "Delete complete: " + key);
 				
-				// possibly delete from LRU cache as well
-				if (self.cache && self.cache.has(key)) {
-					self.cache.delete(key);
+				// possibly "delete" from LRU cache as well
+				if (self.cache && !self.storage.isBinaryKey(key)) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
 				}
 				
 				// cleanup parent dirs if empty

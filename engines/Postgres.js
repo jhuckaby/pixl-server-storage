@@ -204,13 +204,22 @@ module.exports = Class.create({
 		if (this.cache && this.cache.has(key)) {
 			var item = this.cache.getMeta(key);
 			
-			process.nextTick( function() {
-				self.logDebug(9, "Cached head complete: " + key);
-				callback( null, {
-					mod: item.date,
-					len: item.value.length
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to head key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err );
 				} );
-			} );
+			}
+			else {
+				process.nextTick( function() {
+					self.logDebug(9, "Cached head complete: " + key);
+					callback( null, {
+						mod: item.date,
+						len: item.value.length
+					} );
+				} );
+			}
 			return;
 		} // cache
 		
@@ -227,6 +236,12 @@ module.exports = Class.create({
 			if (!row) {
 				var err = new Error("Failed to head key: " + key + ": Not found");
 				err.code = "NoSuchKey";
+
+				if (self.cache && !self.storage.isBinaryKey(key)) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
+
 				return callback(err, null);
 			}
 			callback(null, { mod: parseInt(row.modified, 10), len: row.len });
@@ -242,19 +257,29 @@ module.exports = Class.create({
 		
 		// check cache first
 		if (this.cache && !is_binary && this.cache.has(key)) {
-			var data = this.cache.get(key);
+			var item = this.cache.getMeta(key);
 			
-			process.nextTick( function() {
-				try { data = JSON.parse( data.toString() ); }
-				catch (e) {
-					self.logError('pg', "Failed to parse JSON record: " + key + ": " + e);
-					callback( e, null );
-					return;
-				}
-				self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
-				
-				callback( null, data );
-			} );
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to fetch key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err );
+				} );
+			}
+			else {
+				process.nextTick( function() {
+					var data = null;
+					try { data = JSON.parse( item.value.toString() ); }
+					catch (e) {
+						self.logError('pg', "Failed to parse JSON record: " + key + ": " + e);
+						callback( e, null );
+						return;
+					}
+					self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
+
+					callback( null, data );
+				} );
+			}
 			return;
 		} // cache
 		
@@ -273,6 +298,12 @@ module.exports = Class.create({
 			if (!row) {
 				var err = new Error("Failed to fetch key: " + key + ": Not found");
 				err.code = "NoSuchKey";
+
+				if (self.cache && !is_binary) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
+
 				return callback(err, null);
 			}
 			if (is_binary) {
@@ -412,11 +443,20 @@ module.exports = Class.create({
 			if (!res.rowCount) {
 				var err = new Error("Failed to delete object: " + key + ": Not found");
 				err.code = "NoSuchKey";
+
+				if (self.cache && !self.storage.isBinaryKey(key)) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
+
 				return callback(err);
 			}
 			self.logDebug(9, "Delete complete: " + key);
-			if (self.cache && self.cache.has(key)) {
-				self.cache.delete(key);
+
+			// possibly "delete" from LRU cache as well
+			if (self.cache && !self.storage.isBinaryKey(key)) {
+				// store 'empty' stub in cache
+				self.cache.set( key, Buffer.alloc(0), { date: 0 } );
 			}
 			callback();
 		} ); // query
