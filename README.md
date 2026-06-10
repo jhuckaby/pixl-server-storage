@@ -590,7 +590,12 @@ Then configure your storage thusly:
 		"host": "127.0.0.1",
 		"port": 6379,
 		"keyPrefix": "",
-		"keyTemplate": ""
+		"keyTemplate": "",
+		"cache": {
+			"enabled": true,
+			"maxItems": 100000,
+			"maxBytes": 104857600
+		}
 	}
 }
 ```
@@ -600,6 +605,8 @@ Set the `host` and `port` for your own Redis server setup.  Please see [Common R
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
 
 ### RedisCluster
 
@@ -626,7 +633,12 @@ Then configure your storage thusly:
 			}
 		},
 		"keyPrefix": "",
-		"keyTemplate": ""
+		"keyTemplate": "",
+		"cache": {
+			"enabled": true,
+			"maxItems": 100000,
+			"maxBytes": 104857600
+		}
 	}
 }
 ```
@@ -640,6 +652,8 @@ It is **highly recommended** that you keep the `scaleReads` property set to `"ma
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
 The optional `keyTemplate` property works similarly to the [S3 Key Template](#s3-key-template) feature.  It allows you to specify an exact layout of MD5 hash characters, which can be prefixed, mixed in with or postfixed after the key.
+
+See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
 
 ## SQLite
 

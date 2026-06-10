@@ -9,6 +9,7 @@ const Class = require("pixl-class");
 const Component = require("pixl-server/component");
 const Redis = require('ioredis');
 const Tools = require("pixl-tools");
+const Cache = require("pixl-cache");
 
 module.exports = Class.create({
 	
@@ -49,6 +50,22 @@ module.exports = Class.create({
 		
 		this.keyTemplate = (r_config.keyTemplate || '').replace(/^\//, '').replace(/\/$/, '');
 		
+		// optional LRU cache
+		this.cache = null;
+		var cache_opts = r_config.cache;
+		if (cache_opts && cache_opts.enabled) {
+			this.logDebug(3, "Setting up LRU cache", cache_opts);
+			this.cache = new Cache( Tools.copyHashRemoveKeys(cache_opts, { enabled: 1 }) );
+			this.cache.on('expire', function(item, reason) {
+				self.logDebug(9, "Expiring LRU cache object: " + item.key + " due to: " + reason, {
+					key: item.key,
+					reason: reason,
+					totalCount: self.cache.count,
+					totalBytes: self.cache.bytes
+				});
+			});
+		}
+
 		r_config.clusterOpts.clusterRetryStrategy = function(attempts) {
 			if (attempts > r_config.connectRetries) return false;
 			return attempts;
@@ -107,13 +124,14 @@ module.exports = Class.create({
 		// store key+value in Redis
 		var self = this;
 		key = this.prepKey(key);
+		var is_binary = this.storage.isBinaryKey(key);
 		
-		if (this.storage.isBinaryKey(key)) {
+		if (is_binary) {
 			this.logDebug(9, "Storing Redis Binary Object: " + key, '' + value.length + ' bytes');
 		}
 		else {
 			this.logDebug(9, "Storing Redis JSON Object: " + key, this.debugLevel(10) ? value : null);
-			value = JSON.stringify( value );
+			value = Buffer.from( JSON.stringify( value ) );
 		}
 		
 		this.redis.set( key, value, function(err) {
@@ -123,6 +141,11 @@ module.exports = Class.create({
 			}
 			else self.logDebug(9, "Store complete: " + key);
 			
+			// possibly cache in LRU
+			if (!err && self.cache && !is_binary) {
+				self.cache.set( key, value, { date: Tools.timeNow(true) } );
+			}
+
 			if (callback) callback(err);
 		} );
 	},
@@ -152,7 +175,30 @@ module.exports = Class.create({
 		// The Redis API has no way to head / ping an object.
 		// So, we have to do this the RAM-hard way...
 		
-		this.redis.get( key, function(err, data) {
+		// check cache first
+		if (this.cache && this.cache.has(key)) {
+			var item = this.cache.getMeta(key);
+
+			if (item.value.length == 0) {
+				process.nextTick( function() {
+					var err = new Error("Failed to head key: " + key + ": Not found");
+					err.code = "NoSuchKey";
+					callback( err );
+				} );
+			}
+			else {
+				process.nextTick( function() {
+					self.logDebug(9, "Cached head complete: " + key);
+					callback( null, {
+						mod: item.date,
+						len: item.value.length
+					} );
+				} );
+			}
+			return;
+		} // cache
+
+		this.redis.getBuffer( key, function(err, data) {
 			if (err) {
 				// an actual error
 				err.message = "Failed to head key: " + key + ": " + err;
@@ -164,7 +210,12 @@ module.exports = Class.create({
 				// always use "NoSuchKey" in error code
 				var err = new Error("Failed to head key: " + key + ": Not found");
 				err.code = "NoSuchKey";
-				
+
+				if (self.cache && !self.storage.isBinaryKey(key)) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
+
 				callback( err, null );
 			}
 			else {
@@ -177,44 +228,79 @@ module.exports = Class.create({
 		// fetch Redis value given key
 		var self = this;
 		key = this.prepKey(key);
+		var is_binary = this.storage.isBinaryKey(key);
 		
 		this.logDebug(9, "Fetching Redis Object: " + key);
 		
-		var func = this.storage.isBinaryKey(key) ? 'getBuffer' : 'get';
-		this.redis[func]( key, function(err, result) {
-			if (!result) {
-				if (err) {
-					// an actual error
-					err.message = "Failed to fetch key: " + key + ": " + err;
-					self.logError('redis', ''+err);
-					callback( err, null );
-				}
-				else {
-					// record not found
-					// always use "NoSuchKey" in error code
+		// check cache first
+		if (this.cache && !is_binary && this.cache.has(key)) {
+			var item = this.cache.getMeta(key);
+			
+			if (item.value.length == 0) {
+				process.nextTick( function() {
 					var err = new Error("Failed to fetch key: " + key + ": Not found");
 					err.code = "NoSuchKey";
-					
-					callback( err, null );
-				}
+					callback( err );
+				} );
 			}
 			else {
-				if (self.storage.isBinaryKey(key)) {
-					self.logDebug(9, "Binary fetch complete: " + key, '' + result.length + ' bytes');
-				}
-				else {
-					try { result = JSON.parse( result.toString() ); }
+				process.nextTick( function() {
+					var data = null;
+					try { data = JSON.parse( item.value.toString() ); }
 					catch (err) {
 						self.logError('redis', "Failed to parse JSON record: " + key + ": " + err);
 						callback( err, null );
 						return;
 					}
-					self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? result : null);
+					self.logDebug(9, "Cached JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
+					
+					callback( null, data );
+				} );
+			}
+			return;
+		} // cache
+		
+		this.redis.getBuffer( key, function(err, result) {
+			if (err) {
+				// an actual error
+				err.message = "Failed to fetch key: " + key + ": " + err;
+				self.logError('redis', ''+err);
+				return callback( err, null );
+			}
+			else if (!result || !result.length) {
+				// record not found
+				// always use "NoSuchKey" in error code
+				var err = new Error("Failed to fetch key: " + key + ": Not found");
+				err.code = "NoSuchKey";
+
+				if (self.cache && !is_binary) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
 				}
 				
-				callback( null, result );
+				return callback( err, null );
 			}
-		} );
+			
+			if (is_binary) {
+				self.logDebug(9, "Binary fetch complete: " + key, '' + result.length + ' bytes');
+			}
+			else {
+				// possibly cache in LRU
+				if (self.cache) {
+					self.cache.set( key, result, { date: Tools.timeNow(true) } );
+				}
+				
+				try { result = JSON.parse( result.toString() ); }
+				catch (err) {
+					self.logError('redis', "Failed to parse JSON record: " + key + ": " + err);
+					callback( err, null );
+					return;
+				}
+				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? result : null);
+			}
+			
+			callback( null, result );
+		} ); // redis.getBuffer
 	},
 	
 	getBuffer: function(key, callback) {
@@ -317,6 +403,7 @@ module.exports = Class.create({
 		// delete Redis key given key
 		var self = this;
 		key = this.prepKey(key);
+		var is_binary = this.storage.isBinaryKey(key);
 		
 		this.logDebug(9, "Deleting Redis Object: " + key);
 		
@@ -324,11 +411,24 @@ module.exports = Class.create({
 			if (!err && !deleted) {
 				err = new Error("Failed to fetch key: " + key + ": Not found");
 				err.code = "NoSuchKey";
+
+				if (self.cache && !is_binary) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
 			}
 			if (err) {
 				self.logError('redis', "Failed to delete object: " + key + ": " + err);
 			}
-			else self.logDebug(9, "Delete complete: " + key);
+			else {
+				self.logDebug(9, "Delete complete: " + key);
+
+				// possibly "delete" from LRU cache as well
+				if (self.cache && !is_binary) {
+					// store 'empty' stub in cache
+					self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+				}
+			}
 			
 			callback(err);
 		} );
