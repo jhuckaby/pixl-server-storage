@@ -2,7 +2,7 @@
 
 A transaction is an isolated compound operation with atomic commit and rollback.  Using transactions you can execute a series of operations without affecting other views of the database until you commit, and then it all happens at once.  Commits are an "all or nothing" affair, providing atomicity.  They also provide a safe way to automatically rollback to a known good state in case of an error or crash.
 
-The transaction system works with any storage engine, but it is optimized for the local filesystem.
+The transaction system works with any storage engine, including SQLite, S3-compatible object storage, Redis, Postgres and the local filesystem engine.
 
 The code examples all assume you have your preloaded `Storage` component instance in a local variable named `storage`.  The component instance can be retrieved from a running server like this:
 
@@ -34,7 +34,7 @@ Transaction locking is advisory.  Meaning, transactions will all play nice with 
 
 The transaction system is designed for JSON records only.  Binary records are not included as part of a transaction, and operations are silently passed straight through.  Meaning, any calls accessing binary records inside of a transaction will result in the original record being changed.  This behavior may be changed in a future version.
 
-Please note that transactions aren't 100% [ACID compliant](https://en.wikipedia.org/wiki/ACID), but they do follow *most* of the rules.  When using the local filesystem engine, the real question is durability, as in what happens in the event of a sudden power loss.  When a transaction is committed, by design it could involve changing a huge amount of files.  While this operation is "effectively atomic" by way of advisory locking, the filesystem may still end up in an unknown state after sudden reboot, for example in the middle of a very large commit.  Now, the system does have automatic recovery using a rollback log, and *should* be able to restore the filesystem to the state right before the commit.  But really, when we're talking about yanking power cords, lightning strikes and brown-outs, who the hell knows.  The rollback log may be incomplete or corrupted (yes, we call [fsync](https://nodejs.org/api/fs.html#fsfsyncfd-callback) on it before ever starting the commit, but even then, things can happen -- fsync isn't a 100% guarantee, especially with SSDs).
+Please note that transactions aren't 100% [ACID compliant](https://en.wikipedia.org/wiki/ACID), but they do follow *most* of the rules.  The main thing to understand is durability, as in what happens in the event of a sudden power loss, process crash, storage outage or network failure during a commit.  When a transaction is committed, by design it may involve changing a large number of records in your configured storage engine.  While this operation is "effectively atomic" by way of advisory locking and rollback logging, the underlying engine may still end up in an unknown state if it fails halfway through a large commit.  The system does have automatic recovery using a rollback log, and *should* be able to restore storage to the state right before the commit.  But really, when we're talking about yanking power cords, lightning strikes, brown-outs or remote storage outages, who the hell knows.  The rollback log may be incomplete or corrupted (yes, we call [fsync](https://nodejs.org/api/fs.html#fsfsyncfd-callback) on it before ever starting the commit, but even then, things can happen, and fsync isn't a 100% guarantee, especially with SSDs).
 
 I guess the bottom line is, always keep backups of your data!
 
@@ -45,20 +45,22 @@ The transaction system is configured by a few additional properties in the `Stor
 | Property Name | Type | Description |
 |---------------|------|-------------|
 | `transactions` | Boolean | Set to `true` to enable transactions (defaults to `false`). |
-| `trans_dir` | String | Path to temporary directory on local disk to store transactions in progress (see below). |
+| `trans_dir` | String | Path to local directory for transaction rollback logs and recovery cleanup (see below). |
 | `trans_auto_recover` | Boolean | Automatically recover from fatal errors on startup (see [Recovery](#recovery) below). |
 
-Choose your `trans_dir` carefully.  This directory is used to store temporary files during a transaction.  The optimum value depends on the storage engine, and also possibly the underlying filesystem type:
+Choose your `trans_dir` carefully.  This directory is used for rollback logs during commit, and those logs are what make crash recovery possible.  Transaction record changes are kept in memory until commit time, but the rollback logs are still written to local disk and synced before the main storage engine is modified.  In modern deployments, the best choice is usually a fast, reliable local path on the same machine as your Node.js process:
 
-| Storage Engine | Recommendation |
-|----------------|----------------|
-| Local Filesystem | Make sure your `trans_dir` is on the *same mount* as your local storage data, to ensure speed and safety.  This is the default. |
-| NFS Filesystem | Make sure your `trans_dir` is **NOT** on the NFS mount, but instead points to a local fast SSD mount. |
-| S3 | Make sure your `trans_dir` points to a local fast SSD mount. |
+| Storage Setup | Recommendation |
+|---------------|----------------|
+| SQLite | The default is usually fine, because SQLite exposes a `base_dir`, and transactions will default to a `_transactions` directory inside it.  You can still set `trans_dir` explicitly if you want rollback logs on a different local volume. |
+| S3 or S3-Compatible | Set `trans_dir` explicitly to a fast local disk path.  Do not place rollback logs in object storage. |
+| Local Filesystem | The default is a `_transactions` subdirectory inside your local storage `base_dir`, which is usually a good choice. |
+| Network Filesystem | Do not put `trans_dir` on the network mount.  Point it at a local fast SSD mount instead. |
+| Other Remote Engines | Prefer a local disk path on the app server, rather than a remote or shared filesystem. |
 
-So basically, if you plan to use the [Filesystem](../README.md#local-filesystem) engine with a local (i.e. non-network) disk, you don't need to make any adjustments.  The default setting for `trans_dir` is a subdirectory just inside your `base_dir` engine property.  But if you are going with a networked (i.e. NFS) filesystem, or you're going to use [S3](../README.md#amazon-s3), then you should set `trans_dir` to a local filesystem path on a fast disk (ideally SSD).
+If your storage engine exposes a `baseDir` internally, the default `trans_dir` is a `_transactions` subdirectory under that base path.  Otherwise, it defaults to a `transactions` directory under the current working directory.  For remote engines like S3-compatible storage, it is usually best to set this explicitly, so recovery-critical rollback logs are kept somewhere predictable, local and fast.
 
-**Pro-Tip:** When using transactions with the Amazon S3 engine, consider setting the `maxAttempts` property in your `S3` configuration object, so the AWS client library makes multiple attempts before failing an operation.  Network hiccups can happen.
+**Pro-Tip:** When using transactions with the Amazon S3 engine or an S3-compatible service, consider setting the `maxAttempts` property in your `S3` configuration object, so the AWS client library makes multiple attempts before failing an operation.  Network hiccups can happen.
 
 ## Basic Use
 
@@ -180,7 +182,7 @@ storage.begin( 'some_path', function(err, trans) {
 
 It should be noted that if you receive an error from a [commit()](API.md#commit) call, it is *vital* that you call [abort()](API.md#abort) to undo whatever operations may have already executed.  A commit error is typically very bad, and your storage system will be in an unknown state.  Only by calling [abort()](API.md#abort) can you restore it to before the transaction started.
 
-If the [abort()](API.md#abort) also fails, then the database raises a fatal error and exits immediately.  See [Emergency Shutdown](#emergency-shutdown) below for details about what this means, and [Recovery](#recovery) for how to get back up and running.  Examples of fatal errors include your disk running completely out of space, or a major network failure when using NFS, or S3.
+If the [abort()](API.md#abort) also fails, then the database raises a fatal error and exits immediately.  See [Emergency Shutdown](#emergency-shutdown) below for details about what this means, and [Recovery](#recovery) for how to get back up and running.  Examples of fatal errors include your disk running completely out of space, a SQLite write failure, or a major network failure when using a remote storage engine such as S3-compatible object storage.
 
 ## Automatic API Wrappers
 
@@ -215,7 +217,7 @@ You can still use these methods inside of your own transaction, and they will "j
 
 ## Emergency Shutdown
 
-If a fatal storage error is encountered in the middle of an abort (rollback) operation, the database immediately shuts itself down.  This is because your data will be in an undefined state, stuck in the middle of partial transaction.  This should be a very rare event, only occurring when the underlying storage completely fails to write records.  Examples include a disk running out of space (local or NFS filesystem), or a hard network failure with S3.  When this happens, the Node.js process will exit (by default), and will need to be recovered (see [Recovery](#recovery) below).
+If a fatal storage error is encountered in the middle of an abort (rollback) operation, the database immediately shuts itself down.  This is because your data will be in an undefined state, stuck in the middle of partial transaction.  This should be a very rare event, only occurring when the underlying storage completely fails to write records.  Examples include a disk running out of space, a local database write failure, or a hard network failure with a remote storage engine.  When this happens, the Node.js process will exit (by default), and will need to be recovered (see [Recovery](#recovery) below).
 
 Upon fatal error, your application can hook the event and provide its own emergency shutdown procedure.  Simply add an event listener on the storage object for the `fatal` event.  It will be passed an `Error` object describing the actual error that occurred.  It is then up to your code to call `process.exit()`.  Example:
 
@@ -267,19 +269,19 @@ if (this.server.Storage.recovery_count) {
 
 ## Transaction Internals
 
-The transaction system is implemented by temporarily "branching" the storage system into an isolated object with a dedicated temporary directory on disk.  Any operations performed on the branch are written to a temporary directory.  When the transaction is committed, the branch is "merged" back into main storage, with all operations tracked in a special rollback log which is discarded upon completion.
+The transaction system is implemented by temporarily "branching" the storage system into an isolated object.  Any JSON writes performed on the branch are stored in memory, and any JSON deletes are tracked in memory as well.  Nothing is persisted to the main storage engine until the transaction is committed.  At commit time the branch is "merged" back into main storage, with all operations protected by a special rollback log which is discarded upon completion.
 
 ### Temporary Directory
 
-A local temporary directory on disk is always used for transactions, regardless of the storage engine.  Even if you are using S3 for primary storage, transactions still use temp files on disk before and during commit.  This is to insure both speed and data safety.  You can control where the temporary files live by setting the `trans_dir` configuration property.
+A local transaction directory on disk is used regardless of the storage engine.  Modified JSON records live in memory until commit time.  The directory is mainly used for rollback logs, which are written and synced before any changes are applied to primary storage.  You can control where this directory lives by setting the `trans_dir` configuration property.
 
-Inside the temp directory, two subdirectories are created: `data` and `logs`.  The `data` directory is used to hold all modified records during a transaction (before commit).  Each is named using a unique transaction ID (see below) and a hash of the original key.  This ensures no files will collide with each other, even with many concurrent transactions.  The `logs` directory is for rollback logs.  When a transaction is committed, the original state of the mutated records is written to the log, so it can be applied in reverse during a recovery event.
+Inside the transaction directory, two subdirectories are created: `data` and `logs`.  The `logs` directory is the important one for current transactions.  When a transaction is committed, the original state of the mutated records is written to a rollback log, so it can be applied in reverse during a recovery event.  The `data` directory is created for maintenance and recovery cleanup, but current JSON transaction writes do not use it.
 
 ### Branch Process
 
-When a transaction is first started, the only thing that happens is a unique ID is assigned, and a lock is obtained.  Both are based on the path that is passed into [begin()](API.md#begin).  Nothing is written to disk at this point -- that is deferred until actual operations are performed on the transaction object.
+When a transaction is first started, the only thing that happens is a unique sequential ID is assigned, and a lock is obtained.  The lock is based on the path that is passed into [begin()](API.md#begin).  Nothing is written to disk at this point.
 
-Each record that is mutated (created, updated or deleted) inside a transaction is written to a temporary file, and also a ledger is kept in memory to keep track of which records are changed.  The in-memory ledger only contains keys and a "state", representing a created, updated or deleted record.  Only records created or updated have an associated temp file on disk.  Deleted records are marked in memory only (no need for a temp file).
+Each JSON record that is mutated (created, updated or deleted) inside a transaction is tracked in memory.  The transaction keeps a `keys` ledger, which maps each touched key to a "state", representing a written or deleted record.  Written records also have their full JSON value stored in a `values` hash in memory.  Deleted records are marked in the ledger only.
 
 For example, consider a transaction that begins with path `test1`...
 
@@ -289,7 +291,7 @@ storage.begin( 'test1', function(err, trans) {
 } );
 ```
 
-The transaction ID will be `5a105e8b9d40e1329780d62ea2265d8a` (which is just an MD5 of `test1`).  Now, let's say our `trans_dir` was set to `/let/tmp/db`, and inside our transaction we store a record with key `test1/record1`...
+The transaction ID will be a sequential number such as `1`.  Now, let's say inside our transaction we store a record with key `test1/record1`...
 
 ```js
 trans.put( 'test1/record1', { foo: 12345 }, function(err) {
@@ -297,34 +299,36 @@ trans.put( 'test1/record1', { foo: 12345 }, function(err) {
 } );
 ```
 
-So at this point we wrote the `test1/record1` record using our `trans` object, but nothing has happened in the outer storage system (i.e. nothing was written to the primary storage engine).  Instead, the following temp file was written to disk, containing `{"foo":12345}`:
-
-```
-/tmp/db/data/5a105e8b9d40e1329780d62ea2265d8a-0d1454fd1bcdc024acedcbe5cfff4ffd.json
-```
-
-The temp filename is made up of the transaction ID (`5a105e8b9d40e1329780d62ea2265d8a`) and the MD5 hash of the record key (`0d1454fd1bcdc024acedcbe5cfff4ffd`).  This is to insure it will not collide with any other records in any other concurrent transactions, doesn't require any further subdirectories, and we can easily retrieve it at commit time if we know the plain key.
+So at this point we wrote the `test1/record1` record using our `trans` object, but nothing has happened in the outer storage system (i.e. nothing was written to the primary storage engine).  Instead, the JSON value is kept in memory as part of the active transaction, along with its modification time and byte length.
 
 It should be noted that in these examples our record keys are *under* the `test1` base transaction path, e.g. `test1/record1`.  This is not required, as any record anywhere in storage can be read, written or deleted inside a transaction.  However, it keeps things much cleaner if you design your storage key layout in this way, especially with locking being completely advisory.  You want to ensure that your own application keeps its transaction-enabled records separate from non-transaction records (if any).  You can do this with a base key path like `test1/...` or some other method -- the storage system cares not.
 
-The fact that we wrote to `test1/record1` is also noted in memory, in the transactions hash.  All the transaction keys are kept in memory, and the values are merely a state flag.  Here is the internal representation:
+The fact that we wrote to `test1/record1` is also noted in memory, in the transactions hash.  Active transactions are keyed by the transaction base path, and each transaction has both a `keys` ledger and a `values` hash for written records.  Here is a simplified internal representation:
 
 ```js
 "transactions": {
-	"5a105e8b9d40e1329780d62ea2265d8a": {
-		"id": "5a105e8b9d40e1329780d62ea2265d8a", 
-		"path": "test1", 
-		"date": 1514260380.343, 
+	"test1": {
+		"id": "1",
+		"path": "test1",
+		"log": "/tmp/db/logs/9343-1.log",
+		"date": 1514260380.343,
 		"pid": 9343,
 		"keys": {
 			"test1/record1": "W"
+		},
+		"values": {
+			"test1/record1": {
+				"mod": 1514260380.456,
+				"len": 13,
+				"data": { "foo": 12345 }
+			}
 		},
 		"queue": []
 	}
 }
 ```
 
-In this case the state of the record is `W`, indicating "written".  If we deleted the record inside the transaction, the state would be `D`.  This ledger keeps track of all mutations, and is used to perform the actual commit.
+In this case the state of the record is `W`, indicating "written".  If we deleted the record inside the transaction, the state would be `D`.  This ledger keeps track of all mutations, and is used to perform the actual commit.  The `values` hash holds a copy of the JSON data for all records currently in the `W` state.
 
 Let's also delete a record just to see the internal representation.  Assuming `test1/deleteme` already existed before we started the transaction, we can do this:
 
@@ -334,7 +338,7 @@ trans.delete( 'test1/deleteme', function(err) {
 } );
 ```
 
-This will not result in any temp file created on disk (although it will delete one if it already existed), but we do have to make a note in the transactions hash about the state of the deleted record:
+This does not write anything to disk, but we do have to make a note in the transactions hash about the state of the deleted record:
 
 ```js
 "keys": {
@@ -343,9 +347,9 @@ This will not result in any temp file created on disk (although it will delete o
 },
 ```
 
-So now our transaction contains two mutations (operations).  One record written (has associated temp file), and one record deleted (no temp file).  Still, outside the transaction nothing has happened.  The `test1/deleteme` record still exists.
+So now our transaction contains two mutations (operations).  One record written in memory, and one record deleted in memory.  Still, outside the transaction nothing has happened.  The `test1/deleteme` record still exists.
 
-It is important to note that while some transaction metadata is kept in RAM, all the actual data is written to disk, as is the rollback log, and none of the metadata in RAM is required for recovery.  If you attempt a transaction containing hundreds of thousands of records, sure, it may cause a slowdown and memory bloat, but this database just isn't meant to scale that high.
+It is important to note that active transaction writes are kept in RAM until commit time.  If you plan to issue large transactions, make sure your Node.js process has enough memory allocated to hold all pending writes until commit.  The rollback log is still written to disk during commit, and none of the in-memory transaction metadata is required for crash recovery once the rollback log exists.
 
 Now let's see what happens if we fetch our `test1/record1` key, still inside the transaction and using the `trans` object...
 
@@ -356,7 +360,7 @@ trans.get( 'test1/record1', function(err, data) {
 } );
 ```
 
-Internally, the [get()](API.md#get) method is overridden, and the transaction layer intercepts the call.  First, we check the ledger, to see if the `test1/record1` key was branched, and in this case it was.  So instead of hitting primary storage, we simply load our temp file for the record, and return that value, since the state is `W`.  If the state is `D` (deleted inside transaction), then a `NoSuchKey` error is returned, just as if the record didn't exist in primary storage.  Alternatively, if `test1/record1` simply isn't in the transactions hash, the operation falls back to normal storage.
+Internally, the [get()](API.md#get) method is overridden, and the transaction layer intercepts the call.  First, we check the ledger, to see if the `test1/record1` key was branched, and in this case it was.  So instead of hitting primary storage, we return a copy of the in-memory value from the transaction, since the state is `W`.  If the state is `D` (deleted inside transaction), then a `NoSuchKey` error is returned, just as if the record didn't exist in primary storage.  Alternatively, if `test1/record1` simply isn't in the transaction ledger, the operation falls back to normal storage.
 
 Similarly, if we try to fetch `test1/deleteme` using `trans`, we get an error:
 
@@ -369,27 +373,27 @@ trans.get( 'test1/deleteme', function(err, data) {
 
 Even though the real `test1/deleteme` record still exists, our transaction "simulates" a deleted record by returning an error for the overridden [get()](API.md#get) method.
 
-In this way, any records mutated inside the transaction are "branched" (written to temp files and/or added to the transaction ledger) and kept isolated until the transaction needs to be "merged" (committed), or possibly just discarded (transaction aborted before commit).
+In this way, any records mutated inside the transaction are "branched" in memory and kept isolated until the transaction needs to be "merged" (committed), or possibly just discarded (transaction aborted before commit).
 
 ### Commit Process
 
 The commit process basically replays all the transaction operations on primary storage, effectively "merging the branch".  However, it must do this in such a way so that a sudden crash or power loss at *any point* will still allow for full recovery, i.e. a clean rollback to the previous state.  To do this, we rely on a local rollback log, and of course [fsync](http://man7.org/linux/man-pages/man2/fsync.2.html), to insure the log is actually written to physical disk (and not in the OS cache).
 
-The log will contain the original JSON contents of all the records that will be mutated by the transaction.  It is basically a "snapshot" of the previous state, before we start the commit.  The log goes into the `logs` subdirectory under our `trans_dir` temp directory, and is named using the same Transaction ID hash:
+The log will contain the original JSON contents of all the records that will be mutated by the transaction.  It is basically a "snapshot" of the previous state, before we start the commit.  The log goes into the `logs` subdirectory under our `trans_dir` transaction directory, and is named using the process ID and transaction ID:
 
 ```
-/tmp/db/logs/5a105e8b9d40e1329780d62ea2265d8a.log
+/tmp/db/logs/9343-1.log
 ```
 
 The log file format is plain text with line-delimited JSON for the records.  The first line is a header record that describes the transaction.  Here is an example log:
 
 ```
-{"id":"5a105e8b9d40e1329780d62ea2265d8a","path":"test1","date":1514260380.343,"pid":9343}
-{"key":"test1/record1","value":{"foo":12345}}
-{"key":"test1/deleteme","value":0}
+{"id":"1","path":"test1","log":"/tmp/db/logs/9343-1.log","date":1514260380.343,"pid":9343}
+{"key":"test1/record1","value":0}
+{"key":"test1/deleteme","value":{"old":true}}
 ```
 
-The header record is just a copy of the in-memory transaction metadata, minus the verbose key map and queue.  It's just used to identify the transaction, and for debugging purposes.  The rest of the lines are for all the mutated records.  Each record is wrapped in an outer JSON with a `key` and `value` property.  The `value` is the actual record JSON contents.  If the record was deleted, as was the case with `test1/deleteme`, then the value is set to `0`.
+The header record is just a copy of the in-memory transaction metadata, minus the verbose key map, in-memory values and queue.  It's used to identify the transaction during recovery, and for debugging purposes.  The rest of the lines are for all the mutated records.  Each record is wrapped in an outer JSON with a `key` and `value` property.  The `value` is the original record JSON contents from before the commit began.  If the record did not exist before the transaction, then the value is set to `0`, as shown for `test1/record1` above.  If a record is being deleted, and it existed before the transaction, then its original JSON value is written to the log so rollback can restore it.
 
 So here is the commit process, step by step:
 
@@ -399,17 +403,16 @@ So here is the commit process, step by step:
 	- See the [fsync manpage](http://man7.org/linux/man-pages/man2/fsync.2.html) for details.
 - Apply all transaction record changes to primary storage, as fast as possible.
 	- This uses the storage [concurrency](../README.md#concurrency) configuration setting for parallelization.
-	- When using the [Filesystem](../README.md#local-filesystem) engine, additional optimizations take place here.  The temp files are essentially just "renamed" into place (if possible), rather than being read and written again.
-- Call [fsync](http://man7.org/linux/man-pages/man2/fsync.2.html) on the temp `data` directory (where the temp files came from), to ensure they all get rewritten to disk as well, after their renames.
-	- See this [Stack Overflow article](https://stackoverflow.com/questions/3764822/how-to-durably-rename-a-file-in-posix) for details.
-	- This safety mechanism probably only has a real effect on local ext3/ext4 filesystems.
+	- Written records are applied from the transaction's in-memory `values` hash.
+	- Deleted records are deleted directly from primary storage.
+- If the storage engine provides a `sync()` method, enqueue post-commit sync calls for all written keys.
 - Delete the rollback log.
 - Remove transaction metadata from memory.
 - Release the lock on the transaction base path.
 
-The idea here is that no matter where a crash or sudden power loss occurs during the commit process, a full rollback can always be achieved.  The actual changes on the main storage system are only made once the rollback log is fully written and flushed to disk, and the log itself is only deleted when the record changes are also made (and flushed, where possible).
+The idea here is that no matter where a crash or sudden power loss occurs during the commit process, a full rollback can always be achieved.  The actual changes on the main storage system are only made once the rollback log is fully written and flushed to disk, and the log itself is only deleted when the record changes are also made and synced where possible.
 
-This is not a 100% guarantee of data durability, as corruption can happen during a crash or power loss.  The rollback log may only be partially written, or corrupted in some way where a replay is not possible.  This can happen because fsync calls are not guaranteed on all operating systems, filesystems or disk media (e.g. certain SSDs), and really all bets are off if you are using S3 for primary storage.
+This is not a 100% guarantee of data durability, as corruption can happen during a crash or power loss.  The rollback log may only be partially written, or corrupted in some way where a replay is not possible.  This can happen because fsync calls are not guaranteed on all operating systems, filesystems or disk media (e.g. certain SSDs), and remote storage engines may fail independently of the local process.  For example, an S3-compatible service may accept some writes and fail others during a network or service outage.
 
 Basically it's all just a big crap shoot, but we're trying to cover as many error cases as possible.
 
@@ -417,18 +420,18 @@ Basically it's all just a big crap shoot, but we're trying to cover as many erro
 
 There are two types of aborted transaction: one that happens before the commit (easy & safe), and one that happens as a result of an error *during* the commit (difficult & dangerous).  Let's take the easy one first.
 
-When a transaction is aborted *before* commit, there is really nothing to roll back.  There is no rollback log, and nothing has touched primary storage yet.  Instead, we simply need to clean things up.  All the transaction temp files are deleted (if any), the in-memory transaction metadata is deleted, and the lock is released.  This kind of abort is typically user-driven, by calling [abort()](API.md#abort) in your application code.  It is typically quite safe, low risk and non-destructive to primary storage.
+When a transaction is aborted *before* commit, there is really nothing to roll back.  There is no rollback log, and nothing has touched primary storage yet.  Instead, we simply need to clean things up.  The in-memory key ledger, values hash and queue are discarded, and the lock is released.  This kind of abort is typically user-driven, by calling [abort()](API.md#abort) in your application code.  It is typically quite safe, low risk and non-destructive to primary storage.
 
 The other type of abort -- one that occurs as a result of an error, crash or power loss *during* a commit -- is more involved.  Here we have to basically "replay" the rollback log, and restore records to their original state.
 
-The first step is to locate the rollback log.  It is named using the transaction ID hash, so we can easily find it if we are rolling back an active transaction in the same process (i.e. non-crash rollback).  However, for a full crash recovery, any and all leftover rollback logs are globbed, and then processed in order.
+The first step is to locate the rollback log.  It is named using the process ID and transaction ID, so we can easily find it if we are rolling back an active transaction in the same process (i.e. non-crash rollback).  However, for a full crash recovery, any and all leftover rollback logs are globbed and processed in reverse order.
 
-The rollback log is basically line-delimited JSON records, so we just have to open the file, and iterate over it, line by line.  Generally we skip over the first line (the file header), which is just metadata about the transaction.  This is only needed during a full crash recovery (see below).  Next, we process each line, which is a record to be restored to the specified JSON state, or deleted.  It should be noted that temp files are *not* used for rollback.  All the JSON record data is contained within the rollback log itself (this is why only JSON records are supported for transactions, and not binary records).
+The rollback log is basically line-delimited JSON records, so we just have to open the file, and iterate over it, line by line.  Generally we skip over the first line (the file header), which is just metadata about the transaction.  This is only needed during a full crash recovery (see below).  Next, we process each line, which is a record to be restored to the specified JSON state, or deleted.  Rollback uses the log contents directly, because all the JSON record data is contained within the rollback log itself (this is why only JSON records are supported for transactions, and not binary records).
 
 As noted above, during a full crash recovery we have no transaction metadata in memory (with the transaction ID, log file path, etc.).  To restore this internal state, we use the rollback log header (i.e. the first line).  This special JSON record is used to restore the internal metadata, so we have an active transaction that we are recovering.
 
-The second phase of the rollback is cleanup.  Here we delete any temp files that may have been written as part of the transaction.  Temp files are only used for commit, not rollback, so we can just blindly delete them all.  For a non-crash rollback, we can use the in-memory `keys` hash to locate all the temp files.  For a full crash recovery, we just delete *all* temp files when recovery is complete (transaction temp files have their own directory).
+The second phase of the rollback is cleanup.  The rollback log itself is deleted, the in-memory transaction metadata is discarded, and the original lock is released (if applicable).  During startup recovery, the system also clears the transaction `data` directory.
 
-Finally, the rollback log itself is deleted, the in-memory transaction metadata discarded, and the original lock is released (if applicable).  At this point storage has been restored to the state just before the commit, and everything should be happy.
+At this point storage has been restored to the state just before the commit, and everything should be happy.
 
-Note that if a transaction abort operation fails due to a storage write failure, this is considered fatal.  The database immediately shuts down and issues a `fatal` error event.  We have to give up here because storage will be in an undefined state, and we should not attempt any further operations before a user addresses the underlying issue.  This is typically a disk that ran out of space, or some kind of "permanent" filesystem I/O error.  In the case of S3 or Couchbase, this would be a permanent network error.
+Note that if a transaction abort operation fails due to a storage write failure, this is considered fatal.  The database immediately shuts down and issues a `fatal` error event.  We have to give up here because storage will be in an undefined state, and we should not attempt any further operations before a user addresses the underlying issue.  This is typically a disk that ran out of space, a local database write failure, or a persistent remote storage error.
