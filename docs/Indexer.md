@@ -56,6 +56,7 @@ let storage = server.Storage;
 	* [Changing Fields](#changing-fields)
 - [Performance Tips](#performance-tips)
 - [Indexer Internals](#indexer-internals)
+	* [Sorters](#sorters)
 	* [Date and Number Fields](#date-and-number-fields)
 	* [Special Metadata](#special-metadata)
 
@@ -1005,6 +1006,67 @@ The `tags` field also has the [master_list](#master-list) property set, so a spe
 	"open": 1
 }
 ```
+
+### Sorters
+
+Sorters are stored a little differently than searchable field indexes.  A field index is inverted by word, meaning each unique word gets its own hash of matching record IDs.  A sorter is a single paginated [Hash](Hashes.md) containing every indexed record ID for that sorter, with the sorter value stored as the hash value.
+
+For example, a sorter with an ID of `username` is stored here:
+
+```
+index/
+ └ myapp/
+    └ username/
+       ├ sort/
+       │  └ data.json
+       └ sort.json
+```
+
+Internally, the hash path is:
+
+```
+index/myapp/username/sort
+```
+
+The hash keys are your primary record IDs, and the hash values are the values that will be used for sorting:
+
+```js
+{
+	"TICKET0001": "alice",
+	"TICKET0002": "bob",
+	"TICKET0003": "carol"
+}
+```
+
+Number sorters use the same layout, but store numeric values instead:
+
+```js
+{
+	"TICKET0001": 3,
+	"TICKET0002": 12,
+	"TICKET0003": 0
+}
+```
+
+The sorter hash uses `sorter_page_size` from your index configuration, or `1000` if that is not set.  This is separate from the standard index hash page size, because sorter hashes can be very large and are commonly scanned page by page.
+
+When [indexRecord()](API.md#indexrecord) runs, sorter updates happen after the searchable fields have been indexed.  For each sorter, the indexer reads the configured `source` path from the source record, applies `default_value` if needed, and writes the value using [hashPut()](API.md#hashput).  The record's `_data` record also gets a `_sorters` entry with the last indexed sorter value.  This allows the indexer to skip writing a sorter again if the value has not changed.
+
+When a record is unindexed, or when a sorter has `delete` set, the record ID is removed from the sorter hash using [hashDelete()](API.md#hashdelete).
+
+The important thing to understand is how sorting actually happens.  When you call [sortRecords()](API.md#sortrecords), the indexer does not fetch only the matching IDs from the sorter hash.  Instead, it enumerates the entire sorter hash, one page at a time, using [hashEachPage()](API.md#hasheachpage).  As each page is loaded, the indexer checks each hash key against the current search result hash.  If the ID is present in your result set, the sorter value is plucked out and added to an in-memory list of pairs:
+
+```js
+[
+	[ "TICKET0001", "alice" ],
+	[ "TICKET0002", "bob" ],
+	[ "TICKET0003", "carol" ]
+]
+```
+
+Once the full sorter hash has been scanned, only those matching pairs remain.  That final list is sorted in memory, using either a numeric comparison for `type: "number"`, or `localeCompare()` for string sorting.  The sorted record IDs are then returned as a simple array.
+
+This design keeps the persistent storage model simple and compact, but it also means sorting cost is based on the size of the entire sorter hash, not just the size of the current search results.  For example, sorting 50 matching records still requires scanning the whole sorter hash if the sorter contains 100,000 total records.  This is why the [Performance Tips](#performance-tips) recommend only adding sorters for fields you truly need.
 
 ### Date and Number Fields
 
