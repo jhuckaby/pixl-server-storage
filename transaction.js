@@ -700,6 +700,107 @@ module.exports = Class.create({
 		var num_bytes = 0;
 		var pf = this.perf.begin('commit');
 		
+		if (this.engine.commitTransaction) {
+			// native engine transaction support replaces our entire rollback-log commit system.
+			// The engine is responsible for applying all record changes atomically, using the
+			// full transaction object.  We still own the outer locks, events, logs and cleanup.
+			async.waterfall(
+				[
+					function(callback) {
+						// acquire commit lock
+						self.lock( 'C|'+path, true, function() { callback(); } );
+					},
+					function(callback) {
+						// notify listeners that the commit is starting
+						self.emit('commitStart', trans);
+						
+						// ask the engine to atomically commit all actions
+						self.engine.commitTransaction( trans, callback );
+					}
+				],
+				function(err) {
+					// commit complete
+					var elapsed = pf.end();
+					
+					if (err) {
+						var msg = "Failed to commit transaction: " + path + ": " + err.message;
+						self.logError('commit', msg, { id: trans.id });
+						
+						if (err.fatal) {
+							// Native engine detected an unsafe transaction outcome.  Do not fall
+							// through to abortTransaction(), as there is no rollback log to replay.
+							var fatal_err = new Error(msg);
+							fatal_err.fatal = true;
+							fatal_err.originalError = err;
+							return self.transFatalError(fatal_err);
+						}
+						
+						// Note: in this case unlocking happens in abortTransaction
+						return callback( new Error(msg) );
+					}
+					
+					// emulate the normal per-record put/delete side effects, since native
+					// engine commits bypass self.put() and self.delete() for atomicity.
+					Object.keys(trans.keys).forEach( function(key) {
+						var record_state = trans.keys[key];
+						var norm_key = self.normalizeKey(key);
+						
+						if (record_state == 'W') {
+							var value = trans.values[key];
+							num_bytes += value.len;
+							
+							// update the Storage-level RAM cache, if enabled for this key
+							if (self.cacheKeyRegex && norm_key.match(self.cacheKeyRegex)) {
+								self.cache[norm_key] = value.data;
+							}
+							
+							self.logTransaction('put', norm_key, {
+								elapsed_ms: 0
+							});
+							self.emit('put', norm_key, value.data);
+						}
+						else if (record_state == 'D') {
+							// update the Storage-level RAM cache, if enabled for this key
+							if (self.cacheKeyRegex && norm_key.match(self.cacheKeyRegex) && (norm_key in self.cache)) {
+								delete self.cache[norm_key];
+							}
+							
+							self.logTransaction('delete', norm_key, {
+								elapsed_ms: 0
+							});
+							self.emit('delete', norm_key);
+						}
+					});
+					
+					self.logDebug(5, "Transaction committed successfully: " + trans.id, { path: path, actions: num_actions });
+					self.logTransaction('commit', path, {
+						id: trans.id,
+						elapsed_ms: elapsed,
+						actions: num_actions,
+						bytes_written: num_bytes
+					});
+					
+					// transaction is complete
+					delete trans.values; // release memory
+					delete self.transactions[path];
+					
+					// enqueue any pending tasks that got added during the transaction
+					if (trans.queue.length) {
+						trans.queue.forEach( self.enqueue.bind(self) );
+						trans.queue = []; // release memory
+					}
+					
+					delete trans.keys; // release memory
+					
+					self.emit('commitEnd', trans);
+					self.unlock( 'C|'+path );
+					self._transUnlock(path);
+					callback();
+				}
+			); // native engine commit
+			return;
+		}
+		
 		async.waterfall(
 			[
 				function(callback) {
