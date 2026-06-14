@@ -797,6 +797,8 @@ The `Hybrid` engine only has two properties, `docEngine` and `binaryEngine`.  Th
 
 Note that all of the engine configuration objects are on the same level as the `Hybrid` object.
 
+When transactions are enabled, the `Hybrid` engine routes transaction commits through the configured `docEngine`, because pixl-server-storage transactions only apply to JSON records.  If the `docEngine` supports native transactions, such as Postgres, Redis or SQLite, `Hybrid` will use that native commit path automatically.  The `binaryEngine` is not involved in transactions, because binary keys are passed straight through.
+
 # Key Normalization
 
 In order to maintain compatibility with all the various engines, keys are "normalized" on all entry points.  Specifically, they undergo the following transformations before being passed along to the engine:
