@@ -80,10 +80,10 @@ var TransStorageFunctions = {
 		if (trans.keys[key] == 'W') {
 			// we've written the key, so fetch our version
 			this.logDebug(9, "Pinging Object from transaction: " + key);
+			var value = trans.values[key];
 			
 			setImmediate( function() {
 				self.logDebug(9, "Head complete: " + key);
-				var value = trans.values[key];
 				callback( null, {
 					mod: value.mod,
 					len: value.len
@@ -121,11 +121,12 @@ var TransStorageFunctions = {
 		if (trans.keys[key] == 'W') {
 			// we've written the key, so fetch our version
 			this.logDebug(9, "Fetching Object in transaction: " + key);
+			var value = trans.values[key];
 			
 			setImmediate( function() {
-				var data = trans.values[key].data;
+				var data = value.data;
 				self.logDebug(9, "JSON fetch complete: " + key, self.debugLevel(10) ? data : null);
-				callback( err, Tools.copyHash(data, true) );
+				callback( null, Tools.copyHash(data, true) );
 			} );
 		}
 		else if (trans.keys[key] == 'D') {
