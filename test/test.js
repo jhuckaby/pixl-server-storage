@@ -67,44 +67,54 @@ module.exports = {
 				// save ref to storage
 				self.storage = server.Storage;
 				
-				// build our test array dynamically
-				// we have some repeating tests with different configuration options
-				self.tests = self.tests.concat( 
-					listTests.tests, 
+				var finishStartup = function() {
+					// build our test array dynamically
+					// we have some repeating tests with different configuration options
+					self.tests = self.tests.concat( 
+						listTests.tests, 
+						
+						(self.args.splice || self.args.all || self.args.comprehensive) ? 
+							listTests.generateSpliceTests() : [],
+						
+						hashTests.tests 
+					);
 					
-					(self.args.splice || self.args.all || self.args.comprehensive) ? 
-						listTests.generateSpliceTests() : [],
+					// now add transaction tests, which enable and init transactions
+					self.tests = self.tests.concat( transactionTests.tests );
 					
-					hashTests.tests 
-				);
+					// now repeat list and hash tests, with transactions enabled
+					// augment test names for clarity
+					[].concat( listTests.tests, hashTests.tests ).forEach( function(func) {
+						var wrapper = function(test) { func.apply(this, [test]); };
+						wrapper.testName = 'Transaction_' + func.name;
+						self.tests.push( wrapper );
+					} );
+					
+					// finally add indexer tests
+					self.tests = self.tests.concat( indexerTests.tests );
+					
+					// log memory usage at end
+					self.tests.push( function(test) {
+						if (global.gc) { global.gc(); global.gc(); }
+						test.ok( true );
+						setTimeout( function() { 
+							self.storage.logDebug(9, "MEMORY USAGE: " + Tools.getTextFromBytes( process.memoryUsage.rss() ), process.memoryUsage() );
+							test.done(); 
+						}, 1 );
+					} );
+					
+					// startup complete
+					// delay this by 1ms so the log is in the correct order (pre-start is async)
+					setTimeout( function() { callback(); }, 1 );
+				};
 				
-				// now add transaction tests, which enable and init transactions
-				self.tests = self.tests.concat( transactionTests.tests );
-				
-				// now repeat list and hash tests, with transactions enabled
-				// augment test names for clarity
-				[].concat( listTests.tests, hashTests.tests ).forEach( function(func) {
-					var wrapper = function(test) { func.apply(this, [test]); };
-					wrapper.testName = 'Transaction_' + func.name;
-					self.tests.push( wrapper );
-				} );
-				
-				// finally add indexer tests
-				self.tests = self.tests.concat( indexerTests.tests );
-				
-				// log memory usage at end
-				self.tests.push( function(test) {
-					if (global.gc) { global.gc(); global.gc(); }
-					test.ok( true );
-					setTimeout( function() { 
-						self.storage.logDebug(9, "MEMORY USAGE: " + Tools.getTextFromBytes( process.memoryUsage.rss() ), process.memoryUsage() );
-						test.done(); 
-					}, 1 );
-				} );
-				
-				// startup complete
-				// delay this by 1ms so the log is in the correct order (pre-start is async)
-				setTimeout( function() { callback(); }, 1 );
+				if (self.storage.engine.unitTestCleanup) {
+					self.storage.engine.unitTestCleanup( function(err) {
+						if (err) return callback(err);
+						finishStartup();
+					} );
+				}
+				else finishStartup();
 			} ); // startup
 		} ); // delete
 	},
@@ -127,9 +137,20 @@ module.exports = {
 	
 	tearDown: function (callback) {
 		// clean up
-		this.server.shutdown( function() {
-			cp.exec("rm -rf transactions " + base_data_dir, callback);
-		} );
+		var self = this;
+						
+		var finishShutdown = function(cleanup_err) {
+			self.server.shutdown( function(shutdown_err) {
+				cp.exec("rm -rf transactions " + base_data_dir, function(rm_err) {
+					callback( cleanup_err || shutdown_err || rm_err );
+				} );
+			} );
+		};
+		
+		if (this.storage && this.storage.engine && this.storage.engine.unitTestCleanup) {
+			this.storage.engine.unitTestCleanup( finishShutdown );
+		}
+		else finishShutdown();
 	},
 	
 	multiCheck: function(map, storage, callback) {
