@@ -20,7 +20,8 @@ module.exports = Class.create({
 	startup: function(callback) {
 		// setup multiple sub-engines
 		this.logDebug(2, "Setting up hybrid engine", this.config.get() );
-		
+		var self = this;
+
 		var binaryClass = require( './' + this.config.get('binaryEngine') + '.js' );
 		this.binaryEngine = new binaryClass();
 		this.binaryEngine.storage = this.storage;
@@ -31,6 +32,17 @@ module.exports = Class.create({
 		this.docEngine.storage = this.storage;
 		this.docEngine.init( this.server, this.storage.config.getSub( this.config.get('docEngine') ) );
 		
+		// Native transactions only apply to document records.  Binary keys are
+		// already passed straight through by the outer transaction wrapper, so
+		// only expose this hook if the doc engine can atomically commit JSON.
+		delete this.commitTransaction;
+		if (this.docEngine.commitTransaction) {
+			this.logDebug(3, "Hybrid engine will use native doc engine transactions");
+			this.commitTransaction = function(trans, callback) {
+				self.docEngine.commitTransaction( trans, callback );
+			};
+		}
+
 		async.series([
 			this.binaryEngine.startup.bind(this.binaryEngine),
 			this.docEngine.startup.bind(this.docEngine)
@@ -115,6 +127,21 @@ module.exports = Class.create({
 		], callback );
 	},
 	
+	unitTestCleanup: function(callback) {
+		// cleanup all child engines that provide a unit test cleanup hook
+		var tasks = [];
+
+		if (this.binaryEngine && this.binaryEngine.unitTestCleanup) {
+			tasks.push( this.binaryEngine.unitTestCleanup.bind(this.binaryEngine) );
+		}
+		if (this.docEngine && this.docEngine.unitTestCleanup) {
+			tasks.push( this.docEngine.unitTestCleanup.bind(this.docEngine) );
+		}
+
+		if (!tasks.length) return process.nextTick(callback);
+		async.series( tasks, callback );
+	},
+
 	shutdown: function(callback) {
 		// shutdown storage
 		this.logDebug(2, "Shutting down hybrid system");
