@@ -421,6 +421,115 @@ module.exports = Class.create({
 		} );
 	},
 	
+	commitTransaction: function(trans, callback) {
+		// commit all transaction actions using a native Redis MULTI/EXEC transaction
+		var self = this;
+		var write_keys = [];
+		var write_values = [];
+		var write_modified = [];
+		var delete_keys = [];
+		var bad_state = null;
+		var multi = this.redis.multi();
+		
+		this.logDebug(5, "Beginning transaction commit: " + trans.id, {
+			path: trans.path,
+			actions: Tools.numKeys(trans.keys)
+		});
+		
+		Object.keys(trans.keys).forEach( function(key) {
+			var record_state = trans.keys[key];
+			var norm_key = self.storage.normalizeKey(key);
+			
+			if (record_state == 'W') {
+				// Collect writes into parallel arrays so we can update the cache later
+				// without stringifying and Buffer-wrapping JSON a second time.
+				var item = trans.values[key];
+				var redis_key = self.prepKey(norm_key);
+				var value = Buffer.from( JSON.stringify( item.data ) );
+				
+				write_keys.push( redis_key );
+				write_values.push( value );
+				write_modified.push( item.mod );
+				
+				multi.set( redis_key, value );
+			}
+			else if (record_state == 'D') {
+				// Queue deletes into the same Redis transaction.
+				var redis_key = self.prepKey(norm_key);
+				delete_keys.push( redis_key );
+				
+				multi.del( redis_key );
+			}
+			else {
+				bad_state = new Error("Unknown transaction record state: " + record_state + ": " + key);
+			}
+		});
+		
+		if (bad_state) return callback(bad_state);
+		
+		multi.exec( function(err, results) {
+			if (err) {
+				// With MULTI/EXEC over the network, a top-level exec error may leave
+				// the actual Redis outcome unknowable, so treat it as fatal.
+				err.fatal = true;
+				self.logError('redis', "Transaction commit failed: " + err);
+				return callback(err);
+			}
+			
+			// Redis can return per-command errors from EXEC while still applying
+			// other commands.  That is a partial commit, so it must be fatal.
+			var cmd_err = null;
+			if (results) {
+				results.forEach( function(item) {
+					if (item && item[0] && !cmd_err) cmd_err = item[0];
+				});
+			}
+			if (cmd_err) {
+				cmd_err.fatal = true;
+				self.logError('redis', "Transaction command failed: " + cmd_err);
+				return callback(cmd_err);
+			}
+			
+			// commit succeeded, so now it is safe to update the engine LRU cache
+			if (self.cache) {
+				write_keys.forEach( function(key, idx) {
+					if (!self.storage.isBinaryKey(key)) {
+						self.cache.set( key, write_values[idx], { date: write_modified[idx] } );
+					}
+				});
+				
+				delete_keys.forEach( function(key) {
+					if (!self.storage.isBinaryKey(key)) {
+						// store 'empty' stub in cache
+						self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+					}
+				});
+			}
+			
+			self.logDebug(5, "Transaction commit complete: " + trans.id, {
+				path: trans.path
+			});
+			
+			callback();
+		} );
+	},
+	
+	unitTestCleanup: function(callback) {
+		// cleanup all unit test data
+		var self = this;
+		this.logDebug(3, "Cleaning up Redis unit test database with FLUSHDB");
+		
+		return this.redis.flushdb( function(err) {
+			if (err) {
+				self.logError('redis', "Failed to cleanup Redis unit test database: " + err);
+				return callback(err);
+			}
+			
+			if (self.cache) self.cache.clear();
+			callback();
+		} );
+	},
+	
 	runMaintenance: function(callback) {
 		// run daily maintenance
 		callback();
