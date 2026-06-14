@@ -14,6 +14,10 @@
 		"transactions": 0,
 		"log_event_types": { "all": 1 },
 		
+		"Hybrid": {
+			"docEngine": "SQLite",
+			"binaryEngine": "Filesystem"
+		},
 		"Filesystem": {
 			"base_dir": "data",
 			"key_namespaces": 0,
