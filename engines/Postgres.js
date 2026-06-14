@@ -53,7 +53,9 @@ module.exports = Class.create({
 			get: `SELECT modified, value FROM ${pg_config.table} WHERE key = $key LIMIT 1`,
 			head: `SELECT modified, octet_length(value) AS len FROM ${pg_config.table} WHERE key = $key LIMIT 1`,
 			put: `INSERT INTO ${pg_config.table} (key, value, modified) VALUES ($key, $value, $now) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, modified = EXCLUDED.modified`,
-			delete: `DELETE FROM ${pg_config.table} WHERE key = $key`
+			delete: `DELETE FROM ${pg_config.table} WHERE key = $key`,
+			transPut: `INSERT INTO ${pg_config.table} (key, value, modified) SELECT * FROM unnest($keys::text[], $values::bytea[], $modified::bigint[]) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, modified = EXCLUDED.modified`,
+			transDelete: `DELETE FROM ${pg_config.table} WHERE key = ANY($keys::text[])`
 		};
 		
 		// optional LRU cache
@@ -98,9 +100,15 @@ module.exports = Class.create({
 	},
 	
 	query(sql, args, callback) {
+		// run query against the pool
+		this.queryWithClient( this.db, sql, args, callback );
+	},
+	
+	queryWithClient: function(client, sql, args, callback) {
 		// run and log db query, and error if applicable
 		// allow for named variables in sql, expand to numbered $ variables for pg
 		var self = this;
+		if (!args) args = {};
 		
 		// perform $ placeholder substitution to populate sargs array
 		var sargs = [];
@@ -111,7 +119,7 @@ module.exports = Class.create({
 			return value;
 		} );
 		
-		this.db.query( sql, sargs, function(err, res) {
+		client.query( sql, sargs, function(err, res) {
 			if (err) {
 				self.logError('db', "Failed to execute SQL: " + err, { sql, err });
 				return callback(err);
@@ -123,7 +131,7 @@ module.exports = Class.create({
 			});
 			
 			callback(null, res);
-		} ); // db.query
+		} ); // client.query
 	},
 	
 	prepKey: function(key) {
@@ -460,6 +468,184 @@ module.exports = Class.create({
 			}
 			callback();
 		} ); // query
+	},
+	
+	commitTransaction: function(trans, callback) {
+		// commit all transaction actions using a native Postgres transaction
+		// IMPORTANT: all queries must run on this one checked-out client
+		var self = this;
+		var did_begin = false;
+		var write_keys = [];
+		var write_values = [];
+		var write_modified = [];
+		var delete_keys = [];
+		var bad_state = null;
+		var query_step = '';
+		
+		this.logDebug(5, "Beginning transaction commit: " + trans.id, {
+			path: trans.path,
+			actions: Tools.numKeys(trans.keys)
+		});
+		
+		Object.keys(trans.keys).forEach( function(key) {
+			var record_state = trans.keys[key];
+			var norm_key = self.storage.normalizeKey(key);
+			
+			if (record_state == 'W') {
+				// Collect writes into parallel arrays for one bulk UPSERT below.
+				var item = trans.values[key];
+				write_keys.push( self.prepKey(norm_key) );
+				write_values.push( Buffer.from( JSON.stringify( item.data ) ) );
+				write_modified.push( item.mod );
+			}
+			else if (record_state == 'D') {
+				// Collect deletes into one bulk DELETE below.
+				delete_keys.push( self.prepKey(norm_key) );
+			}
+			else {
+				bad_state = new Error("Unknown transaction record state: " + record_state + ": " + key);
+			}
+		});
+		
+		if (bad_state) return callback(bad_state);
+		
+		this.db.connect( function(err, client, release) {
+			if (err) {
+				self.logError('pg', "Failed to acquire Postgres client for transaction commit: " + err);
+				return callback(err);
+			}
+			
+			var releaseClient = function(err) {
+				// release the pg client exactly once
+				if (!release) return;
+				var rel = release;
+				release = null;
+				rel(err);
+			};
+			
+			async.series(
+				[
+					function(callback) {
+						// start native Postgres transaction
+						query_step = 'BEGIN';
+						self.queryWithClient( client, "BEGIN", {}, function(err) {
+							if (!err) did_begin = true;
+							callback(err);
+						} );
+					},
+					function(callback) {
+						// delete all final-deleted records in one set-based SQL statement
+						if (!delete_keys.length) return callback();
+						
+						query_step = 'DELETE';
+						self.queryWithClient( client, self.commands.transDelete, {
+							keys: delete_keys
+						}, function(err, res) {
+							if (err) return callback(err);
+							
+							if (res.rowCount < delete_keys.length) {
+								self.logDebug(5, "Some records were already deleted", {
+									requested: delete_keys.length,
+									deleted: res.rowCount
+								});
+							}
+							
+							callback();
+						} );
+					},
+					function(callback) {
+						// upsert all final-written records in one set-based SQL statement
+						if (!write_keys.length) return callback();
+						
+						query_step = 'UPSERT';
+						self.queryWithClient( client, self.commands.transPut, {
+							keys: write_keys,
+							values: write_values,
+							modified: write_modified
+						}, callback );
+					},
+					function(callback) {
+						// atomically reveal all transaction actions
+						query_step = 'COMMIT';
+						self.queryWithClient( client, "COMMIT", {}, callback );
+					}
+				],
+				function(err) {
+					if (!err) {
+						// commit succeeded, so now it is safe to update the engine LRU cache
+						if (self.cache) {
+							write_keys.forEach( function(key, idx) {
+								if (!self.storage.isBinaryKey(key)) {
+									self.cache.set( key, write_values[idx], { date: write_modified[idx] } );
+								}
+							});
+							
+							delete_keys.forEach( function(key) {
+								if (!self.storage.isBinaryKey(key)) {
+									// store 'empty' stub in cache
+									self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+								}
+							});
+						}
+						
+						self.logDebug(5, "Transaction commit complete: " + trans.id, {
+							path: trans.path
+						});
+						
+						releaseClient();
+						return callback();
+					}
+					
+					self.logError('pg', "Transaction commit failed: " + err);
+					
+					// If COMMIT itself fails, the outcome may be unknowable from the app side:
+					// Postgres may have committed, but the client may have lost the response.
+					// Surface this to the outer transaction layer as a fatal consistency error.
+					if (query_step == 'COMMIT') {
+						err.fatal = true;
+					}
+					
+					if (!did_begin) {
+						releaseClient(err);
+						return callback(err);
+					}
+					
+					// rollback best-effort.  If this fails, discard the client from the pool.
+					self.queryWithClient( client, "ROLLBACK", {}, function(rollback_err) {
+						if (rollback_err) {
+							self.logError('pg', "Transaction rollback failed: " + rollback_err);
+							err.fatal = true;
+							err.rollbackError = rollback_err;
+							releaseClient(rollback_err);
+						}
+						else {
+							self.logDebug(5, "Transaction rollback complete: " + trans.id);
+							releaseClient();
+						}
+						
+						callback(err);
+					} );
+				}
+			); // series
+		} ); // db.connect
+	},
+	
+	unitTestCleanup: function(callback) {
+		// cleanup all unit test data, leaving the table itself intact
+		var self = this;
+		var table = this.config.get('table');
+		
+		this.logDebug(3, "Cleaning up Postgres unit test table: " + table);
+		
+		this.query( `TRUNCATE TABLE ${table}`, {}, function(err) {
+			if (err) {
+				self.logError('pg', "Failed to cleanup Postgres unit test table: " + err);
+				return callback(err);
+			}
+			
+			if (self.cache) self.cache.clear();
+			callback();
+		} );
 	},
 	
 	runMaintenance: function(callback) {
