@@ -449,6 +449,92 @@ module.exports = Class.create({
 		});
 	},
 	
+	commitTransaction: function(trans, callback) {
+		// commit all transaction actions using a native SQLite transaction
+		var self = this;
+		var write_keys = [];
+		var write_values = [];
+		var write_modified = [];
+		var delete_keys = [];
+		var bad_state = null;
+		
+		this.logDebug(5, "Beginning transaction commit: " + trans.id, {
+			path: trans.path,
+			actions: Tools.numKeys(trans.keys)
+		});
+		
+		Object.keys(trans.keys).forEach( function(key) {
+			var record_state = trans.keys[key];
+			var norm_key = self.storage.normalizeKey(key);
+			
+			if (record_state == 'W') {
+				// Collect writes into parallel arrays so we can update the cache later
+				// without stringifying and Buffer-wrapping JSON a second time.
+				var item = trans.values[key];
+				write_keys.push( self.prepKey(norm_key) );
+				write_values.push( Buffer.from( JSON.stringify( item.data ) ) );
+				write_modified.push( item.mod );
+			}
+			else if (record_state == 'D') {
+				// Collect deletes into the same native transaction.
+				delete_keys.push( self.prepKey(norm_key) );
+			}
+			else {
+				bad_state = new Error("Unknown transaction record state: " + record_state + ": " + key);
+			}
+		});
+		
+		if (bad_state) return callback(bad_state);
+		
+		process.nextTick(function() {
+			try {
+				var put_stmt = self.db.prepare(self.commands.put);
+				var delete_stmt = self.db.prepare(self.commands.delete);
+				
+				var commit = self.db.transaction(function() {
+					delete_keys.forEach( function(key) {
+						delete_stmt.run({ key: key });
+					});
+					
+					write_keys.forEach( function(key, idx) {
+						put_stmt.run({ key: key, value: write_values[idx], now: write_modified[idx] });
+					});
+				});
+				
+				// Ask SQLite for the write transaction up front, since every commit
+				// replay here mutates rows.
+				commit.immediate();
+			}
+			catch (err) {
+				err.message = "Failed to commit transaction: " + trans.id + ": " + err;
+				self.logError('sqlite', '' + err);
+				return callback(err);
+			}
+			
+			// commit succeeded, so now it is safe to update the engine LRU cache
+			if (self.cache) {
+				write_keys.forEach( function(key, idx) {
+					if (!self.storage.isBinaryKey(key)) {
+						self.cache.set( key, write_values[idx], { date: write_modified[idx] } );
+					}
+				});
+				
+				delete_keys.forEach( function(key) {
+					if (!self.storage.isBinaryKey(key)) {
+						// store 'empty' stub in cache
+						self.cache.set( key, Buffer.alloc(0), { date: 0 } );
+					}
+				});
+			}
+			
+			self.logDebug(5, "Transaction commit complete: " + trans.id, {
+				path: trans.path
+			});
+			
+			callback();
+		});
+	},
+	
 	runMaintenance: function(callback) {
 		// run daily maintenance
 		// config.backups: { enabled, dir, filename, compress?, keep? }
