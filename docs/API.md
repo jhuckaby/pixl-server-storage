@@ -32,6 +32,7 @@ let storage = server.Storage;
 	* [shareUnlock](#shareunlock)
 	* [expire](#expire)
 	* [addRecordType](#addrecordtype)
+	* [optimize](#optimize)
 	* [getStats](#getstats)
 - [List Methods](#list-methods)
 	* [listCreate](#listcreate)
@@ -429,6 +430,63 @@ storage.addRecordType( 'my_custom_type', {
 ```
 
 See [Custom Record Types](../README.md#custom-record-types) for more details.
+
+## optimize
+
+```js
+storage.optimize( CALLBACK );
+```
+
+The `optimize()` method asks the current storage engine to run any engine-specific compaction or optimization routine, and returns a JSON-friendly report.  This is mostly useful for database engines.  SQLite runs `VACUUM`, performs a WAL checkpoint when applicable, and runs an integrity check.  Postgres runs `VACUUM` on the configured storage table.  Redis and engines without an optimization routine return a no-op report.
+
+The method waits for the storage queue and advisory locks to drain before starting.  Your callback is passed an error if optimization fails, or a report object as the second argument.  The `perf` property is the direct result of a [pixl-perf](https://github.com/jhuckaby/pixl-perf) `metrics()` call using second-scale timing.  Example:
+
+```js
+storage.optimize( function(err, report) {
+	if (err) throw err;
+	console.log( report );
+} );
+```
+
+Example SQLite report:
+
+```json
+{
+	"engine": "SQLite",
+	"optimized": true,
+	"file": "/let/data/sqlite.db",
+	"size_before": 1048576,
+	"size_after": 786432,
+	"bytes_reclaimed": 262144,
+	"integrity_ok": true,
+	"integrity_check": "ok",
+	"perf": {
+		"scale": 1,
+		"perf": {
+			"total": 0.421,
+			"vacuum": 0.31,
+			"checkpoint": 0.001,
+			"integrity": 0.11
+		},
+		"counters": {}
+	},
+	"operations": [
+		{
+			"name": "vacuum",
+			"ok": true,
+			"size_before": 1048576,
+			"size_after": 786432,
+			"bytes_reclaimed": 262144,
+			"reclaimed": "256 KB"
+		},
+		{
+			"name": "integrity_check",
+			"ok": true,
+			"result": "ok"
+		}
+	]
+}
+```
 
 ## getStats
 

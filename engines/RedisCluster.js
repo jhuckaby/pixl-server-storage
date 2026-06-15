@@ -9,6 +9,7 @@ const Class = require("pixl-class");
 const Component = require("pixl-server/component");
 const Redis = require('ioredis');
 const Tools = require("pixl-tools");
+const Perf = require("pixl-perf");
 const Cache = require("pixl-cache");
 
 module.exports = Class.create({
@@ -437,6 +438,29 @@ module.exports = Class.create({
 	runMaintenance: function(callback) {
 		// run daily maintenance
 		callback();
+	},
+	
+	optimize: function(callback) {
+		// Redis Cluster does its own memory management, so there is nothing to run here.
+		var perf = new Perf();
+		perf.setScale(1);
+		perf.begin();
+		perf.begin('noop');
+		perf.end('noop');
+		perf.end();
+		
+		process.nextTick( callback, null, {
+			engine: this.__name,
+			optimized: false,
+			perf: perf.metrics(),
+			operations: [
+				{
+					name: 'noop',
+					ok: true,
+					message: "RedisCluster does not require storage optimization."
+				}
+			]
+		} );
 	},
 	
 	shutdown: function(callback) {

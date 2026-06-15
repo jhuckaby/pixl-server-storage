@@ -30,7 +30,7 @@ module.exports = Class.create({
 		maintenance: 0,
 		log_event_types: { 
 			all:0, get:0, put:0, head:0, delete:0, expire_set:0, perf_sec:0, perf_min:0,
-			commit:0, index:0, unindex:0, search:0, sort:0, maint:1 
+			commit:0, index:0, unindex:0, search:0, sort:0, maint:1, optimize:1
 		},
 		max_recent_events: 0,
 		cache_key_match: '',
@@ -785,6 +785,68 @@ module.exports = Class.create({
 				} // succes
 			} // list complete
 		); // listEach
+	},
+	
+	optimize: function(callback) {
+		// run engine-specific storage optimization, if supported
+		var self = this;
+		if (!callback) callback = function() {};
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		// Optimize operates on the live backing store, so it should only be run
+		// from the root storage instance, after queued writes and locks settle.
+		if (this.currentTransactionPath) {
+			return callback( new Error("Cannot optimize storage from inside a transaction.") );
+		}
+		
+		this.logDebug(3, "Starting storage optimization");
+		
+		this.waitForQueueDrain( function() {
+			self.waitForAllLocks( function() {
+				var pf = self.perf.begin('optimize');
+				var engine = self.engine;
+				var optimize = engine && engine.optimize;
+				
+				if (!optimize) {
+					pf.end();
+					var perf = new Perf();
+					perf.setScale(1);
+					perf.begin();
+					perf.begin('noop');
+					perf.end('noop');
+					perf.end();
+					
+					var report = {
+						engine: engine ? engine.__name : '',
+						optimized: false,
+						perf: perf.metrics(),
+						operations: [
+							{
+								name: 'noop',
+								ok: true,
+								message: "No optimization is available for this engine."
+							}
+						]
+					};
+					
+					self.logTransaction('optimize', report.engine || 'none', report);
+					return callback(null, report);
+				}
+				
+				optimize.call( engine, function(err, report) {
+					pf.end();
+					if (err) return callback(err);
+					
+					if (!report) report = {};
+					if (!report.engine) report.engine = engine.__name;
+					if (typeof(report.optimized) == 'undefined') report.optimized = true;
+					
+					self.logDebug(3, "Storage optimization complete", report);
+					self.logTransaction('optimize', report.engine || 'none', report);
+					callback(null, report);
+				} );
+			} ); // waitForLocks
+		} ); // waitForQueueDrain
 	},
 	
 	lock: function(key, wait, callback) {

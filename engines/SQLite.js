@@ -79,7 +79,7 @@ module.exports = Class.create({
 			});
 		}
 		
-		var db_file = Path.join( this.baseDir, sql_config.filename );
+		var db_file = this.dbFile = Path.join( this.baseDir, sql_config.filename );
 		this.logDebug(3, "Opening database file: " + db_file, sql_config.pragmas || {});
 		
 		try {
@@ -675,6 +675,112 @@ module.exports = Class.create({
 			self.logError('backup', "SQLite backup operation failed.  Please check permissions and available disk space. " + err);
 			fs.unlink(file, noop);
 			finish();
+		});
+	},
+	
+	optimize: function(callback) {
+		// compact the SQLite database and run an integrity check
+		var self = this;
+		var perf = new Perf();
+		var report = {
+			engine: this.__name,
+			optimized: true,
+			file: this.dbFile,
+			operations: []
+		};
+		
+		this.logDebug(3, "Running SQLite optimization");
+		perf.setScale(1);
+		perf.begin();
+		
+		process.nextTick(function() {
+			try {
+				if (!self.db) throw new Error("SQLite database is not open.");
+				if (!self.dbFile || !fs.existsSync(self.dbFile)) throw new Error("SQLite database file could not be found.");
+				
+				var old_size = fs.statSync(self.dbFile).size;
+				
+				self.logDebug(7, "Running SQLite VACUUM");
+				perf.begin('vacuum');
+				self.db.exec("VACUUM;");
+				perf.end('vacuum');
+				
+				var new_size = fs.statSync(self.dbFile).size;
+				var bytes_reclaimed = Math.max(0, old_size - new_size);
+				
+				report.size_before = old_size;
+				report.size_after = new_size;
+				report.bytes_reclaimed = bytes_reclaimed;
+				report.operations.push({
+					name: 'vacuum',
+					ok: true,
+					size_before: old_size,
+					size_after: new_size,
+					bytes_reclaimed: bytes_reclaimed,
+					reclaimed: Tools.getTextFromBytes(bytes_reclaimed)
+				});
+				
+				// If the DB is in WAL mode, truncate the WAL file after VACUUM
+				// so the caller sees disk usage reclaimed immediately.
+				var journal_mode = '';
+				try { journal_mode = ('' + self.db.pragma('journal_mode', { simple: true })).toUpperCase(); }
+				catch (err) {
+					var pragmas = self.config.get('pragmas') || {};
+					journal_mode = ('' + (pragmas.journal_mode || '')).toUpperCase();
+				}
+				
+				if (journal_mode == 'WAL') {
+					self.logDebug(7, "Running SQLite WAL checkpoint");
+					
+					perf.begin('checkpoint');
+					var rows = self.db.prepare("PRAGMA wal_checkpoint(TRUNCATE);").all();
+					perf.end('checkpoint');
+					var row = rows && rows[0] ? rows[0] : {};
+					var busy = row.busy || 0;
+					
+					report.operations.push({
+						name: 'wal_checkpoint',
+						ok: !busy,
+						mode: 'TRUNCATE',
+						journal_mode: journal_mode,
+						busy: busy,
+						log: row.log || 0,
+						checkpointed: row.checkpointed || 0
+					});
+				}
+				
+				self.logDebug(7, "Running SQLite integrity check");
+				
+				perf.begin('integrity');
+				var rows = self.db.prepare("PRAGMA integrity_check;").all();
+				perf.end('integrity');
+				var results = rows.map( function(row) {
+					return ('' + row.integrity_check).trim();
+				}).filter( function(text) {
+					return !!text;
+				});
+				
+				var result = results.join("\n") || "No response from integrity check.";
+				var ok = (result.toLowerCase() == 'ok');
+				
+				report.integrity_ok = ok;
+				report.integrity_check = result;
+				report.operations.push({
+					name: 'integrity_check',
+					ok: ok,
+					result: result
+				});
+				
+				perf.end();
+				report.perf = perf.metrics();
+				self.logDebug(3, "SQLite optimization complete", report);
+				callback(null, report);
+			}
+			catch (err) {
+				err.message = "SQLite optimization failed: " + err.message;
+				self.logError('sqlite', '' + err);
+				callback(err);
+			}
 		});
 	},
 	

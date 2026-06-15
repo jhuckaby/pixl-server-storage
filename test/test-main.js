@@ -656,6 +656,23 @@ module.exports = {
 			} );
 		},
 		
+		function testOptimize(test) {
+			// run engine-specific optimization, or a safe no-op if unsupported
+			test.expect(8);
+			
+			this.storage.optimize( function(err, report) {
+				test.ok( !err, "No error running optimize: " + err );
+				test.ok( !!report, "Got an optimize report" );
+				test.ok( !!report.engine, "Optimize report has an engine name" );
+				test.ok( Array.isArray(report.operations), "Optimize report has operations" );
+				test.ok( report.operations.length >= 1, "Optimize report has at least one operation" );
+				test.ok( !!report.perf, "Optimize report has perf metrics" );
+				test.ok( report.perf.scale == 1, "Optimize perf metrics are in seconds" );
+				test.ok( typeof(report.perf.perf.total) == 'number', "Optimize perf metrics have a total" );
+				test.done();
+			} );
+		},
+		
 		function testMaintenance(test) {
 			var self = this;
 			test.expect(3);

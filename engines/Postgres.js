@@ -653,6 +653,48 @@ module.exports = Class.create({
 		callback();
 	},
 	
+	optimize: function(callback) {
+		// run Postgres VACUUM on the storage table
+		var self = this;
+		var table = this.config.get('table');
+		var perf = new Perf();
+		var vacuum = null;
+		
+		this.logDebug(3, "Running Postgres optimization", { table: table });
+		perf.setScale(1);
+		perf.begin();
+		vacuum = perf.begin('vacuum');
+		
+		this.query( `VACUUM ${table}`, {}, function(err, res) {
+			vacuum.end();
+			perf.end();
+			
+			if (err) {
+				err.message = "Postgres optimization failed: " + err.message;
+				self.logError('pg', '' + err);
+				return callback(err);
+			}
+			
+			var report = {
+				engine: self.__name,
+				optimized: true,
+				table: table,
+				perf: perf.metrics(),
+				operations: [
+					{
+						name: 'vacuum',
+						ok: true,
+						command: res.command || 'VACUUM',
+						rowCount: res.rowCount || 0
+					}
+				]
+			};
+			
+			self.logDebug(3, "Postgres optimization complete", report);
+			callback(null, report);
+		} );
+	},
+	
 	shutdown: function(callback) {
 		// shutdown storage
 		var self = this;

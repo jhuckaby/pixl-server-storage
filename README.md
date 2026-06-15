@@ -67,6 +67,7 @@ Here is the table of contents for this current document:
 	* [Copying Records](#copying-records)
 	* [Renaming Records](#renaming-records)
 	* [Deleting Records](#deleting-records)
+	* [Optimizing Storage](#optimizing-storage)
 - [Storing Binary Blobs](#storing-binary-blobs)
 - [Using Streams](#using-streams)
 - [Expiring Data](#expiring-data)
@@ -931,6 +932,19 @@ storage.delete( 'test1', function(err) {
 } );
 ```
 
+## Optimizing Storage
+
+To ask the current engine to run any engine-specific optimization routine, call the [optimize()](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#optimize) method.  This waits for the storage queue and advisory locks to drain, then runs whatever is appropriate for the backing store.  SQLite runs `VACUUM`, performs a WAL checkpoint when applicable, and runs an integrity check.  Postgres runs `VACUUM` on the configured storage table.  Redis and engines without an optimization routine return a no-op report.
+
+```js
+storage.optimize( function(err, report) {
+	if (err) throw err;
+	console.log( report );
+} );
+```
+
+The returned report is JSON-friendly and suitable for rendering into logs, Markdown or an admin UI.  It includes a `perf` object from [pixl-perf](https://github.com/jhuckaby/pixl-perf) with named timings for the optimization steps.  See the [API Reference](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/API.md#optimize) for details.
+
 # Storing Binary Blobs
 
 To store a binary value, pass a filled `Buffer` object as the value, and specify a key ending in a "file extension", e.g. `.gif`.  The latter requirement is so the engine can detect which records are binary and which are JSON, just by looking at the key.  Example:
@@ -1126,7 +1140,7 @@ Other examples of errors include transaction commit failures and transaction rol
 Transactions (well, more specifically, all storage actions) are logged with the `category` column set to `transaction`.  The `code` column will be one of the following constants, denoting which action took place:
 
 ```
-get, put, head, delete, expire_set, perf_sec, perf_min, commit, index, unindex, search, sort, maint
+get, put, head, delete, expire_set, perf_sec, perf_min, commit, index, unindex, search, sort, maint, optimize
 ```
 
 You can control which of these event types are logged, by including a `log_event_types` object in your storage configuration.  Include keys with true values for any log event types you want to see logged.  Example:
@@ -1134,7 +1148,7 @@ You can control which of these event types are logged, by including a `log_event
 ```js
 log_event_types: { 
 	get:0, put:1, head:0, delete:1, expire_set:1, perf_sec:1, perf_min:1,
-	commit:1, index:1, unindex:1, search:0, sort:0, maint:1 
+	commit:1, index:1, unindex:1, search:0, sort:0, maint:1, optimize:1
 }
 ```
 

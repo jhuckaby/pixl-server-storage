@@ -4,7 +4,7 @@
 
 var Class = require("pixl-class");
 var Component = require("pixl-server/component");
-var Tools = require("pixl-tools");
+var Perf = require("pixl-perf");
 var async = require('async');
 
 module.exports = Class.create({
@@ -125,6 +125,81 @@ module.exports = Class.create({
 			this.binaryEngine.runMaintenance.bind(this.binaryEngine),
 			this.docEngine.runMaintenance.bind(this.docEngine)
 		], callback );
+	},
+	
+	optimize: function(callback) {
+		// run optimization on child engines that support it
+		var self = this;
+		var perf = new Perf();
+		var results = [];
+		
+		this.logDebug(3, "Running hybrid optimization");
+		perf.setScale(1);
+		perf.begin();
+		
+		var optimizeEngine = function(label, engine, callback) {
+			var tracker = perf.begin(label);
+			
+			if (!engine || !engine.optimize) {
+				var child_perf = new Perf();
+				child_perf.setScale(1);
+				child_perf.begin();
+				child_perf.begin('noop');
+				child_perf.end('noop');
+				child_perf.end();
+				tracker.end();
+				
+				results.push({
+					role: label,
+					engine: engine ? engine.__name : '',
+					optimized: false,
+					perf: child_perf.metrics(),
+					operations: [
+						{
+							name: 'noop',
+							ok: true,
+							message: "No optimization is available for this engine."
+						}
+					]
+				});
+				return process.nextTick(callback);
+			}
+			
+			engine.optimize( function(err, report) {
+				tracker.end();
+				if (err) return callback(err);
+				if (!report) report = {};
+				report.role = label;
+				if (!report.engine) report.engine = engine.__name;
+				results.push(report);
+				callback();
+			} );
+		};
+		
+		async.series([
+			function(callback) {
+				optimizeEngine( 'binary', self.binaryEngine, callback );
+			},
+			function(callback) {
+				optimizeEngine( 'doc', self.docEngine, callback );
+			}
+		], function(err) {
+			if (err) return callback(err);
+			perf.end();
+			
+			var report = {
+				engine: self.__name,
+				optimized: results.some( function(item) { return !!item.optimized; } ),
+				perf: perf.metrics(),
+				engines: results
+			};
+			
+			report.operations = results.reduce( function(list, item) {
+				return list.concat( item.operations || [] );
+			}, [] );
+			
+			callback(null, report);
+		} );
 	},
 	
 	unitTestCleanup: function(callback) {
