@@ -752,6 +752,83 @@ You can customize the table name via the `table` configuration property.  It def
 
 [Connection Pooling](https://node-postgres.com/features/pooling) is utilized to open many simultaneous connections to greatly increase throughput.  Set the `max` property to the maximum number of concurrent connections your database can handle.  Ideally this should be set to the global [concurrency](#concurrency) setting.
 
+### Postgres SSL
+
+The Postgres engine passes all extra properties in the `Postgres` configuration block directly into the [pg.Pool constructor](https://node-postgres.com/apis/pool), except for `table` and `cache`, which are used by pixl-server-storage itself.  This means you can use the standard [node-postgres SSL options](https://node-postgres.com/features/ssl) without any special pixl-server-storage code.
+
+For a server with a certificate trusted by Node.js already, you can enable SSL by simply adding `"ssl":true` like this:
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"host": "postgres.example.com",
+		"database": "postgres",
+		"user": "postgres",
+		"password": "postgres",
+		"port": 5432,
+		"ssl": true
+	}
+}
+```
+
+For a private CA, self-signed server certificate, or hosted database that requires its own CA bundle, pass an `ssl` object.  This object is passed through to Node.js TLS, so you can provide `ca`, `cert`, `key`, `servername`, and other supported TLS options.  If you store PEM text directly in JSON, preserve line breaks as `\n` (standard JSON string encoding):
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"host": "postgres.example.com",
+		"database": "postgres",
+		"user": "postgres",
+		"password": "postgres",
+		"port": 5432,
+		"ssl": {
+			"ca": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+		}
+	}
+}
+```
+
+If you need to load the CA certificate from disk, you can also use a `connectionString` with the standard Postgres SSL parameters.  The `pg` module will read `sslrootcert` and use it as the TLS CA:
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"connectionString": "postgres://postgres:postgres@postgres.example.com:5432/postgres?sslmode=verify-full&sslrootcert=/path/to/root-ca.pem",
+		"max": 32,
+		"table": "items"
+	}
+}
+```
+
+If you put SSL parameters such as `sslmode`, `sslcert`, `sslkey`, or `sslrootcert` in the connection string, avoid also setting a separate `ssl` object.  The `pg` connection string parser replaces the `ssl` object when those URL parameters are present.
+
+Please avoid `ssl: { "rejectUnauthorized": false }` for production use.  It can be useful as a short diagnostic test, but it disables certificate verification.
+
+#### AWS RDS
+
+Amazon RDS for PostgreSQL works well with this setup.  Download the appropriate RDS CA bundle from the [AWS RDS SSL/TLS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html), place it somewhere readable by your app, and use `sslmode=verify-full` with `sslrootcert`:
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"connectionString": "postgres://xyops:secret@mydb.abc123.us-east-1.rds.amazonaws.com:5432/xyops?sslmode=verify-full&sslrootcert=/opt/xyops/conf/rds-ca.pem",
+		"max": 32,
+		"table": "items"
+	}
+}
+```
+
+AWS has a few quirks worth knowing:
+
+* RDS for PostgreSQL 15 and newer enables `rds.force_ssl` by default, so non-SSL connections may be rejected with an error similar to `no pg_hba.conf entry ... SSL off`.
+* `sslmode=verify-full` verifies both the certificate chain and the hostname.  Use the actual RDS endpoint hostname in your connection string when possible.
+* If you connect through a custom DNS name, SSH tunnel, or local proxy, hostname verification may need the original RDS endpoint as the TLS `servername` option.  In that case, prefer explicit config properties and an `ssl` object instead of URL SSL parameters.
+* AWS recommends trusting the root RDS CA certificate.  Avoid pinning intermediate certificates, as that can cause trouble when RDS rotates server certificates.
+
 See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
 
 Note that pooling and caching have little effect when the database is running locally (i.e. localhost).  They offer much more benefit when the database is located remotely over some number of network hops.
