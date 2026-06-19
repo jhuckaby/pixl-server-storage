@@ -56,9 +56,13 @@ Here is the table of contents for this current document:
 		+ [S3 Cache](#s3-cache)
 		+ [S3 Compatible Services](#s3-compatible-services)
 	* [Redis](#redis)
+		+ [Redis Auth and TLS](#redis-auth-and-tls)
 		+ [RedisCluster](#rediscluster)
+			- [RedisCluster Auth and TLS](#rediscluster-auth-and-tls)
 	* [SQLite](#sqlite)
 	* [Postgres](#postgres)
+		+ [Postgres SSL](#postgres-ssl)
+		+ [AWS RDS](#aws-rds)
 	* [Hybrid](#hybrid)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)
@@ -590,6 +594,8 @@ Then configure your storage thusly:
 	"Redis": {
 		"host": "127.0.0.1",
 		"port": 6379,
+		"username": "",
+		"password": "",
 		"keyPrefix": "",
 		"keyTemplate": "",
 		"cache": {
@@ -602,6 +608,58 @@ Then configure your storage thusly:
 ```
 
 Set the `host` and `port` for your own Redis server setup.  Please see [Common Redis Options](https://redis.github.io/ioredis/interfaces/CommonRedisOptions.html) for other things you can include here, such as timeouts, authentication and database selection.
+
+### Redis Auth and TLS
+
+For production, Redis is usually deployed on a private network, firewalled to trusted clients, and protected with authentication as an extra layer of safety.  Modern Redis ACL users use both `username` and `password`.
+
+Configure `username` and `password` like this:
+
+```json
+{
+	"engine": "Redis",
+	"Redis": {
+		"host": "redis.example.com",
+		"port": 6379,
+		"username": "default",
+		"password": "your-redis-password"
+	}
+}
+```
+
+Redis `AUTH` is sent over the Redis connection itself, so use TLS too when traffic can cross an untrusted network, a shared network, or a managed provider endpoint that requires encryption.  The Redis engine passes extra config properties through to [ioredis](https://github.com/redis/ioredis), so you can enable TLS with the `tls` option:
+
+```json
+{
+	"engine": "Redis",
+	"Redis": {
+		"host": "redis.example.com",
+		"port": 6380,
+		"username": "default",
+		"password": "your-redis-password",
+		"tls": {}
+	}
+}
+```
+
+For a private CA or self-signed certificate, pass TLS options such as `ca`, `cert`, `key` or `servername` inside the `tls` object.  These are passed through to Node.js TLS.  If you store PEM text directly in JSON, preserve line breaks as `\n`:
+
+```json
+{
+	"engine": "Redis",
+	"Redis": {
+		"host": "redis.example.com",
+		"port": 6380,
+		"username": "default",
+		"password": "your-redis-password",
+		"tls": {
+			"ca": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+		}
+	}
+}
+```
+
+Please avoid `tls: { "rejectUnauthorized": false }` for production use.  It can be useful as a short diagnostic test, but it disables certificate verification.
 
 The optional `keyPrefix` property works similarly to the [S3 Key Prefix](#s3-key-prefix) feature.  It allows you to prefix all the Redis keys with a common string, to separate your application's data in a shared database situation.
 
@@ -647,6 +705,53 @@ Then configure your storage thusly:
 Set the `host` and `port` for your own Redis cluster setup.  The `host` should point to the cluster endpoint, **not** an individual Redis server.  The `connectRetries` sets the number of retries on the initial socket connect operation (it defaults to `5`).
 
 The `clusterOpts` property can hold several different cluster configuration options.  Please see [Cluster Options](https://redis.github.io/ioredis/interfaces/ClusterOptions.html) for other things you can include here, such as `scaleReads` and `redisOptions`.  For the `redisOptions` object, please see [Common Redis Options](https://redis.github.io/ioredis/interfaces/CommonRedisOptions.html) for other things you can include, such as timeouts, authentication and database selection.
+
+#### RedisCluster Auth and TLS
+
+For RedisCluster, shared authentication and TLS options should go inside `clusterOpts.redisOptions`, because those options are passed to every Redis node connection created by ioredis:
+
+```json
+{
+	"engine": "RedisCluster",
+	"RedisCluster": {
+		"host": "clustercfg.redis.example.com",
+		"port": 6379,
+		"clusterOpts": {
+			"scaleReads": "master",
+			"redisOptions": {
+				"commandTimeout": 5000,
+				"connectTimeout": 5000,
+				"username": "default",
+				"password": "your-cluster-password"
+			}
+		}
+	}
+}
+```
+
+To connect to a TLS-enabled Redis cluster, add `tls` under `redisOptions`:
+
+```json
+{
+	"engine": "RedisCluster",
+	"RedisCluster": {
+		"host": "clustercfg.redis.example.com",
+		"port": 6380,
+		"clusterOpts": {
+			"scaleReads": "master",
+			"redisOptions": {
+				"commandTimeout": 5000,
+				"connectTimeout": 5000,
+				"username": "default",
+				"password": "your-cluster-password",
+				"tls": {}
+			}
+		}
+	}
+}
+```
+
+AWS ElastiCache for Redis commonly uses this pattern when authentication and in-transit encryption are enabled.  Use `username` and `password` for ACL users.
 
 It is **highly recommended** that you keep the `scaleReads` property set to `"master"`, for immediate consistency (required for [Lists](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Lists.md), [Hashes](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Hashes.md), [Transactions](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Transactions.md) and the [Indexer](https://github.com/jhuckaby/pixl-server-storage/blob/master/docs/Indexer.md)).
 
@@ -807,7 +912,7 @@ If you put SSL parameters such as `sslmode`, `sslcert`, `sslkey`, or `sslrootcer
 
 Please avoid `ssl: { "rejectUnauthorized": false }` for production use.  It can be useful as a short diagnostic test, but it disables certificate verification.
 
-#### AWS RDS
+### AWS RDS
 
 Amazon RDS for PostgreSQL works well with this setup.  Download the appropriate RDS CA bundle from the [AWS RDS SSL/TLS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html), place it somewhere readable by your app, and use `sslmode=verify-full` with `sslrootcert`:
 
