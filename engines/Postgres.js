@@ -644,6 +644,11 @@ module.exports = Class.create({
 			return Promise.resolve(self._azureTokenCache.token);
 		}
 
+		// Coalesce concurrent callers onto the same in-flight request
+		if (self._azureTokenFetch) {
+			return self._azureTokenFetch;
+		}
+
 		var tenant_id = process.env.AZURE_TENANT_ID;
 		var client_id = process.env.AZURE_CLIENT_ID;
 		var token_file = process.env.AZURE_FEDERATED_TOKEN_FILE;
@@ -664,7 +669,7 @@ module.exports = Class.create({
 			client_assertion: federated_token
 		}).toString();
 
-		return new Promise(function(resolve, reject) {
+		self._azureTokenFetch = new Promise(function(resolve, reject) {
 			var options = {
 				hostname: 'login.microsoftonline.com',
 				path: '/' + tenant_id + '/oauth2/v2.0/token',
@@ -692,7 +697,15 @@ module.exports = Class.create({
 			req.on('error', reject);
 			req.write(body);
 			req.end();
+		}).then(function(token) {
+			self._azureTokenFetch = null;
+			return token;
+		}, function(err) {
+			self._azureTokenFetch = null;
+			throw err;
 		});
+
+		return self._azureTokenFetch;
 	},
 
 	unitTestCleanup: function(callback) {

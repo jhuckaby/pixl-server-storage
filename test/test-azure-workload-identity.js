@@ -198,6 +198,59 @@ module.exports = {
 			test.done();
 		},
 
+		function fetchAzureToken_coalescesConcurrentFetches(test) {
+			test.expect(2);
+
+			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-conc-' + process.pid + '.txt');
+			fs.writeFileSync(tokenFile, 'FAKE_FEDERATED_TOKEN\n', 'utf8');
+
+			var callCount = 0;
+			var origRequest = https.request;
+			https.request = function(options, cb) {
+				callCount++;
+				var EventEmitter = require('events');
+				var res = new EventEmitter();
+				res.statusCode = 200;
+				var fakeReq = new EventEmitter();
+				fakeReq.write = function() {};
+				fakeReq.setTimeout = function() {};
+				fakeReq.destroy = function() {};
+				fakeReq.end = function() {
+					setImmediate(function() {
+						cb(res);
+						setImmediate(function() {
+							res.emit('data', JSON.stringify({ access_token: 'CONCURRENT_TOKEN' }));
+							res.emit('end');
+						});
+					});
+				};
+				return fakeReq;
+			};
+
+			var ctx = {};
+			var fetchAzureToken = fetchAzureToken_proto.bind(ctx);
+
+			withEnv({
+				AZURE_TENANT_ID: 'test-tenant-id',
+				AZURE_CLIENT_ID: 'test-client-id',
+				AZURE_FEDERATED_TOKEN_FILE: tokenFile
+			}, function() {
+				// Fire three concurrent calls before any resolves
+				return Promise.all([fetchAzureToken(), fetchAzureToken(), fetchAzureToken()]);
+			}).then(function(tokens) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(tokens.every(function(t) { return t === 'CONCURRENT_TOKEN'; }), "All callers got the token");
+				test.ok(callCount === 1, "https.request called only once despite three concurrent callers (got " + callCount + ")");
+				test.done();
+			}).catch(function(err) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(false, "Unexpected error: " + err);
+				test.done();
+			});
+		},
+
 		function fetchAzureToken_cachesToken(test) {
 			test.expect(2);
 
