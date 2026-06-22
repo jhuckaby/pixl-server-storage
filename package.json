@@ -43,7 +43,7 @@
 		"pixl-unit": "^1.0.14"
 	},
 	"scripts": {
-		"test": "pixl-unit test/test.js",
+		"test": "pixl-unit test/test.js test/test-azure-workload-identity.js",
 		"build": "nearleyc pxql.ne > pxql.js"
 	}
 }

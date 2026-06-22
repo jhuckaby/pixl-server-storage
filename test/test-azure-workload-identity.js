@@ -82,27 +82,6 @@ function withEnv(vars, fn) {
 	);
 }
 
-function mockHttps(responseBody) {
-	var EventEmitter = require('events');
-	var origRequest = https.request;
-	https.request = function(options, cb) {
-		var res = new EventEmitter();
-		var fakeReq = new EventEmitter();
-		fakeReq.write = function() {};
-		fakeReq.end = function() {
-			setImmediate(function() {
-				cb(res);
-				setImmediate(function() {
-					res.emit('data', typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody));
-					res.emit('end');
-				});
-			});
-		};
-		return fakeReq;
-	};
-	return function restore() { https.request = origRequest; };
-}
-
 module.exports = {
 	tests: [
 
@@ -123,21 +102,24 @@ module.exports = {
 			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-' + process.pid + '.txt');
 			fs.writeFileSync(tokenFile, 'FAKE_FEDERATED_TOKEN\n', 'utf8');
 
-			var restore = mockHttps({ access_token: 'FAKE_ACCESS_TOKEN' });
 			var capturedOptions = null;
 			var origRequest = https.request;
 			https.request = function(options, cb) {
 				capturedOptions = options;
-				return origRequest.call(https, options, cb);
-			};
-			// (mockHttps already replaced origRequest so chain properly)
-			// Redo: capture and delegate to the mock
-			restore(); // restore the real one
-			var mockRestore = mockHttps({ access_token: 'FAKE_ACCESS_TOKEN' });
-			var mockRequest = https.request;
-			https.request = function(options, cb) {
-				capturedOptions = options;
-				return mockRequest.call(https, options, cb);
+				var EventEmitter = require('events');
+				var res = new EventEmitter();
+				var fakeReq = new EventEmitter();
+				fakeReq.write = function() {};
+				fakeReq.end = function() {
+					setImmediate(function() {
+						cb(res);
+						setImmediate(function() {
+							res.emit('data', JSON.stringify({ access_token: 'FAKE_ACCESS_TOKEN' }));
+							res.emit('end');
+						});
+					});
+				};
+				return fakeReq;
 			};
 
 			withEnv({
@@ -147,14 +129,14 @@ module.exports = {
 			}, function() {
 				return fetchAzureToken();
 			}).then(function(token) {
-				mockRestore();
+				https.request = origRequest;
 				try { fs.unlinkSync(tokenFile); } catch(e) {}
 				test.ok(token === 'FAKE_ACCESS_TOKEN', "Returned expected access_token");
 				test.ok(capturedOptions && capturedOptions.hostname === 'login.microsoftonline.com', "Called correct hostname");
 				test.ok(capturedOptions && capturedOptions.path.indexOf('test-tenant-id') >= 0, "Path contains tenant ID");
 				test.done();
 			}).catch(function(err) {
-				mockRestore();
+				https.request = origRequest;
 				try { fs.unlinkSync(tokenFile); } catch(e) {}
 				test.ok(false, "Unexpected error: " + err);
 				test.done();
@@ -167,7 +149,23 @@ module.exports = {
 			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-err-' + process.pid + '.txt');
 			fs.writeFileSync(tokenFile, 'FAKE_TOKEN', 'utf8');
 
-			var restore = mockHttps({ error: 'invalid_client', error_description: 'Bad credentials' });
+			var origRequest = https.request;
+			https.request = function(options, cb) {
+				var EventEmitter = require('events');
+				var res = new EventEmitter();
+				var fakeReq = new EventEmitter();
+				fakeReq.write = function() {};
+				fakeReq.end = function() {
+					setImmediate(function() {
+						cb(res);
+						setImmediate(function() {
+							res.emit('data', JSON.stringify({ error: 'invalid_client', error_description: 'Bad credentials' }));
+							res.emit('end');
+						});
+					});
+				};
+				return fakeReq;
+			};
 
 			withEnv({
 				AZURE_TENANT_ID: 'test-tenant-id',
@@ -176,12 +174,12 @@ module.exports = {
 			}, function() {
 				return fetchAzureToken();
 			}).then(function() {
-				restore();
+				https.request = origRequest;
 				try { fs.unlinkSync(tokenFile); } catch(e) {}
 				test.ok(false, "Should have rejected on error response");
 				test.done();
 			}).catch(function(err) {
-				restore();
+				https.request = origRequest;
 				try { fs.unlinkSync(tokenFile); } catch(e) {}
 				test.ok(/Azure token fetch failed/.test(err.message), "Error message is descriptive: " + err.message);
 				test.done();
