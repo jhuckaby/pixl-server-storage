@@ -8,60 +8,12 @@ var os = require('os');
 var https = require('https');
 var Tools = require('pixl-tools');
 
-// Replicate fetchAzureToken exactly as defined in engines/Postgres.js so we can
-// test it without requiring the `pg` peer dependency.
-// IMPORTANT: keep this copy in sync with the engine method body.
-var fetchAzureToken = async function() {
-	var tenant_id = process.env.AZURE_TENANT_ID;
-	var client_id = process.env.AZURE_CLIENT_ID;
-	var token_file = process.env.AZURE_FEDERATED_TOKEN_FILE;
-
-	if (!tenant_id || !client_id || !token_file) {
-		throw new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars");
-	}
-
-	var federated_token;
-	try { federated_token = fs.readFileSync(token_file, 'utf8').trim(); }
-	catch(e) { throw new Error("Azure Workload Identity: failed to read token file '" + token_file + "': " + e.message); }
-
-	var body = new URLSearchParams({
-		grant_type: 'client_credentials',
-		client_id: client_id,
-		scope: 'https://ossrdbms-aad.database.windows.net/.default',
-		client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-		client_assertion: federated_token
-	}).toString();
-
-	return new Promise(function(resolve, reject) {
-		var options = {
-			hostname: 'login.microsoftonline.com',
-			path: '/' + tenant_id + '/oauth2/v2.0/token',
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-				'Content-Length': Buffer.byteLength(body)
-			}
-		};
-		var req = https.request(options, function(res) {
-			var data = '';
-			res.on('data', function(chunk) { data += chunk; });
-			res.on('end', function() {
-				try {
-					var parsed = JSON.parse(data);
-					if (parsed.access_token) resolve(parsed.access_token);
-					else reject(new Error("Azure token fetch failed (HTTP " + res.statusCode + "): " + data));
-				} catch(e) { reject(e); }
-			});
-		});
-		req.setTimeout(10000, function() { req.destroy(new Error("Azure token fetch timed out")); });
-		req.on('error', reject);
-		req.write(body);
-		req.end();
-	});
-};
+// Import the actual engine so fetchAzureToken tests run against the real implementation.
+// pg must be installed as a devDependency for this require to succeed.
+var PostgresEngine = require('../engines/Postgres.js');
+var fetchAzureToken = PostgresEngine.prototype.fetchAzureToken.bind({});
 
 function withEnv(vars, fn) {
-	// Set env vars, call fn, then restore original state
 	var originals = {};
 	Object.keys(vars).forEach(function(k) {
 		originals[k] = process.env[k];

@@ -106,7 +106,7 @@ module.exports = Class.create({
 		} );
 	},
 	
-	query(sql, args, callback) {
+	query: function(sql, args, callback) {
 		// run query against the pool
 		this.queryWithClient( this.db, sql, args, callback );
 	},

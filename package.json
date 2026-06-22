@@ -39,7 +39,11 @@
 		"stream-meter": "1.0.4",
 		"unidecode": "0.1.8"
 	},
+	"peerDependencies": {
+		"pg": ">=8.0.0"
+	},
 	"devDependencies": {
+		"pg": "8.22.0",
 		"pixl-unit": "^1.0.14"
 	},
 	"scripts": {
