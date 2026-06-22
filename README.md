@@ -938,6 +938,40 @@ See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the
 
 Note that pooling and caching have little effect when the database is running locally (i.e. localhost).  They offer much more benefit when the database is located remotely over some number of network hops.
 
+### Azure Workload Identity
+
+Azure Database for PostgreSQL Flexible Server supports [Azure AD authentication](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-azure-ad-authentication), which lets you connect without a static password by using short-lived Entra tokens.  When running in a Kubernetes cluster with the [Azure Workload Identity webhook](https://azure.github.io/azure-workload-identity/docs/) installed, the necessary environment variables and token file are injected automatically.
+
+Set `azure_workload_identity` to `true` in your Postgres config to enable this mode.  When enabled, the `password` field is ignored and the engine fetches a fresh token from `login.microsoftonline.com` for every new pool connection using the injected federated credential.
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"host": "mypg.postgres.database.azure.com",
+		"database": "mydb",
+		"user": "my-app-service-principal",
+		"port": 5432,
+		"ssl": true,
+		"max": 32,
+		"table": "items",
+		"azure_workload_identity": true
+	}
+}
+```
+
+The following environment variables must be present (the Workload Identity webhook injects them automatically):
+
+| Variable | Description |
+|----------|-------------|
+| `AZURE_TENANT_ID` | Azure tenant ID |
+| `AZURE_CLIENT_ID` | Client (app) ID of the managed identity or app registration |
+| `AZURE_FEDERATED_TOKEN_FILE` | Path to the projected service account token file |
+
+The `user` value must match the Azure AD display name of the identity that has been granted access to the PostgreSQL database (e.g., via `CREATE ROLE "my-app-service-principal" WITH LOGIN;` followed by the appropriate grants).
+
+No additional npm packages are required — token exchange is performed using Node's built-in `https` module.
+
 ## Hybrid
 
 Your application may need the features of multiple engines.  Specifically, you may want JSON (document) records to use one engine, and binary records to use another.  Binary records are specified with keys that end in a file extension, e.g. `.jpg`.  To facilitate this, there is a `Hybrid` engine available, which can load multiple sub-engines, one for JSON keys and one for binary keys.  Example use:
