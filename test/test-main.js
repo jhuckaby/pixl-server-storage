@@ -656,6 +656,38 @@ module.exports = {
 			} );
 		},
 		
+		function testDeleteAll(test) {
+			// delete multiple keys using deleteAll, continuing past errors
+			test.expect(5);
+			var self = this;
+			var keys = ['deleteall1', 'deleteall_missing', 'deleteall2'];
+			
+			this.storage.putMulti( {
+				deleteall1: { fruit: 'apple' },
+				deleteall2: { fruit: 'banana' }
+			}, function(err) {
+				test.ok( !err, "No error creating deleteAll test records: " + err );
+				
+				self.storage.deleteAll( keys, function(err) {
+					test.ok( !err, "No error calling deleteAll: " + err );
+					
+					// the missing middle key should not prevent the final key from deleting
+					self.storage.get( 'deleteall1', function(err) {
+						test.ok( !!err, "Expected error fetching first deleteAll key after delete" );
+						
+						self.storage.get( 'deleteall_missing', function(err) {
+							test.ok( !!err, "Expected error fetching missing deleteAll key after delete" );
+							
+							self.storage.get( 'deleteall2', function(err) {
+								test.ok( !!err, "Expected error fetching final deleteAll key after delete" );
+								test.done();
+							} );
+						} );
+					} );
+				} );
+			} );
+		},
+		
 		function testOptimize(test) {
 			// run engine-specific optimization, or a safe no-op if unsupported
 			test.expect(8);

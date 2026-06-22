@@ -24,6 +24,7 @@ let storage = server.Storage;
 	* [headMulti](#headmulti)
 	* [delete](#delete)
 	* [deleteMulti](#deletemulti)
+	* [deleteAll](#deleteall)
 	* [copy](#copy)
 	* [rename](#rename)
 	* [lock](#lock)
@@ -324,6 +325,22 @@ The `deleteMulti()` method deletes multiple records at once, from a specified ar
 
 ```js
 storage.deleteMulti( ['test1', 'test2', 'test3'], function(err) {
+	if (err) throw err;
+} );
+```
+
+Note that this function returns immediately if it fails to delete any key in the specified set.
+
+## deleteAll
+
+```js
+storage.deleteAll( KEYS, CALLBACK );
+```
+
+The `deleteAll()` method deletes multiple records at once, from a specified array of keys.  This is similar to [deleteMulti()](#deletemulti), except it does not stop on the first error.  Each delete error is logged, and the remaining keys are still attempted.  Example:
+
+```js
+storage.deleteAll( ['test1', 'test2', 'test3'], function(err) {
 	if (err) throw err;
 } );
 ```

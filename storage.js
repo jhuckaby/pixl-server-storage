@@ -516,6 +516,35 @@ module.exports = Class.create({
 		);
 	},
 	
+	deleteAll: function(keys, callback) {
+		// delete multiple records at once, given array of keys
+		// continue through all keys, even if some deletes fail
+		var self = this;
+		if (!this.started) return callback( new Error("Storage has not completed startup.") );
+		
+		// if engine provides its own deleteAll, call that directly
+		if (("deleteAll" in this.engine) && !this.currentTransactionPath) {
+			return this.engine.deleteAll(keys, callback);
+		}
+		
+		async.eachLimit(keys, this.concurrency, 
+			function(key, callback) {
+				// iterator for each key
+				self.delete(key, function(err) {
+					if (err) {
+						// log and swallow the error so the remaining deletes can proceed
+						self.logError('storage', "Failed to delete key in deleteAll: " + key + ": " + err);
+					}
+					callback();
+				} );
+			}, 
+			function() {
+				// all keys attempted
+				callback();
+			}
+		);
+	},
+	
 	copy: function(old_key, new_key, callback) {
 		// copy record to new key
 		var self = this;
