@@ -33,7 +33,8 @@ module.exports = Class.create({
 		query_timeout: 6000,
 		connectionTimeoutMillis: 30000,
 		idleTimeoutMillis: 10000,
-		table: "items"
+		table: "items",
+		azure_workload_identity: false
 	},
 	
 	startup: function(callback) {
@@ -75,9 +76,14 @@ module.exports = Class.create({
 		}
 		
 		// pass entire config to pg.Pool, sans our custom keys
-		var db = this.db = new pg.Pool( 
-			Tools.copyHashRemoveKeys( pg_config, { cache: 1, table: 1 }) 
-		);
+		var pool_config = Tools.copyHashRemoveKeys( pg_config, { cache: 1, table: 1, azure_workload_identity: 1 });
+
+		if (pg_config.azure_workload_identity) {
+			delete pool_config.password;
+			pool_config.password = async function() { return self.fetchAzureToken(); };
+		}
+
+		var db = this.db = new pg.Pool( pool_config );
 		
 		db.on('error', function(err) {
 			self.logError('db', "DB Error: " + err, err);
@@ -630,6 +636,53 @@ module.exports = Class.create({
 		} ); // db.connect
 	},
 	
+	fetchAzureToken: async function() {
+		var tenant_id = process.env.AZURE_TENANT_ID;
+		var client_id = process.env.AZURE_CLIENT_ID;
+		var token_file = process.env.AZURE_FEDERATED_TOKEN_FILE;
+
+		if (!tenant_id || !client_id || !token_file) {
+			throw new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars");
+		}
+
+		var federated_token = fs.readFileSync(token_file, 'utf8').trim();
+		var https = require('https');
+
+		var body = new URLSearchParams({
+			grant_type: 'client_credentials',
+			client_id: client_id,
+			scope: 'https://ossrdbms-aad.database.windows.net/.default',
+			client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+			client_assertion: federated_token
+		}).toString();
+
+		return new Promise(function(resolve, reject) {
+			var options = {
+				hostname: 'login.microsoftonline.com',
+				path: '/' + tenant_id + '/oauth2/v2.0/token',
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+					'Content-Length': Buffer.byteLength(body)
+				}
+			};
+			var req = https.request(options, function(res) {
+				var data = '';
+				res.on('data', function(chunk) { data += chunk; });
+				res.on('end', function() {
+					try {
+						var parsed = JSON.parse(data);
+						if (parsed.access_token) resolve(parsed.access_token);
+						else reject(new Error("Azure token fetch failed: " + data));
+					} catch(e) { reject(e); }
+				});
+			});
+			req.on('error', reject);
+			req.write(body);
+			req.end();
+		});
+	},
+
 	unitTestCleanup: function(callback) {
 		// cleanup all unit test data, leaving the table itself intact
 		var self = this;
