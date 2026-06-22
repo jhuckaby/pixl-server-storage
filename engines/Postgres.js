@@ -7,6 +7,8 @@
 const fs = require('fs');
 const Path = require('path');
 const zlib = require('zlib');
+const os = require('os');
+const cp = require('child_process');
 const Class = require("pixl-class");
 const Component = require("pixl-server/component");
 const pg = require('pg');
@@ -33,6 +35,8 @@ module.exports = Class.create({
 		query_timeout: 6000,
 		connectionTimeoutMillis: 30000,
 		idleTimeoutMillis: 10000,
+		passwordPlugin: "",
+		passwordPluginTimeout: 30000,
 		table: "items"
 	},
 	
@@ -75,9 +79,16 @@ module.exports = Class.create({
 		}
 		
 		// pass entire config to pg.Pool, sans our custom keys
-		var db = this.db = new pg.Pool( 
-			Tools.copyHashRemoveKeys( pg_config, { cache: 1, table: 1 }) 
-		);
+		var pool_config = Tools.copyHashRemoveKeys( pg_config, { cache: 1, table: 1, passwordPlugin: 1, passwordPluginTimeout: 1 } );
+		
+		if (pg_config.passwordPlugin) {
+			// node-postgres supports password as a sync/async callback, called for each
+			// new physical connection.  We use that hook to ask an external command for
+			// short-lived provider tokens without baking provider-specific code in here.
+			pool_config.password = this.getPasswordFromPlugin.bind(this);
+		}
+		
+		var db = this.db = new pg.Pool( pool_config );
 		
 		db.on('error', function(err) {
 			self.logError('db', "DB Error: " + err, err);
@@ -102,6 +113,89 @@ module.exports = Class.create({
 	query(sql, args, callback) {
 		// run query against the pool
 		this.queryWithClient( this.db, sql, args, callback );
+	},
+	
+	getPasswordFromPlugin: function() {
+		// execute an external command to resolve the Postgres password
+		// the plugin may also return a TTL, allowing us to cache it in memory
+		var self = this;
+		var pg_config = this.config.get();
+		var now = Date.now();
+		
+		if (this.passwordPluginCache && (now < this.passwordPluginCache.expires)) {
+			return Promise.resolve( this.passwordPluginCache.password );
+		}
+		
+		// If a plugin call is already in-flight, return the same Promise.
+		// This coalesces simultaneous pool reconnects into one plugin exec.
+		if (this.passwordPluginFetch) return this.passwordPluginFetch;
+		
+		var hook_args = {
+			type: 'postgres_password',
+			config: Tools.copyHashRemoveKeys( pg_config, { password: 1, passwordPlugin: 1, passwordPluginTimeout: 1 } )
+		};
+		
+		var child_cmd = pg_config.passwordPlugin;
+		var child_opts = {
+			cwd: os.tmpdir(),
+			timeout: pg_config.passwordPluginTimeout || 30000
+		};
+		
+		this.logDebug(5, "Calling Postgres password plugin");
+		
+		this.passwordPluginFetch = new Promise( function(resolve, reject) {
+			var child = cp.exec( child_cmd, child_opts, function(err, stdout, stderr) {
+				var json = null;
+				
+				if (!err && stdout.match(/\S/)) {
+					// parse last line only, to omit any noise from plugin
+					try { json = JSON.parse( stdout.replace(/\r\n/g, "\n").trim().split(/\n/).pop() ); }
+					catch (e) {
+						err = new Error("Postgres password plugin JSON parse error: " + (e.message || e));
+						err.code = 'json';
+					}
+				}
+				
+				if (stderr && stderr.match(/\S/)) {
+					self.logDebug(9, "Postgres password plugin emitted STDERR: " + Buffer.byteLength(stderr) + " bytes");
+				}
+				
+				if (err) return reject( err );
+				if (!json) return reject( new Error("Postgres password plugin error: No JSON found in response STDOUT") );
+				if (json.code) return reject( new Error("Postgres password plugin error: " + (json.description || json.code)) );
+				if (typeof(json.password) != 'string') return reject( new Error("Postgres password plugin error: No password string found in response JSON") );
+				
+				var ttl = parseInt( json.ttl || 0, 10 ) || 0;
+				
+				if (ttl > 0) {
+					self.passwordPluginCache = {
+						password: json.password,
+						expires: Date.now() + (ttl * 1000)
+					};
+					
+					self.logDebug(6, "Postgres password plugin returned password with TTL: " + ttl + " seconds");
+				}
+				else {
+					self.passwordPluginCache = null;
+					self.logDebug(6, "Postgres password plugin returned password without TTL");
+				}
+				
+				resolve( json.password );
+			} ); // cp.exec
+			
+			// Write hook data to child's stdin, using one compact JSON document.
+			child.stdin.on('error', noop);
+			child.stdin.write( JSON.stringify(hook_args) + "\n" );
+			child.stdin.end();
+		} ).then( function(password) {
+			self.passwordPluginFetch = null;
+			return password;
+		}, function(err) {
+			self.passwordPluginFetch = null;
+			throw err;
+		} );
+		
+		return this.passwordPluginFetch;
 	},
 	
 	queryWithClient: function(client, sql, args, callback) {

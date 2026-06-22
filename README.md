@@ -63,6 +63,7 @@ Here is the table of contents for this current document:
 	* [Postgres](#postgres)
 		+ [Postgres SSL](#postgres-ssl)
 		+ [AWS RDS](#aws-rds)
+		+ [Postgres Password Plugin](#postgres-password-plugin)
 	* [Hybrid](#hybrid)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)
@@ -859,7 +860,7 @@ You can customize the table name via the `table` configuration property.  It def
 
 ### Postgres SSL
 
-The Postgres engine passes all extra properties in the `Postgres` configuration block directly into the [pg.Pool constructor](https://node-postgres.com/apis/pool), except for `table` and `cache`, which are used by pixl-server-storage itself.  This means you can use the standard [node-postgres SSL options](https://node-postgres.com/features/ssl) without any special pixl-server-storage code.
+The Postgres engine passes all extra properties in the `Postgres` configuration block directly into the [pg.Pool constructor](https://node-postgres.com/apis/pool), except for `table`, `cache`, `passwordPlugin`, and `passwordPluginTimeout`, which are used by pixl-server-storage itself.  This means you can use the standard [node-postgres SSL options](https://node-postgres.com/features/ssl) without any special pixl-server-storage code.
 
 For a server with a certificate trusted by Node.js already, you can enable SSL by simply adding `"ssl":true` like this:
 
@@ -934,7 +935,79 @@ AWS has a few quirks worth knowing:
 * If you connect through a custom DNS name, SSH tunnel, or local proxy, hostname verification may need the original RDS endpoint as the TLS `servername` option.  In that case, prefer explicit config properties and an `ssl` object instead of URL SSL parameters.
 * AWS recommends trusting the root RDS CA certificate.  Avoid pinning intermediate certificates, as that can cause trouble when RDS rotates server certificates.
 
-See [S3 Cache](#s3-cache) for details on the `cache` section, as it works in the same way.
+### Postgres Password Plugin
+
+If your Postgres password needs to be generated dynamically, such as with a cloud provider token service, you can configure a password plugin command.  This uses the [node-postgres dynamic password callback](https://node-postgres.com/features/connecting), so the command is called whenever the pool needs a new physical database connection.
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"host": "mypg.postgres.example.com",
+		"database": "mydb",
+		"user": "my-app-user",
+		"ssl": true,
+		"passwordPlugin": "npx -y pxpg-plug-example@1.0.0"
+	}
+}
+```
+
+In this example the command uses the [npx](https://docs.npmjs.com/cli/commands/npx) CLI to automatically download and run a NPM package.  The package is also cached on local disk (in `~/.npm`) for fast subsequent runs.
+
+The command receives one compact JSON document on STDIN, delimited by an EOL (pretty-printed here for display purposes):
+
+```json
+{
+	"type": "postgres_password",
+	"config": {
+		"host": "mypg.postgres.example.com",
+		"database": "mydb",
+		"user": "my-app-user",
+		"ssl": true
+	}
+}
+```
+
+The `config` object contains the Postgres configuration with `password`, `passwordPlugin`, and `passwordPluginTimeout` removed.
+
+The command should print one compact JSON document to STDOUT.  Extra logging is allowed, as pixl-server-storage only parses the last line of STDOUT:
+
+```json
+{
+	"password": "GENERATED_PASSWORD_OR_TOKEN",
+	"ttl": 3000
+}
+```
+
+The `password` property is required, and must be a string.  The optional `ttl` property is a cache duration in seconds.  If `ttl` is greater than zero, pixl-server-storage caches the returned password in memory and reuses it for subsequent new database connections until the TTL expires.  If `ttl` is omitted or zero, the command is invoked for every new database connection.
+
+If the plugin cannot produce a password, it can return an error:
+
+```json
+{
+	"code": "auth",
+	"description": "Could not fetch provider token."
+}
+```
+
+The default plugin timeout is 30 seconds.  You can customize it with `passwordPluginTimeout`, in milliseconds:
+
+```json
+{
+	"engine": "Postgres",
+	"Postgres": {
+		"host": "mypg.postgres.example.com",
+		"database": "mydb",
+		"user": "my-app-user",
+		"passwordPlugin": "/usr/local/bin/px-pg-plug-example",
+		"passwordPluginTimeout": 10000
+	}
+}
+```
+
+For production, consider preinstalling the plugin and pointing `passwordPlugin` at the installed executable.  This avoids starting `npx` and checking the NPM registry whenever the cached password expires.
+
+See [S3 Cache](#s3-cache) for details on the `cache` section, as Postgres works in the same way.
 
 Note that pooling and caching have little effect when the database is running locally (i.e. localhost).  They offer much more benefit when the database is located remotely over some number of network hops.
 
