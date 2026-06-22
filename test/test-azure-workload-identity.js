@@ -11,7 +11,7 @@ var Tools = require('pixl-tools');
 // Import the actual engine so fetchAzureToken tests run against the real implementation.
 // pg must be installed as a devDependency for this require to succeed.
 var PostgresEngine = require('../engines/Postgres.js');
-var fetchAzureToken = PostgresEngine.prototype.fetchAzureToken.bind({});
+var fetchAzureToken_proto = PostgresEngine.prototype.fetchAzureToken;
 
 function withEnv(vars, fn) {
 	var originals = {};
@@ -43,6 +43,7 @@ module.exports = {
 
 		function fetchAzureToken_missingEnvVars(test) {
 			test.expect(1);
+			var fetchAzureToken = fetchAzureToken_proto.bind({});
 			withEnv({ AZURE_TENANT_ID: null, AZURE_CLIENT_ID: null, AZURE_FEDERATED_TOKEN_FILE: null }, function() {
 				return fetchAzureToken().then(function() {
 					test.ok(false, "Should have thrown for missing env vars");
@@ -54,6 +55,7 @@ module.exports = {
 
 		function fetchAzureToken_fetchesToken(test) {
 			test.expect(3);
+			var fetchAzureToken = fetchAzureToken_proto.bind({});
 
 			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-' + process.pid + '.txt');
 			fs.writeFileSync(tokenFile, 'FAKE_FEDERATED_TOKEN\n', 'utf8');
@@ -103,6 +105,7 @@ module.exports = {
 
 		function fetchAzureToken_rejectsOnErrorResponse(test) {
 			test.expect(2);
+			var fetchAzureToken = fetchAzureToken_proto.bind({});
 
 			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-err-' + process.pid + '.txt');
 			fs.writeFileSync(tokenFile, 'FAKE_TOKEN', 'utf8');
@@ -149,6 +152,7 @@ module.exports = {
 
 		function fetchAzureToken_rejectsOnUnreadableTokenFile(test) {
 			test.expect(1);
+			var fetchAzureToken = fetchAzureToken_proto.bind({});
 			withEnv({
 				AZURE_TENANT_ID: 'test-tenant-id',
 				AZURE_CLIENT_ID: 'test-client-id',
@@ -171,8 +175,7 @@ module.exports = {
 			var pool_config = Tools.copyHashRemoveKeys(pg_config, { cache: 1, table: 1, azure_workload_identity: 1 });
 
 			if (pg_config.azure_workload_identity) {
-				delete pool_config.password;
-				pool_config.password = async function() { return 'token'; };
+				pool_config.password = fetchAzureToken_proto.bind({});
 			}
 
 			test.ok(typeof pool_config.password === 'function', "password is a function when azure_workload_identity is true");
@@ -187,13 +190,116 @@ module.exports = {
 			var pool_config = Tools.copyHashRemoveKeys(pg_config, { cache: 1, table: 1, azure_workload_identity: 1 });
 
 			if (pg_config.azure_workload_identity) {
-				delete pool_config.password;
-				pool_config.password = async function() { return 'token'; };
+				pool_config.password = fetchAzureToken_proto.bind({});
 			}
 
 			test.ok(pool_config.password === 'secret', "password passes through unchanged when azure_workload_identity is false");
 			test.ok(!('azure_workload_identity' in pool_config), "azure_workload_identity is stripped from pool_config");
 			test.done();
+		},
+
+		function fetchAzureToken_cachesToken(test) {
+			test.expect(2);
+
+			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-cache-' + process.pid + '.txt');
+			fs.writeFileSync(tokenFile, 'FAKE_FEDERATED_TOKEN\n', 'utf8');
+
+			var callCount = 0;
+			var origRequest = https.request;
+			https.request = function(options, cb) {
+				callCount++;
+				var EventEmitter = require('events');
+				var res = new EventEmitter();
+				res.statusCode = 200;
+				var fakeReq = new EventEmitter();
+				fakeReq.write = function() {};
+				fakeReq.setTimeout = function() {};
+				fakeReq.destroy = function() {};
+				fakeReq.end = function() {
+					setImmediate(function() {
+						cb(res);
+						setImmediate(function() {
+							res.emit('data', JSON.stringify({ access_token: 'CACHED_TOKEN' }));
+							res.emit('end');
+						});
+					});
+				};
+				return fakeReq;
+			};
+
+			var ctx = {};
+			var fetchAzureToken = fetchAzureToken_proto.bind(ctx);
+
+			withEnv({
+				AZURE_TENANT_ID: 'test-tenant-id',
+				AZURE_CLIENT_ID: 'test-client-id',
+				AZURE_FEDERATED_TOKEN_FILE: tokenFile
+			}, function() {
+				return fetchAzureToken().then(function() { return fetchAzureToken(); });
+			}).then(function(token) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(token === 'CACHED_TOKEN', "Second call returns cached token: " + token);
+				test.ok(callCount === 1, "https.request called only once (got " + callCount + ")");
+				test.done();
+			}).catch(function(err) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(false, "Unexpected error: " + err);
+				test.done();
+			});
+		},
+
+		function fetchAzureToken_refetchesOnExpiredCache(test) {
+			test.expect(2);
+
+			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-exp-' + process.pid + '.txt');
+			fs.writeFileSync(tokenFile, 'FAKE_FEDERATED_TOKEN\n', 'utf8');
+
+			var callCount = 0;
+			var origRequest = https.request;
+			https.request = function(options, cb) {
+				callCount++;
+				var EventEmitter = require('events');
+				var res = new EventEmitter();
+				res.statusCode = 200;
+				var fakeReq = new EventEmitter();
+				fakeReq.write = function() {};
+				fakeReq.setTimeout = function() {};
+				fakeReq.destroy = function() {};
+				fakeReq.end = function() {
+					setImmediate(function() {
+						cb(res);
+						setImmediate(function() {
+							res.emit('data', JSON.stringify({ access_token: 'FRESH_TOKEN' }));
+							res.emit('end');
+						});
+					});
+				};
+				return fakeReq;
+			};
+
+			var ctx = { _azureTokenCache: { token: 'STALE_TOKEN', expiresAt: Date.now() - 1000 } };
+			var fetchAzureToken = fetchAzureToken_proto.bind(ctx);
+
+			withEnv({
+				AZURE_TENANT_ID: 'test-tenant-id',
+				AZURE_CLIENT_ID: 'test-client-id',
+				AZURE_FEDERATED_TOKEN_FILE: tokenFile
+			}, function() {
+				return fetchAzureToken();
+			}).then(function(token) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(token === 'FRESH_TOKEN', "Refetches when cache is expired: " + token);
+				test.ok(callCount === 1, "https.request called once for expired cache");
+				test.done();
+			}).catch(function(err) {
+				https.request = origRequest;
+				try { fs.unlinkSync(tokenFile); } catch(e) {}
+				test.ok(false, "Unexpected error: " + err);
+				test.done();
+			});
 		}
 
 	]

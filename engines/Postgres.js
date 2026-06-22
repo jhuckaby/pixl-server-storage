@@ -80,8 +80,7 @@ module.exports = Class.create({
 		var pool_config = Tools.copyHashRemoveKeys( pg_config, { cache: 1, table: 1, azure_workload_identity: 1 });
 
 		if (pg_config.azure_workload_identity) {
-			delete pool_config.password;
-			pool_config.password = async function() { return self.fetchAzureToken(); };
+			pool_config.password = self.fetchAzureToken.bind(self);
 		}
 
 		var db = this.db = new pg.Pool( pool_config );
@@ -637,18 +636,25 @@ module.exports = Class.create({
 		} ); // db.connect
 	},
 	
-	fetchAzureToken: async function() {
+	fetchAzureToken: function() {
+		var self = this;
+
+		// Entra tokens are valid 1h; refresh at 50m to avoid expiry mid-connection
+		if (self._azureTokenCache && Date.now() < self._azureTokenCache.expiresAt) {
+			return Promise.resolve(self._azureTokenCache.token);
+		}
+
 		var tenant_id = process.env.AZURE_TENANT_ID;
 		var client_id = process.env.AZURE_CLIENT_ID;
 		var token_file = process.env.AZURE_FEDERATED_TOKEN_FILE;
 
 		if (!tenant_id || !client_id || !token_file) {
-			throw new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars");
+			return Promise.reject(new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars"));
 		}
 
 		var federated_token;
 		try { federated_token = fs.readFileSync(token_file, 'utf8').trim(); }
-		catch(e) { throw new Error("Azure Workload Identity: failed to read token file '" + token_file + "': " + e.message); }
+		catch(e) { return Promise.reject(new Error("Azure Workload Identity: failed to read token file '" + token_file + "': " + e.message)); }
 
 		var body = new URLSearchParams({
 			grant_type: 'client_credentials',
@@ -674,7 +680,10 @@ module.exports = Class.create({
 				res.on('end', function() {
 					try {
 						var parsed = JSON.parse(data);
-						if (parsed.access_token) resolve(parsed.access_token);
+						if (parsed.access_token) {
+							self._azureTokenCache = { token: parsed.access_token, expiresAt: Date.now() + (50 * 60 * 1000) };
+							resolve(parsed.access_token);
+						}
 						else reject(new Error("Azure token fetch failed (HTTP " + res.statusCode + "): " + data));
 					} catch(e) { reject(e); }
 				});
