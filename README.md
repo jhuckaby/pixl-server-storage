@@ -63,6 +63,7 @@ Here is the table of contents for this current document:
 	* [Postgres](#postgres)
 		+ [Postgres SSL](#postgres-ssl)
 		+ [AWS RDS](#aws-rds)
+		+ [Azure Workload Identity](#azure-workload-identity)
 	* [Hybrid](#hybrid)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)

@@ -5,6 +5,7 @@
 // Requires the 'pg' module
 
 const fs = require('fs');
+const https = require('https');
 const Path = require('path');
 const zlib = require('zlib');
 const Class = require("pixl-class");
@@ -645,8 +646,9 @@ module.exports = Class.create({
 			throw new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars");
 		}
 
-		var federated_token = fs.readFileSync(token_file, 'utf8').trim();
-		var https = require('https');
+		var federated_token;
+		try { federated_token = fs.readFileSync(token_file, 'utf8').trim(); }
+		catch(e) { throw new Error("Azure Workload Identity: failed to read token file '" + token_file + "': " + e.message); }
 
 		var body = new URLSearchParams({
 			grant_type: 'client_credentials',
@@ -673,10 +675,11 @@ module.exports = Class.create({
 					try {
 						var parsed = JSON.parse(data);
 						if (parsed.access_token) resolve(parsed.access_token);
-						else reject(new Error("Azure token fetch failed: " + data));
+						else reject(new Error("Azure token fetch failed (HTTP " + res.statusCode + "): " + data));
 					} catch(e) { reject(e); }
 				});
 			});
+			req.setTimeout(10000, function() { req.destroy(new Error("Azure token fetch timed out")); });
 			req.on('error', reject);
 			req.write(body);
 			req.end();

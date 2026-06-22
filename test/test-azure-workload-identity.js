@@ -10,6 +10,7 @@ var Tools = require('pixl-tools');
 
 // Replicate fetchAzureToken exactly as defined in engines/Postgres.js so we can
 // test it without requiring the `pg` peer dependency.
+// IMPORTANT: keep this copy in sync with the engine method body.
 var fetchAzureToken = async function() {
 	var tenant_id = process.env.AZURE_TENANT_ID;
 	var client_id = process.env.AZURE_CLIENT_ID;
@@ -19,7 +20,9 @@ var fetchAzureToken = async function() {
 		throw new Error("Azure Workload Identity requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE env vars");
 	}
 
-	var federated_token = fs.readFileSync(token_file, 'utf8').trim();
+	var federated_token;
+	try { federated_token = fs.readFileSync(token_file, 'utf8').trim(); }
+	catch(e) { throw new Error("Azure Workload Identity: failed to read token file '" + token_file + "': " + e.message); }
 
 	var body = new URLSearchParams({
 		grant_type: 'client_credentials',
@@ -46,10 +49,11 @@ var fetchAzureToken = async function() {
 				try {
 					var parsed = JSON.parse(data);
 					if (parsed.access_token) resolve(parsed.access_token);
-					else reject(new Error("Azure token fetch failed: " + data));
+					else reject(new Error("Azure token fetch failed (HTTP " + res.statusCode + "): " + data));
 				} catch(e) { reject(e); }
 			});
 		});
+		req.setTimeout(10000, function() { req.destroy(new Error("Azure token fetch timed out")); });
 		req.on('error', reject);
 		req.write(body);
 		req.end();
@@ -108,8 +112,10 @@ module.exports = {
 				capturedOptions = options;
 				var EventEmitter = require('events');
 				var res = new EventEmitter();
+				res.statusCode = 200;
 				var fakeReq = new EventEmitter();
 				fakeReq.write = function() {};
+				fakeReq.setTimeout = function() {};
 				fakeReq.end = function() {
 					setImmediate(function() {
 						cb(res);
@@ -144,7 +150,7 @@ module.exports = {
 		},
 
 		function fetchAzureToken_rejectsOnErrorResponse(test) {
-			test.expect(1);
+			test.expect(2);
 
 			var tokenFile = path.join(os.tmpdir(), 'pixl-test-fedtoken-err-' + process.pid + '.txt');
 			fs.writeFileSync(tokenFile, 'FAKE_TOKEN', 'utf8');
@@ -153,8 +159,10 @@ module.exports = {
 			https.request = function(options, cb) {
 				var EventEmitter = require('events');
 				var res = new EventEmitter();
+				res.statusCode = 401;
 				var fakeReq = new EventEmitter();
 				fakeReq.write = function() {};
+				fakeReq.setTimeout = function() {};
 				fakeReq.end = function() {
 					setImmediate(function() {
 						cb(res);
@@ -181,7 +189,25 @@ module.exports = {
 			}).catch(function(err) {
 				https.request = origRequest;
 				try { fs.unlinkSync(tokenFile); } catch(e) {}
-				test.ok(/Azure token fetch failed/.test(err.message), "Error message is descriptive: " + err.message);
+				test.ok(/Azure token fetch failed/.test(err.message), "Error message mentions fetch failure: " + err.message);
+				test.ok(/HTTP 401/.test(err.message), "Error message includes HTTP status code: " + err.message);
+				test.done();
+			});
+		},
+
+		function fetchAzureToken_rejectsOnUnreadableTokenFile(test) {
+			test.expect(1);
+			withEnv({
+				AZURE_TENANT_ID: 'test-tenant-id',
+				AZURE_CLIENT_ID: 'test-client-id',
+				AZURE_FEDERATED_TOKEN_FILE: '/nonexistent/path/to/token'
+			}, function() {
+				return fetchAzureToken();
+			}).then(function() {
+				test.ok(false, "Should have rejected for unreadable token file");
+				test.done();
+			}).catch(function(err) {
+				test.ok(/failed to read token file/.test(err.message), "Error message mentions token file read failure: " + err.message);
 				test.done();
 			});
 		},
