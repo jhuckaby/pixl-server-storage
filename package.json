@@ -30,7 +30,7 @@
 		"he": "1.1.1",
 		"moo": "0.4.3",
 		"nearley": "2.20.1",
-		"pixl-cache": "^1.0.6",
+		"pixl-cache": "^1.1.2",
 		"pixl-class": "^1.0.3",
 		"pixl-perf": "^1.0.9",
 		"pixl-server": "^1.0.39",
