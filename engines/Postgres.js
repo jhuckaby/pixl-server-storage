@@ -67,7 +67,7 @@ module.exports = Class.create({
 		var cache_opts = pg_config.cache;
 		if (cache_opts && cache_opts.enabled) {
 			this.logDebug(3, "Setting up LRU cache", cache_opts);
-			this.cache = new Cache( Tools.copyHashRemoveKeys(cache_opts, { enabled: 1 }) );
+			this.cache = new Cache({ copyBuffers: true, ...Tools.copyHashRemoveKeys(cache_opts, { enabled: 1 }) });
 			this.cache.on('expire', function(item, reason) {
 				self.logDebug(9, "Expiring LRU cache object: " + item.key + " due to: " + reason, {
 					key: item.key,

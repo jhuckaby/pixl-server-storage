@@ -65,6 +65,7 @@ Here is the table of contents for this current document:
 		+ [AWS RDS](#aws-rds)
 		+ [Postgres Password Plugin](#postgres-password-plugin)
 	* [Hybrid](#hybrid)
+- [Cache Buffer Copying](#cache-buffer-copying)
 - [Key Normalization](#key-normalization)
 - [Basic Functions](#basic-functions)
 	* [Storing Records](#storing-records)
@@ -417,8 +418,9 @@ The properties are as follows:
 | `enabled` | Boolean | Set this to `true` to enable the filesystem caching system. |
 | `maxItems` | Integer | This is the maximum number of objects to allow in the cache. |
 | `maxBytes` | Integer | This is the maximum number of bytes to allow in the cache. |
+| `copyBuffers` | Boolean | Defaults to `true`.  Stores independent, unpooled copies of cached Buffers.  Set to `false` to opt out.  See [Cache Buffer Copying](#cache-buffer-copying). |
 
-The cache will automatically expire objects in LRU fashion when either of the limits are exceeded (whichever is hit first).  Set the properties to `0` for no limit.
+The cache will automatically expire objects in LRU fashion when either of the limits are exceeded (whichever is hit first).  Set either limit to `0` for no limit.
 
 Note that binary records are **not** cached.  This system is for JSON records only.
 
@@ -518,8 +520,9 @@ The properties are as follows:
 | `enabled` | Boolean | Set this to `true` to enable the S3 caching system. |
 | `maxItems` | Integer | This is the maximum number of objects to allow in the cache. |
 | `maxBytes` | Integer | This is the maximum number of bytes to allow in the cache. |
+| `copyBuffers` | Boolean | Defaults to `true`.  Stores independent, unpooled copies of cached Buffers.  Set to `false` to opt out.  See [Cache Buffer Copying](#cache-buffer-copying). |
 
-The cache will automatically expire objects in LRU fashion when either of the limits are met (whichever is reached first).  Set the properties to `0` for no limit.
+The cache will automatically expire objects in LRU fashion when either of the limits are met (whichever is reached first).  Set either limit to `0` for no limit.
 
 It is recommended that you set the `maxItems` and `maxBytes` high enough to allow new data written to live for *at least* several seconds before getting expired out of the cache.  This depends on the overall storage throughput of your application, but 1,000 max items and 10 MB max bytes is probably fine for most use cases.
 
@@ -1054,6 +1057,31 @@ The `Hybrid` engine only has two properties, `docEngine` and `binaryEngine`.  Th
 Note that all of the engine configuration objects are on the same level as the `Hybrid` object.
 
 When transactions are enabled, the `Hybrid` engine routes transaction commits through the configured `docEngine`, because pixl-server-storage transactions only apply to JSON records.  If the `docEngine` supports native transactions, such as Postgres, Redis or SQLite, `Hybrid` will use that native commit path automatically.  The `binaryEngine` is not involved in transactions, because binary keys are passed straight through.
+
+# Cache Buffer Copying
+
+All six engine caches (`Filesystem`, `S3`, `Redis`, `RedisCluster`, `SQLite`, and `Postgres`) default to `copyBuffers: true`.  This applies whenever the engine's cache is enabled with `cache.enabled: true`; existing cache configurations receive the new default automatically.
+
+These caches store serialized JSON records as Buffers.  A small Buffer can share a much larger memory allocation with other Buffers, and keeping it in the cache can retain that entire allocation.  Node.js 24.18.0 increased the default Buffer pool size from 8 KiB to 64 KiB, making this retention more costly.  See the [Node.js 24.18.0 release notes](https://nodejs.org/en/blog/release/v24.18.0).
+
+The Postgres report in [issue #8](https://github.com/jhuckaby/pixl-server-storage/issues/8) demonstrated how retained backing allocations could greatly exceed the cached payload size.  The same retention pattern can affect all six engines, so Buffer copying is enabled by default across their caches.  Each cached Buffer gets its own unpooled copy when added or replaced, preventing it from retaining an oversized shared allocation.  This adds an allocation and byte copy on insertion, but cache hits do not make additional Buffer copies.  The `maxBytes` setting still measures cache key and value sizes, rather than total process memory.
+
+If you need to avoid the extra copying, set `copyBuffers` to `false` inside your engine's `cache` configuration.  For example, merge this fragment into your existing `Storage` configuration for Postgres:
+
+```json
+{
+	"Postgres": {
+		"cache": {
+			"enabled": true,
+			"maxItems": 100000,
+			"maxBytes": 104857600,
+			"copyBuffers": false
+		}
+	}
+}
+```
+
+Use the same `cache.copyBuffers` property inside any of the other five engine configuration blocks.  Caching remains enabled in this example, while disabling Buffer copying restores the previous retention behavior.  Omit `copyBuffers`, or set it to `true`, to use the recommended default.
 
 # Key Normalization
 
