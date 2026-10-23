@@ -575,7 +575,8 @@ module.exports = Class.create({
 		trans.aborting = true;
 		
 		var num_actions = Tools.numKeys(trans.keys || {});
-		this.logError('rollback', "Aborting transaction: " + trans.id, { path: path, actions: num_actions });
+		if (num_actions) this.logError('rollback', "Aborting transaction: " + trans.id, { path: path, actions: num_actions });
+		else this.logDebug(6, "Aborting empty transaction (no-op): " + trans.id, { path: path, actions: num_actions });
 		
 		// read in file line by line
 		// (file may not exist, which is fine, hence 'ignore_not_found')
